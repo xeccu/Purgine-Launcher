@@ -1,8 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using System.Windows.Media;
-using LightLauncher.Core;
 using LightLauncher.Infrastructure;
+using LightLauncher.SteamNet;
 using LightLauncher.Library;
 using LightLauncher.Stats;
 
@@ -62,9 +62,8 @@ public sealed class GameCardViewModel : ObservableObject
         PlayCommand = new RelayCommand(
             _ => { if (IsNotInstalled) _host.Install(this); else _host.Launch(this); },
             _ => IsNotInstalled || _host.CanLaunch);
-        InstallCommand = new RelayCommand(_ => _host.Install(this), _ => IsNotInstalled);
-        InstallWithSteamCommand = new RelayCommand(_ => _host.InstallWithSteamDialog(this), _ => IsSteam && (IsNotInstalled || IsQueued));
-        CancelInstallCommand = new RelayCommand(_ => _host.CancelInstall(this), _ => IsQueued);
+        InstallCommand = new RelayCommand(_ => _host.Install(this), _ => IsNotInstalled && !HasActiveJob);
+        CancelInstallCommand = new RelayCommand(_ => _host.CancelInstall(this), _ => HasActiveJob);
         UninstallCommand = new RelayCommand(_ => _host.Uninstall(this), _ => CanUninstall);
         UpdateCommand = new RelayCommand(_ => _host.Update(this), _ => ShowUpdateButton);
         NewTagCommand = new RelayCommand(_ => _host.CreateTagFor(this));
@@ -85,7 +84,7 @@ public sealed class GameCardViewModel : ObservableObject
     public string PlatformLabel =>
         IsLocal ? "Local"
         : IsNotInstalled ? "No instalado"
-        : Entry.HasPendingUpdate ? "Actualización pendiente"
+        : HasUpdate ? "Actualización pendiente"
         : "Steam";
 
     public string Tooltip
@@ -128,33 +127,29 @@ public sealed class GameCardViewModel : ObservableObject
 
     public string OverlayText =>
         _isRunning ? "En curso"
+        : HasActiveJob ? "Ver descarga"
         : IsNotInstalled ? "Instalar"
-        : _live is { IsActive: true } or { Phase: DownloadPhase.Paused } ? "Ver descarga"
-        : IsDownloading ? "Descargando…"
-        : IsQueued ? "En cola…"
-        : Entry.IsFullyInstalled ? "Jugar"
-        : "Actualizar y jugar";
+        : "Jugar";
 
     /// <summary>Juego de la cuenta que no está en disco.</summary>
     public bool IsNotInstalled => !Entry.IsInstalled;
 
-    /// <summary>Manifiesto creado pero sin bytes descargados aún (esperando a que Steam empiece).</summary>
-    public bool IsQueued => Entry.IsInstalling && Entry.SizeOnDisk == 0 && Entry.BytesDownloaded == 0 && !IsDownloading;
+    // ----- Descarga nativa en curso (SteamDownloadManager) -----
 
-    /// <summary>Opción de menú «Instalar con el diálogo de Steam» (alternativa a la instalación en segundo plano).</summary>
-    public bool ShowSteamInstallOption => IsSteam && (IsNotInstalled || IsQueued);
+    private DownloadJob? _job;
 
-    // ----- Progreso en vivo (monitor de descargas) -----
+    /// <summary>Descarga/actualización de LightLauncher para este juego (null si no hay).</summary>
+    public DownloadJob? Job => _job;
 
-    private DownloadInfo? _live;
+    public bool HasActiveJob => _job is { IsFinished: false };
 
-    /// <summary>Estado en vivo de la descarga de este juego (null si no hay ninguna).</summary>
-    public DownloadInfo? Live => _live;
-
-    public void SetLive(DownloadInfo? live)
+    /// <summary>Asigna o refresca la descarga en curso (se llama en cada cambio de progreso).</summary>
+    public void SetJob(DownloadJob? job)
     {
-        if (live == _live) return;
-        _live = live;
+        _job = job;
+        OnPropertyChanged(nameof(Job));
+        OnPropertyChanged(nameof(HasActiveJob));
+        OnPropertyChanged(nameof(IsQueued));
         OnPropertyChanged(nameof(IsDownloading));
         OnPropertyChanged(nameof(DownloadPercent));
         OnPropertyChanged(nameof(DownloadText));
@@ -162,51 +157,41 @@ public sealed class GameCardViewModel : ObservableObject
         OnPropertyChanged(nameof(IsIndeterminateProgress));
         OnPropertyChanged(nameof(OverlayText));
         OnPropertyChanged(nameof(ShowUpdateButton));
+        OnPropertyChanged(nameof(CanUninstall));
     }
 
-    /// <summary>Barra/insignia de instalación visible (en cola, descargando, en pausa…).</summary>
-    public bool ShowInstallProgress =>
-        _live is { } l ? l.IsActive || l.Phase == DownloadPhase.Paused || (l.Phase == DownloadPhase.Queued && l.IsRequested)
-        : IsQueued || Entry.DownloadProgress is not null;
+    public bool IsQueued => _job?.State == DownloadJobState.Queued;
+    public bool ShowInstallProgress => HasActiveJob;
+    public bool IsDownloading => _job?.State == DownloadJobState.Downloading;
+    public bool IsIndeterminateProgress => _job is { } j && (j.Progress is null || j.State is DownloadJobState.Queued or DownloadJobState.Preparing);
+    public double DownloadPercent => (_job?.Progress ?? 0) * 100;
 
-    public bool IsDownloading => _live is { Phase: DownloadPhase.Downloading } || (_live is null && Entry.DownloadProgress is not null);
+    /// <summary>«Descargando 45,2 % · 12,3 MB/s · 4 min» / «En cola» / «En pausa».</summary>
+    public string DownloadText => _job is { } j ? JobText.Short(j) : string.Empty;
 
-    public bool IsIndeterminateProgress => _live is { } l
-        ? l.Progress is null || l.Phase is not (DownloadPhase.Downloading or DownloadPhase.Paused)
-        : IsQueued;
+    public bool CanUninstall => IsSteam && !IsNotInstalled && !IsRunning && !HasActiveJob;
 
-    public double DownloadPercent => ((_live?.Progress) ?? Entry.DownloadProgress ?? 0) * 100;
+    // ----- Actualizaciones -----
 
-    /// <summary>«Descargando 45,2 % · 12,3 MB/s · 4 min» / «En cola…» / «En pausa».</summary>
-    public string DownloadText
+    private bool _remoteUpdate;
+
+    /// <summary>Steam (red) publica una build más nueva que la instalada.</summary>
+    public void SetRemoteUpdate(bool available)
     {
-        get
-        {
-            if (_live is { } l)
-            {
-                var text = l.PhaseText;
-                if (l.Progress is double p && l.Phase is DownloadPhase.Downloading or DownloadPhase.Paused) text += $" {p * 100:0.0} %";
-                if (l.Phase == DownloadPhase.Downloading && l.BytesPerSecond > 0) text += $" · {Formatting.Speed(l.BytesPerSecond)}";
-                if (l.Phase == DownloadPhase.Downloading && l.Eta is { } eta) text += $" · {Formatting.Eta(eta)}";
-                return text;
-            }
-            return Entry.DownloadProgress is double dp
-                ? $"Descargando {dp * 100:0.0} %"
-                : IsQueued ? "En cola · esperando a Steam…" : string.Empty;
-        }
+        if (_remoteUpdate == available) return;
+        _remoteUpdate = available;
+        OnPropertyChanged(nameof(HasUpdate));
+        OnPropertyChanged(nameof(ShowUpdateButton));
+        OnPropertyChanged(nameof(PlatformLabel));
     }
 
-    /// <summary>Instalación nueva aún sin terminar (clic → panel de descargas en vez de jugar).</summary>
-    public bool IsFreshInstallInProgress => IsSteam && Entry.IsInstalling && Entry.SizeOnDisk == 0;
+    /// <summary>Hay actualización: según el manifiesto local o según la build pública de Steam.</summary>
+    public bool HasUpdate => IsSteam && !IsNotInstalled && (Entry.HasPendingUpdate || _remoteUpdate);
 
-    public bool CanUninstall => IsSteam && !IsNotInstalled && !IsRunning;
+    /// <summary>Botón «Actualizar» visible: hay actualización y no hay ya una descarga de este juego.</summary>
+    public bool ShowUpdateButton => HasUpdate && !IsRunning && !HasActiveJob;
 
-    /// <summary>Botón «Actualizar» visible: hay actualización pendiente y Steam no está ya con ella.</summary>
-    public bool ShowUpdateButton =>
-        IsSteam && Entry.HasPendingUpdate && !IsRunning &&
-        _live is not ({ IsActive: true } or { Phase: DownloadPhase.Queued, IsRequested: true });
-
-    public string UpdateButtonText => Entry.IsUpdatePaused ? "Reanudar actualización" : "Actualizar";
+    public string UpdateButtonText => "Actualizar";
 
     public string PlaytimeText
     {
@@ -230,7 +215,6 @@ public sealed class GameCardViewModel : ObservableObject
 
     public ICommand PlayCommand { get; }
     public ICommand InstallCommand { get; }
-    public ICommand InstallWithSteamCommand { get; }
     public ICommand CancelInstallCommand { get; }
     public ICommand UninstallCommand { get; }
     public ICommand UpdateCommand { get; }

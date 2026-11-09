@@ -23,13 +23,16 @@ public sealed class SettingsViewModel : ObservableObject
     private string _newTagName = string.Empty;
     private string _savedText = string.Empty;
 
-    public SettingsViewModel(LauncherSettings settings, UserLibrary library, SteamLocator steam, Action save, Func<IDialogService?> dialogs)
+    public SettingsViewModel(LauncherSettings settings, UserLibrary library, SteamLocator steam, Action save, Func<IDialogService?> dialogs,
+        Func<Task> login, Func<Task> logout)
     {
         _s = settings;
         _library = library;
         _steam = steam;
         _save = save;
         _dialogs = dialogs;
+        LoginCommand = new RelayCommand(async _ => await login(), _ => !IsSteamLoggedIn);
+        LogoutCommand = new RelayCommand(async _ => await logout(), _ => IsSteamLoggedIn);
 
         AddTagCommand = new RelayCommand(_ => AddTag(), _ => !string.IsNullOrWhiteSpace(NewTagName));
         RemoveTagCommand = new RelayCommand(p => { if (p is string t) RemoveTag(t); });
@@ -38,6 +41,34 @@ public sealed class SettingsViewModel : ObservableObject
 
         RefreshTags();
         _library.Changed += (_, _) => RefreshTags();
+    }
+
+    // ===================== Cuenta de Steam (SteamKit2) =====================
+
+    private string _accountText = string.Empty;
+    private bool _isSteamLoggedIn;
+
+    public string AccountText
+    {
+        get => _accountText;
+        private set => SetProperty(ref _accountText, value);
+    }
+
+    public bool IsSteamLoggedIn
+    {
+        get => _isSteamLoggedIn;
+        private set => SetProperty(ref _isSteamLoggedIn, value);
+    }
+
+    public ICommand LoginCommand { get; }
+    public ICommand LogoutCommand { get; }
+
+    /// <summary>Lo llama la ventana principal cuando cambia la sesión.</summary>
+    public void SetAccountState(string text, bool loggedIn)
+    {
+        AccountText = text;
+        IsSteamLoggedIn = loggedIn;
+        CommandManager.InvalidateRequerySuggested();
     }
 
     // ===================== Al terminar de jugar =====================

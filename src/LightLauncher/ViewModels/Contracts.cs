@@ -7,15 +7,13 @@ public interface ICardHost
 {
     bool CanLaunch { get; }
     void Launch(GameCardViewModel card);
-    /// <summary>Instalación en segundo plano (sin ventana de Steam).</summary>
+    /// <summary>Instala descargando de la CDN de Steam (SteamKit2, sin el cliente).</summary>
     void Install(GameCardViewModel card);
-    /// <summary>Alternativa: diálogo oficial de instalación de Steam.</summary>
-    void InstallWithSteamDialog(GameCardViewModel card);
-    /// <summary>Quita de la cola una instalación que aún no ha empezado a descargar.</summary>
+    /// <summary>Cancela la descarga en curso de este juego.</summary>
     void CancelInstall(GameCardViewModel card);
-    /// <summary>Desinstala con el comando oficial de Steam.</summary>
+    /// <summary>Desinstala borrando sus archivos y su appmanifest (sin el cliente).</summary>
     void Uninstall(GameCardViewModel card);
-    /// <summary>Aplica la actualización pendiente (despierta Steam, actualiza y lo cierra al terminar).</summary>
+    /// <summary>Actualiza descargando solo lo que cambió (sin el cliente).</summary>
     void Update(GameCardViewModel card);
     void CreateTagFor(GameCardViewModel card);
     void OpenInstallFolder(GameCardViewModel card);
@@ -36,8 +34,9 @@ public interface IStoreActions
     bool IsKnownOwned(string appId);
 
     /// <summary>
-    /// Instala un juego: en segundo plano si es de la cuenta; con el diálogo de Steam si es gratuito y aún
-    /// no está en la cuenta; y si es de pago sin licencia, abre la compra en la web.
+    /// Instala un juego descargándolo directamente: si es de la cuenta, a la cola; si es gratuito y aún no
+    /// está en la cuenta, primero se pide su licencia gratuita (SteamKit2); si es de pago sin licencia,
+    /// abre la compra en la web.
     /// </summary>
     Task InstallAsync(string appId, string name, bool isFree);
 
@@ -54,6 +53,8 @@ public interface IStoreActions
 public interface IDialogService
 {
     string? PromptText(string title, string message, string initial = "");
+    /// <summary>Inicio de sesión en Steam (usuario/contraseña + Steam Guard). True si se completó.</summary>
+    Task<bool> SteamLoginAsync();
     LocalGameDefinition? EditLocalGame(LocalGameDefinition? existing);
     bool Confirm(string title, string message);
 }

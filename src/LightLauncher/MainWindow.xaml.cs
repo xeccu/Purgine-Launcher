@@ -23,13 +23,16 @@ public partial class MainWindow : Window, IDialogService
     private bool _exitRequested;
     private bool _trayHintShown;
 
-    public MainWindow(MainViewModel viewModel, LauncherSettings settings, UserLibrary library)
+    private readonly SteamNet.SteamSession _steamSession;
+
+    public MainWindow(MainViewModel viewModel, LauncherSettings settings, UserLibrary library, SteamNet.SteamSession steamSession)
     {
         InitializeComponent();
         WindowTheming.UseDarkTitleBar(this);
         _vm = viewModel;
         _settings = settings;
         _library = library;
+        _steamSession = steamSession;
         DataContext = viewModel;
         viewModel.Dialogs = this;
 
@@ -163,6 +166,12 @@ public partial class MainWindow : Window, IDialogService
 
     public LocalGameDefinition? EditLocalGame(LocalGameDefinition? existing) =>
         LocalGameDialog.Show(VisibleOwner(), _library, existing);
+
+    public Task<bool> SteamLoginAsync()
+    {
+        if (!IsVisible) RestoreFromTray();
+        return Task.FromResult(SteamLoginDialog.Show(this, _steamSession));
+    }
 
     public bool Confirm(string title, string message) =>
         MessageBox.Show(this, message, title, MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;

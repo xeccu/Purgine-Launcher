@@ -31,4 +31,9 @@
     <RuntimeHostConfigurationOption Include="System.GC.RetainVM" Value="false" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Protocolo de red de Steam (CM + CDN). DPAPI (ProtectedData) ya viene con .NET 10 para Windows. -->
+    <PackageReference Include="SteamKit2" Version="3.5.0" />
+  </ItemGroup>
+
 </Project>

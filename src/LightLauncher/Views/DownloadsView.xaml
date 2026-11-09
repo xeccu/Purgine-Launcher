@@ -11,19 +11,16 @@
         <!-- ===== Cabecera ===== -->
         <DockPanel Margin="0,0,0,14">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                <Button Style="{StaticResource GhostButton}" Command="{Binding PauseCommand}"
-                        Visibility="{Binding IsPaused, Converter={StaticResource InverseBoolToVis}}"
-                        ToolTip="Congela Steam (y con él sus descargas) sin abrir su ventana. Steam no permite pausar una sola descarga.">
+                <Button Style="{StaticResource GhostButton}" Command="{Binding PauseAllCommand}" Margin="0,0,8,0">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#xE769;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                        <TextBlock Text="Pausar descargas" />
+                        <TextBlock Text="Pausar todo" />
                     </StackPanel>
                 </Button>
-                <Button Style="{StaticResource PrimaryButton}" Command="{Binding ResumeCommand}"
-                        Visibility="{Binding IsPaused, Converter={StaticResource BoolToVis}}">
+                <Button Style="{StaticResource GhostButton}" Command="{Binding ResumeAllCommand}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#xE768;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                        <TextBlock Text="Reanudar" />
+                        <TextBlock Text="Reanudar todo" />
                     </StackPanel>
                 </Button>
             </StackPanel>
@@ -63,14 +60,21 @@
                                         <ProgressBar Style="{StaticResource SlimProgress}" Height="6" Margin="0,10,0,8"
                                                      Value="{Binding Percent, Mode=OneWay}" IsIndeterminate="{Binding IsIndeterminate, Mode=OneWay}" />
                                         <DockPanel>
+                                            <TextBlock DockPanel.Dock="Left" Text="{Binding KindText}" Foreground="{StaticResource MutedBrush}" FontSize="12" Margin="0,0,10,0" />
                                             <TextBlock DockPanel.Dock="Left" Text="{Binding PhaseText}" Foreground="{StaticResource AccentBrush}" FontSize="12" Margin="0,0,12,0" />
                                             <TextBlock Text="{Binding DetailText}" Style="{StaticResource MutedText}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
                                         </DockPanel>
                                     </StackPanel>
 
-                                    <Button Grid.Column="2" Style="{StaticResource GhostButton}" Content="Cancelar" VerticalAlignment="Center"
-                                            Command="{Binding CancelCommand}"
-                                            Visibility="{Binding CanCancel, Converter={StaticResource BoolToVis}}" />
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Button Style="{StaticResource IconButton}" Content="&#xE769;" Margin="0,0,6,0" ToolTip="Pausar"
+                                                Command="{Binding PauseCommand}"
+                                                Visibility="{Binding CanPause, Converter={StaticResource BoolToVis}}" />
+                                        <Button Style="{StaticResource IconButton}" Content="&#xE768;" Margin="0,0,6,0" ToolTip="Reanudar"
+                                                Command="{Binding ResumeCommand}"
+                                                Visibility="{Binding CanResume, Converter={StaticResource BoolToVis}}" />
+                                        <Button Style="{StaticResource GhostButton}" Content="Cancelar" Command="{Binding CancelCommand}" />
+                                    </StackPanel>
                                 </Grid>
                             </Border>
                         </DataTemplate>
@@ -122,7 +126,7 @@
                 </StackPanel>
 
                 <TextBlock Style="{StaticResource MutedText}" Margin="0,16,0,0"
-                           Text="Progreso y velocidad medidos en vivo a partir de la transferencia de Steam y de su registro de descargas. Mientras haya descargas, Steam permanece abierto en segundo plano y solo se cierra cuando terminan todas." />
+                           Text="Descargas directas desde la CDN de Steam (SteamKit2), sin abrir el cliente: progreso y velocidad son los bytes reales recibidos. Al reanudar o actualizar solo se descarga lo que falta o ha cambiado. Al terminar, el juego se registra en Steam (con Steam cerrado) para poder jugarlo." />
             </StackPanel>
         </ScrollViewer>
     </Grid>

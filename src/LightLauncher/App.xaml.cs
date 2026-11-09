@@ -5,6 +5,7 @@ using LightLauncher.Infrastructure;
 using LightLauncher.Library;
 using LightLauncher.Settings;
 using LightLauncher.Stats;
+using LightLauncher.SteamNet;
 using LightLauncher.Store;
 using LightLauncher.ViewModels;
 
@@ -20,6 +21,7 @@ public partial class App : Application
     private EventWaitHandle? _showEvent;
     private RegisteredWaitHandle? _showWait;
     private SteamStoreService? _store;
+    private SteamSession? _steamSession;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -65,19 +67,18 @@ public partial class App : Application
         var library = new UserLibrary(AppPaths.LibraryFile, AppPaths.CoversDir);
         var orchestrator = new ProcessOrchestrator(locator, scanner, tracker, settings);
         _store = new SteamStoreService(settings);
-        var installer = new SteamInstaller(locator, scanner, orchestrator);
-        // Descargas: monitor en vivo + pausa global; el orquestador los consulta antes de cerrar Steam.
-        var suspender = new SteamSuspender(AppPaths.SuspendedStateFile);
-        var monitor = new DownloadMonitor(locator, scanner) { IsSteamSuspended = () => suspender.IsSuspended };
-        orchestrator.Downloads = monitor;
-        orchestrator.Suspender = suspender;
+        // Red de Steam (SteamKit2): sesión, propiedad y descargas sin el cliente de escritorio.
+        _steamSession = new SteamSession(new SteamCredentialStore(AppPaths.SteamSessionFile));
+        var ownership = new SteamOwnershipService(_steamSession, AppPaths.OwnedGamesFile);
+        var downloads = new SteamDownloadManager(_steamSession, ownership, locator, scanner, AppPaths.DownloadQueueFile);
+
         var viewModel = new MainViewModel(
             scanner, orchestrator, tracker, library, settings, _store, new LibraryWatcher(), locator,
-            installer, new AppNameCache(AppPaths.AppNamesFile), monitor, suspender,
+            _steamSession, ownership, downloads,
             saveSettings: () => JsonFileStore.Save(AppPaths.SettingsFile, settings));
-        monitor.Start();
+        downloads.TryRegisterPending();
 
-        var window = new MainWindow(viewModel, settings, library);
+        var window = new MainWindow(viewModel, settings, library, _steamSession);
         MainWindow = window;
         window.Show();
 
@@ -93,6 +94,8 @@ public partial class App : Application
         _showWait?.Unregister(null);
         _showEvent?.Dispose();
         _store?.Dispose();
+        try { _steamSession?.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(3)); }
+        catch (Exception ex) { Log.Warn($"Cierre de la sesión de Steam: {ex.Message}"); }
         if (_singleInstance is not null)
         {
             try { _singleInstance.ReleaseMutex(); } catch (ApplicationException) { /* no era nuestro */ }

@@ -359,7 +359,9 @@
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
         </Style>
 
-        <!-- Base de diálogos -->
+        <!-- Base de diálogos.
+             Ojo: WindowStartupLocation NO es una propiedad de dependencia y no puede ir en un Style
+             (rompe el estilo entero y WPF lo reporta como «recurso no encontrado»): se pone en cada ventana. -->
         <Style x:Key="DialogWindow" TargetType="Window">
             <Setter Property="Background" Value="{StaticResource BgBrush}" />
             <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
@@ -368,7 +370,6 @@
             <Setter Property="ResizeMode" Value="NoResize" />
             <Setter Property="SizeToContent" Value="Height" />
             <Setter Property="ShowInTaskbar" Value="False" />
-            <Setter Property="WindowStartupLocation" Value="CenterOwner" />
             <Setter Property="UseLayoutRounding" Value="True" />
         </Style>
 

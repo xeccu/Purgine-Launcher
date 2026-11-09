@@ -39,6 +39,9 @@ public sealed record GameEntry
     /// <summary>StateFlags crudos del manifiesto (4 = instalado sin nada pendiente; 2 = actualización requerida).</summary>
     public int StateFlags { get; init; }
 
+    /// <summary>Build instalada (campo <c>buildid</c> del manifiesto); se compara con la pública de Steam.</summary>
+    public uint BuildId { get; init; }
+
     // Bits de EAppState de Steam relevantes para actualizaciones.
     private const int FlagUpdateRequired = 2, FlagFullyInstalled = 4, FlagUpdatePaused = 512, FlagUpdateStarted = 1024;
 

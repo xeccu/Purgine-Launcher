@@ -246,6 +246,7 @@ public sealed class SteamLibraryScanner
                 SizeOnDisk = size,
                 IsFullyInstalled = (flags & StateFullyInstalled) != 0,
                 StateFlags = flags,
+                BuildId = uint.TryParse(state.GetValue("buildid"), out var build) ? build : 0,
                 BytesToDownload = toDownload,
                 BytesDownloaded = downloaded,
                 CoverImagePath = FindCoverImage(appId),

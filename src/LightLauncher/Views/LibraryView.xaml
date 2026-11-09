@@ -10,10 +10,8 @@
                       Visibility="{Binding IsNotInstalled, Converter={StaticResource InverseBoolToVis}}" />
             <MenuItem Header="Instalar" Command="{Binding InstallCommand}" FontWeight="SemiBold"
                       Visibility="{Binding IsNotInstalled, Converter={StaticResource BoolToVis}}" />
-            <MenuItem Header="Instalar con el diálogo de Steam" Command="{Binding InstallWithSteamCommand}"
-                      Visibility="{Binding ShowSteamInstallOption, Converter={StaticResource BoolToVis}}" />
-            <MenuItem Header="Cancelar instalación" Command="{Binding CancelInstallCommand}"
-                      Visibility="{Binding IsQueued, Converter={StaticResource BoolToVis}}" />
+            <MenuItem Header="Cancelar descarga" Command="{Binding CancelInstallCommand}"
+                      Visibility="{Binding HasActiveJob, Converter={StaticResource BoolToVis}}" />
             <MenuItem Header="{Binding UpdateButtonText}" Command="{Binding UpdateCommand}" FontWeight="SemiBold"
                       Visibility="{Binding ShowUpdateButton, Converter={StaticResource BoolToVis}}" />
             <Separator />
@@ -263,11 +261,34 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
+        <!-- ===== Sin sesión: invitación a sincronizar la biblioteca completa ===== -->
+        <Border Grid.Row="0" Margin="24,16,24,0" CornerRadius="10" Padding="18,14"
+                Background="{StaticResource AccentSoftBrush}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1"
+                Visibility="{Binding ShowSignInBanner, Converter={StaticResource BoolToVis}}">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Style="{StaticResource PrimaryButton}" VerticalAlignment="Center" Margin="16,0,0,0"
+                        Command="{Binding SignInCommand}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE77B;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                        <TextBlock Text="Iniciar sesión en Steam" />
+                    </StackPanel>
+                </Button>
+                <TextBlock DockPanel.Dock="Left" Text="&#xE753;" FontFamily="{StaticResource IconFont}" FontSize="22"
+                           Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" Margin="0,0,16,0" />
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Estás viendo solo los juegos instalados en este equipo" FontWeight="SemiBold" FontSize="14" />
+                    <TextBlock Style="{StaticResource MutedText}" Margin="0,3,0,0"
+                               Text="Inicia sesión para sincronizar tu biblioteca completa de Steam e instalar o actualizar juegos sin abrir el cliente. Solo hace falta una vez: la sesión se guarda cifrada en este equipo." />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
         <!-- ===== Barra de herramientas ===== -->
-        <DockPanel Grid.Row="0" Margin="24,16,24,10" LastChildFill="False">
+        <DockPanel Grid.Row="1" Margin="24,16,24,10" LastChildFill="False">
             <!-- Búsqueda -->
             <Grid DockPanel.Dock="Left" Width="280">
                 <TextBox x:Name="SearchBox" Style="{StaticResource SearchBox}" Padding="32,7,10,7"
@@ -347,7 +368,7 @@
         </DockPanel>
 
         <!-- ===== Filtros por etiqueta ===== -->
-        <DockPanel Grid.Row="1" Margin="24,0,24,4">
+        <DockPanel Grid.Row="2" Margin="24,0,24,4">
             <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Padding="10,4" VerticalAlignment="Top"
                     Command="{Binding NewTagCommand}" ToolTip="Crear una etiqueta nueva">
                 <StackPanel Orientation="Horizontal">
@@ -369,7 +390,7 @@
         </DockPanel>
 
         <!-- ===== Juegos ===== -->
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                       Padding="16,4,16,12" PanningMode="VerticalOnly">
             <ItemsControl ItemsSource="{Binding GamesView}" Focusable="False">
                 <ItemsControl.Style>
@@ -389,7 +410,7 @@
             </ItemsControl>
         </ScrollViewer>
 
-        <TextBlock Grid.Row="2" Text="{Binding EmptyStateText}" TextAlignment="Center" TextWrapping="Wrap"
+        <TextBlock Grid.Row="3" Text="{Binding EmptyStateText}" TextAlignment="Center" TextWrapping="Wrap"
                    HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="440" LineHeight="22"
                    Foreground="{StaticResource MutedBrush}" FontSize="14" IsHitTestVisible="False" />
     </Grid>
