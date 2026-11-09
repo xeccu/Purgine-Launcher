@@ -474,6 +474,21 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     private async Task UpdateAsync(GameCardViewModel card)
     {
         if (card.IsRunning || !card.ShowUpdateButton) return;
+
+        // Steam aplazó esta actualización (juego sin jugar desde hace tiempo): despertarlo no la aplica
+        // (comprobado). La vía oficial sin su ventana es abrir el juego: Steam lo actualiza antes de lanzarlo.
+        if (_monitor.GetUpdateDelayedUntil(card.Entry.AppId) is { } until)
+        {
+            var play = Dialogs?.Confirm("Actualización aplazada por Steam",
+                $"Steam ha aplazado la actualización de «{card.Name}» hasta el {until.LocalDateTime:d 'de' MMMM} porque no lo juegas desde hace tiempo, " +
+                "y mientras tanto no la aplica aunque esté abierto.\n\n" +
+                "La única forma de aplicarla ya sin abrir la ventana de Steam es abrir el juego: Steam lo actualizará primero y después lo lanzará.\n\n" +
+                "¿Actualizar y jugar ahora?") ?? false;
+            if (play) _ = LaunchAsync(card);
+            else StatusText = $"Steam actualizará {card.Name} automáticamente a partir del {until.LocalDateTime:d MMM}.";
+            return;
+        }
+
         StatusText = $"Preparando la actualización de {card.Name}…";
         var (ok, message) = await Task.Run(() => _orchestrator.StartUpdateAsync(card.Entry));
         StatusText = message;
@@ -492,8 +507,9 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         if (info.Phase == DownloadPhase.Canceled && info.Detail is not null)
         {
             // Steam no empezó la tarea (app en uso, restricciones de descarga…): se avisa y se libera.
-            StatusText = $"Steam no empezó la tarea de {info.Name}. Si el juego o la app están abiertos, ciérralos y vuelve a intentarlo.";
-            Notify("Steam no empezó la tarea", $"{info.Name}: ¿está abierto el juego o la app? Ciérralo y vuelve a intentarlo.");
+            StatusText = $"Steam no empezó la tarea de {info.Name}. Si el juego o la app están abiertos, ciérralos; " +
+                         "si es una actualización, abrir el juego hace que Steam la aplique antes de lanzarlo.";
+            Notify("Steam no empezó la tarea", $"{info.Name}: si está abierto, ciérralo. Para actualizar ya, abre el juego desde LightLauncher.");
             _pendingInstalls.Remove(info.AppId);
         }
         else if (info.Phase == DownloadPhase.Completed && info.IsRequested && !_pendingInstalls.Contains(info.AppId))

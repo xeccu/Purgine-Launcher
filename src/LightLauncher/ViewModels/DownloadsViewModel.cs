@@ -41,7 +41,9 @@ public sealed class DownloadItemViewModel : ObservableObject
     /// <summary>Barra animada solo cuando Steam trabaja sin un porcentaje medible (no para lo que está en espera).</summary>
     public bool IsIndeterminate => _info.IsActive && (_info.Progress is null || _info.Phase is DownloadPhase.Preparing
         or DownloadPhase.Preallocating or DownloadPhase.Verifying or DownloadPhase.Committing or DownloadPhase.Uninstalling);
-    public string PercentText => _info.Progress is double p ? $"{p * 100:0.0} %" : string.Empty;
+    /// <summary>Porcentaje solo cuando hay una descarga en marcha o en pausa (no en lo que espera).</summary>
+    public string PercentText =>
+        _info.Progress is double p && (_info.IsActive || _info.Phase == DownloadPhase.Paused) ? $"{p * 100:0.0} %" : string.Empty;
 
     /// <summary>«3,2 GB de 7,0 GB · 12,3 MB/s · 4 min restantes»</summary>
     public string DetailText
@@ -49,7 +51,9 @@ public sealed class DownloadItemViewModel : ObservableObject
         get
         {
             var parts = new List<string>();
-            if (_info.BytesTotal > 0)
+            if (_info.BytesTotal > 0 && _info.Phase == DownloadPhase.Queued)
+                parts.Add($"{Formatting.Bytes(_info.BytesTotal)} por descargar");
+            else if (_info.BytesTotal > 0)
                 parts.Add($"{Formatting.Bytes(_info.BytesDownloaded)} de {Formatting.Bytes(_info.BytesTotal)}");
             if (IsDownloading && _info.BytesPerSecond > 0) parts.Add(Formatting.Speed(_info.BytesPerSecond));
             if (IsDownloading && _info.Eta is { } eta) parts.Add($"{Formatting.Eta(eta)} restantes");

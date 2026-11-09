@@ -51,7 +51,7 @@ public sealed record DownloadInfo(
 
     public string PhaseText => Phase switch
     {
-        DownloadPhase.Queued => IsRequested ? "En cola" : "Actualización pendiente",
+        DownloadPhase.Queued => Detail ?? (IsRequested ? "En cola" : "Actualización pendiente"),
         DownloadPhase.Preparing => "Preparando…",
         DownloadPhase.Preallocating => "Reservando espacio en disco…",
         DownloadPhase.Downloading => "Descargando",
@@ -264,9 +264,20 @@ public sealed partial class DownloadMonitor : IDisposable
                     {
                         detail = "Empezará al abrirse Steam";
                     }
+                    if (phase == DownloadPhase.Queued && !_requested.ContainsKey(appId) &&
+                        _delayedUntil.TryGetValue(appId, out var until) && until > DateTimeOffset.Now)
+                    {
+                        detail = $"Aplazada por Steam hasta el {until.LocalDateTime:d MMM}";
+                    }
 
                     var total = s.TotalDownload > 0 ? s.TotalDownload : s.ManifestTotal;
                     var done = (long)Math.Min(total > 0 ? total : long.MaxValue, Math.Max(s.ManifestBytes, s.EstimatedBytes));
+                    // En espera: mostrar el tamaño real de lo pendiente (no restos de descargas anteriores).
+                    if (phase == DownloadPhase.Queued && _pendingBytes.TryGetValue(appId, out var pending))
+                    {
+                        total = pending;
+                        done = 0;
+                    }
                     if (s.Phase == DownloadPhase.Completed) done = total;
                     var speed = phase == DownloadPhase.Downloading ? s.SpeedEma : 0;
                     TimeSpan? eta = speed > 50_000 && total > done ? TimeSpan.FromSeconds((total - done) / speed) : null;
@@ -329,7 +340,12 @@ public sealed partial class DownloadMonitor : IDisposable
 
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         var length = fs.Length;
-        if (_logOffset < 0) _logOffset = Math.Max(0, length - InitialTailBytes); // primer arranque
+        if (_logOffset < 0)
+        {
+            // Primer arranque: los aplazamientos de Steam pueden estar en cualquier punto del log.
+            ScanUpdateDelays(fs);
+            _logOffset = Math.Max(0, length - InitialTailBytes);
+        }
         if (length < _logOffset) _logOffset = 0;                                  // Steam rotó el log
         if (length == _logOffset) return;
 
@@ -348,6 +364,74 @@ public sealed partial class DownloadMonitor : IDisposable
         }
     }
 
+    // ----- Aplazamientos de Steam -----
+
+    /// <summary>
+    /// Steam retrasa las actualizaciones automáticas de juegos que no se juegan desde hace tiempo y lo anota:
+    /// <c>state changed : Update Required,Fully Installed, (Update delayed for N secs)</c>. Mientras dure,
+    /// despertar Steam no la aplica (comprobado): solo la aplica al abrir el juego o desde su ventana.
+    /// </summary>
+    private readonly Dictionary<string, DateTimeOffset> _delayedUntil = new();
+
+    /// <summary>Fecha hasta la que Steam aplaza la actualización de esta app, si se conoce y no ha pasado.</summary>
+    public DateTimeOffset? GetUpdateDelayedUntil(string appId)
+    {
+        lock (_gate)
+            return _delayedUntil.TryGetValue(appId, out var until) && until > DateTimeOffset.Now ? until : null;
+    }
+
+    private void ScanUpdateDelays(FileStream fs)
+    {
+        fs.Position = 0;
+        using var reader = new StreamReader(fs, Encoding.UTF8, false, 64 * 1024, leaveOpen: true);
+        lock (_gate)
+        {
+            string? line;
+            while ((line = reader.ReadLine()) is not null)
+            {
+                // Solo interesan los aplazamientos y lo que los anula (actualización hecha o empezada).
+                if (line.Contains("delayed for", StringComparison.Ordinal) ||
+                    line.Contains("update started", StringComparison.Ordinal) ||
+                    line.Contains("finished update", StringComparison.Ordinal) ||
+                    line.Contains("prefetch finished", StringComparison.Ordinal))
+                    TrackDelay(line);
+            }
+        }
+    }
+
+    private void TrackDelay(string line)
+    {
+        var m = LogLine().Match(line);
+        if (!m.Success) return;
+        var appId = m.Groups["id"].Value;
+        var rest = m.Groups["rest"].Value;
+        if (rest.StartsWith("Workshop", StringComparison.Ordinal)) return;
+
+        // «update prefetch finished : N bytes to download»: tamaño real de la actualización pendiente.
+        var prefetch = PrefetchBytes().Match(rest);
+        if (prefetch.Success && long.TryParse(prefetch.Groups["bytes"].Value, out var pendingBytes))
+        {
+            _pendingBytes[appId] = pendingBytes;
+            return;
+        }
+
+        var delay = UpdateDelay().Match(rest);
+        if (delay.Success &&
+            DateTimeOffset.TryParse(m.Groups["ts"].Value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var ts) &&
+            long.TryParse(delay.Groups["secs"].Value, out var secs))
+        {
+            _delayedUntil[appId] = ts + TimeSpan.FromSeconds(secs);
+        }
+        else if (rest.Contains("update started", StringComparison.Ordinal) || rest.StartsWith("finished update", StringComparison.Ordinal))
+        {
+            _delayedUntil.Remove(appId);
+            _pendingBytes.Remove(appId);
+        }
+    }
+
+    /// <summary>Tamaño de la actualización pendiente según el último «prefetch» de Steam.</summary>
+    private readonly Dictionary<string, long> _pendingBytes = new();
+
     /// <summary>Aplica una línea del log a la máquina de estados (expuesto para pruebas).</summary>
     public void ApplyLogLine(string line)
     {
@@ -355,6 +439,7 @@ public sealed partial class DownloadMonitor : IDisposable
         if (!m.Success) return;
         var rest = m.Groups["rest"].Value;
         if (rest.StartsWith("Workshop", StringComparison.Ordinal)) return; // contenido del taller: no es una descarga de juego
+        TrackDelay(line);
 
         var appId = m.Groups["id"].Value;
         _ = DateTimeOffset.TryParse(m.Groups["ts"].Value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var ts);
@@ -570,4 +655,10 @@ public sealed partial class DownloadMonitor : IDisposable
 
     [GeneratedRegex(@"download (?<done>\d+)/(?<total>\d+)")]
     private static partial Regex DownloadPair();
+
+    [GeneratedRegex(@"Update delayed for (?<secs>\d+) secs")]
+    private static partial Regex UpdateDelay();
+
+    [GeneratedRegex(@"prefetch finished : (?<bytes>\d+) bytes to download")]
+    private static partial Regex PrefetchBytes();
 }

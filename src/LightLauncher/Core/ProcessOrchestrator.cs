@@ -385,9 +385,11 @@ public sealed class ProcessOrchestrator
     }
 
     /// <summary>
-    /// Actualizar: despierta Steam en segundo plano y deja que su planificador aplique la actualización
-    /// pendiente (Steam no tiene un comando para actualizar un juego concreto sin abrir su ventana; con la
-    /// actualización automática activada la empieza en cuanto arranca). Después, apagado automático.
+    /// Actualizar en segundo plano: despierta Steam (sin ventana) para que su planificador aplique la
+    /// actualización pendiente, y lo cierra al terminar. Steam no tiene un comando para forzar la
+    /// actualización de un juego concreto sin su ventana, y si la ha aplazado (juego sin jugar desde hace
+    /// tiempo) no la aplica aunque esté abierto: en ese caso la vía oficial es abrir el juego
+    /// (<c>steam://run</c>), que Steam actualiza antes de lanzarlo. Lo decide la ventana principal.
     /// </summary>
     public async Task<(bool Ok, string Message)> StartUpdateAsync(GameEntry game, CancellationToken ct = default)
     {
@@ -396,8 +398,8 @@ public sealed class ProcessOrchestrator
         if (!game.HasPendingUpdate) return (false, $"{game.Name} no tiene actualizaciones pendientes.");
 
         Suspender?.Resume();
-        Downloads?.MarkRequested(game.AppId, game.Name); // progreso en vivo + Steam no se cierra a medias
         var wasRunning = SteamLocator.IsClientRunning();
+        Downloads?.MarkRequested(game.AppId, game.Name); // progreso en vivo + Steam no se cierra a medias
         if (!wasRunning)
         {
             Report(LaunchPhase.StartingClient, $"Despertando Steam en segundo plano para actualizar {game.Name}…", null);
@@ -405,9 +407,7 @@ public sealed class ProcessOrchestrator
         }
 
         TrackSteamTask(steamWokenByUs: !wasRunning);
-        var msg = wasRunning
-            ? $"Steam ya estaba abierto: actualizará {game.Name} en segundo plano."
-            : $"Actualizando {game.Name} en segundo plano. Steam se cerrará solo al terminar.";
+        var msg = $"Actualizando {game.Name} en segundo plano. Steam se cerrará solo al terminar.";
         Report(LaunchPhase.Idle, msg, null);
         Log.Info($"Actualización solicitada: {game.Name} ({game.AppId}).");
         return (true, msg);
