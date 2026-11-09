@@ -64,6 +64,10 @@ public sealed class SteamLocator
 
     public static bool IsClientRunning() => ProcessUtils.IsRunning("steam");
 
+    /// <summary>AccountID (32 bits) del usuario con sesión iniciada en Steam; 0 si no hay.</summary>
+    public static int GetActiveAccountId() =>
+        ReadDword(Registry.CurrentUser, $@"{SteamKey}\ActiveProcess", "ActiveUser");
+
     /// <summary>
     /// El cliente está "listo" cuando ha publicado su PID activo y hay un usuario con sesión iniciada.
     /// A partir de ahí acepta comandos <c>steam://</c> sin perderlos.

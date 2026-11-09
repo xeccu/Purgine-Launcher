@@ -11,6 +11,9 @@ public static class AppPaths
 
     public static string SettingsFile => Path.Combine(DataDir, "settings.json");
     public static string PlaytimeFile => Path.Combine(DataDir, "playtime.json");
+    public static string LibraryFile => Path.Combine(DataDir, "library.json");
+    public static string CoversDir => Path.Combine(DataDir, "covers");
+    public static string AppNamesFile => Path.Combine(DataDir, "app-names.json");
     public static string LogFile => Path.Combine(DataDir, "lightlauncher.log");
 
     public static void EnsureCreated() => Directory.CreateDirectory(DataDir);

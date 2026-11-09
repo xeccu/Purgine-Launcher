@@ -10,6 +10,13 @@ public static class Formatting
         return t.Minutes == 0 ? $"{(int)t.TotalHours} h" : $"{(int)t.TotalHours} h {t.Minutes} min";
     }
 
+    public static string Bytes(long bytes) => bytes switch
+    {
+        >= 1L << 30 => $"{bytes / (double)(1L << 30):0.0} GB",
+        >= 1L << 20 => $"{bytes / (double)(1L << 20):0} MB",
+        _ => $"{bytes / 1024.0:0} KB",
+    };
+
     public static string RelativeDate(DateTimeOffset? utc)
     {
         if (utc is null) return string.Empty;

@@ -1,0 +1,65 @@
+<Window x:Class="LightLauncher.Views.LocalGameDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Style="{StaticResource DialogWindow}"
+        Width="620" Title="Añadir ejecutable">
+    <Grid Margin="22,20">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="140" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Portada -->
+        <StackPanel Grid.Column="0" Margin="0,0,20,0">
+            <Grid Width="140" Height="210">
+                <Border CornerRadius="8" Background="{StaticResource CardBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+                    <StackPanel VerticalAlignment="Center" Margin="10">
+                        <Image x:Name="IconPreview" Width="40" Height="40" Margin="0,0,0,8" />
+                        <TextBlock Text="Sin portada" HorizontalAlignment="Center" Foreground="{StaticResource MutedBrush}" FontSize="12" />
+                    </StackPanel>
+                </Border>
+                <Border x:Name="CoverBorder" CornerRadius="8" Visibility="Collapsed">
+                    <Border.Background>
+                        <ImageBrush x:Name="CoverBrush" Stretch="UniformToFill" />
+                    </Border.Background>
+                </Border>
+            </Grid>
+            <Button Style="{StaticResource GhostButton}" Content="Elegir portada…" Margin="0,10,0,0" Click="OnBrowseCover" />
+            <Button x:Name="ClearCoverButton" Style="{StaticResource GhostButton}" Content="Quitar portada" Margin="0,6,0,0"
+                    Click="OnClearCover" Visibility="Collapsed" />
+            <TextBlock Style="{StaticResource MutedText}" Margin="0,8,0,0" Text="Ideal 600×900 (vertical). JPG o PNG." />
+        </StackPanel>
+
+        <!-- Campos -->
+        <StackPanel Grid.Column="1">
+            <TextBlock Text="Ejecutable" Margin="0,0,0,4" />
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Content="Examinar…" Margin="8,0,0,0" Click="OnBrowseExe" />
+                <TextBox x:Name="ExeBox" Style="{StaticResource SearchBox}" TextChanged="OnExeChanged" />
+            </DockPanel>
+            <TextBlock Style="{StaticResource MutedText}" Margin="0,4,0,12"
+                       Text="Cualquier .exe, .bat o acceso directo: exportaciones de Godot/Unity, emuladores, juegos sin tienda…" />
+
+            <TextBlock Text="Nombre" Margin="0,0,0,4" />
+            <TextBox x:Name="NameBox" Style="{StaticResource SearchBox}" MaxLength="80" />
+
+            <TextBlock Text="Argumentos (opcional)" Margin="0,12,0,4" />
+            <TextBox x:Name="ArgsBox" Style="{StaticResource SearchBox}" />
+            <TextBlock Style="{StaticResource MutedText}" Margin="0,4,0,0" Text="Ej.: --fullscreen  ·  para un emulador, la ruta de la ROM entre comillas." />
+
+            <TextBlock Text="Carpeta de trabajo (opcional)" Margin="0,12,0,4" />
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Content="Examinar…" Margin="8,0,0,0" Click="OnBrowseWorkDir" />
+                <TextBox x:Name="WorkDirBox" Style="{StaticResource SearchBox}" />
+            </DockPanel>
+            <TextBlock Style="{StaticResource MutedText}" Margin="0,4,0,0" Text="Vacío = la carpeta del ejecutable." />
+
+            <TextBlock x:Name="ErrorText" Foreground="{StaticResource DangerBrush}" Margin="0,12,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <Button Style="{StaticResource GhostButton}" Content="Cancelar" IsCancel="True" Margin="0,0,8,0" />
+                <Button x:Name="SaveButton" Style="{StaticResource PrimaryButton}" Content="Añadir a la biblioteca" IsDefault="True" Click="OnSave" />
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</Window>

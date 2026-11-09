@@ -101,6 +101,87 @@ public sealed class SteamLibraryScanner
         return games.Values.OrderBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
     }
 
+    /// <summary>Tipos de app de Steam que se muestran como juegos no instalados.</summary>
+    private static readonly HashSet<string> GameTypes = new(StringComparer.OrdinalIgnoreCase) { "game" };
+
+    /// <summary>
+    /// Escaneo completo: juegos instalados + juegos de la cuenta que no están en disco, todo desde
+    /// archivos locales de Steam:
+    /// <list type="bullet">
+    ///   <item>propiedad: <c>userdata\{id}\config\librarycache\{appid}.json</c> (Steam crea uno por cada juego
+    ///         de tu biblioteca) + juegos con tiempo en <c>localconfig.vdf</c> + instalados;</item>
+    ///   <item>nombre, tipo y carpeta: <c>appcache\appinfo.vdf</c>;</item>
+    ///   <item>portadas: <c>appcache\librarycache</c>.</item>
+    /// </list>
+    /// <c>licensecache</c> está cifrado y no se toca: la lista es una aproximación local fiable, no la API oficial.
+    /// </summary>
+    public SteamLibrarySnapshot ScanFull()
+    {
+        var installed = Scan();
+        var usage = ReadSteamPlaytime();
+        var appInfo = SteamAppInfoReader.Read(_locator.SteamPath);
+        var owned = ReadOwnedAppIds(usage);
+        foreach (var g in installed) owned.Add(g.AppId);
+
+        var installedIds = installed.Select(g => g.AppId).ToHashSet();
+        var notInstalled = new List<GameEntry>();
+        var unresolved = new List<string>();
+        foreach (var appId in owned)
+        {
+            if (installedIds.Contains(appId) || IgnoredAppIds.Contains(appId)) continue;
+            if (!appInfo.TryGetValue(appId, out var basics)) { unresolved.Add(appId); continue; }
+            if (!GameTypes.Contains(basics.Type)) continue; // herramientas, demos, configs, betas…
+            notInstalled.Add(CreateNotInstalledEntry(appId, basics.Name, basics.InstallDir));
+        }
+
+        Log.Info($"Biblioteca Steam: {installed.Count} instalados, {notInstalled.Count} no instalados, {unresolved.Count} sin nombre local.");
+        return new SteamLibrarySnapshot(installed, notInstalled, owned, usage, appInfo, unresolved, GetLibraryFolders());
+    }
+
+    /// <summary>AppIDs que constan en la cuenta según la caché local (sin los instalados).</summary>
+    public HashSet<string> ReadOwnedAppIds(IReadOnlyDictionary<string, SteamAppUsage> usage)
+    {
+        var owned = new HashSet<string>(usage.Keys);
+        var userDir = SteamPlaytimeReader.FindUserDir(_locator.SteamPath);
+        if (userDir is null) return owned;
+
+        var cache = Path.Combine(userDir, "config", "librarycache");
+        if (!Directory.Exists(cache)) return owned;
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(cache, "*.json"))
+            {
+                var name = Path.GetFileNameWithoutExtension(file);
+                if (name.Length > 0 && name.All(char.IsAsciiDigit)) owned.Add(name);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"No se pudo leer {cache}: {ex.Message}");
+        }
+        return owned;
+    }
+
+    /// <summary>Entrada de un juego de la cuenta que no está en disco.</summary>
+    public GameEntry CreateNotInstalledEntry(string appId, string name, string? installDirName) => new()
+    {
+        Id = GameEntry.MakeSteamId(appId),
+        Platform = GamePlatform.Steam,
+        AppId = appId,
+        Name = name,
+        IsInstalled = false,
+        IsFullyInstalled = false,
+        InstallDirName = installDirName,
+        CoverImagePath = FindCoverImage(appId),
+    };
+
+    /// <summary>
+    /// Tiempo jugado histórico de Steam (de <c>localconfig.vdf</c>), indexado por AppID.
+    /// Incluye también juegos no instalados: sirve de señal local de propiedad para la Tienda.
+    /// </summary>
+    public IReadOnlyDictionary<string, SteamAppUsage> ReadSteamPlaytime() =>
+        SteamPlaytimeReader.Read(_locator.SteamPath);
+
     /// <summary>Busca un juego concreto por AppID (lee solo los manifiestos necesarios).</summary>
     public GameEntry? FindGame(string appId)
     {
@@ -110,6 +191,26 @@ public sealed class SteamLibraryScanner
             if (File.Exists(manifest)) return ParseManifest(manifest, library);
         }
         return null;
+    }
+
+    /// <summary>
+    /// Parsea un único <c>appmanifest_*.acf</c> (lo usa el vigilante de bibliotecas para reflejar
+    /// instalaciones y progreso de descargas en vivo).
+    /// </summary>
+    public GameEntry? ParseManifestFile(string manifestPath)
+    {
+        // {biblioteca}\steamapps\appmanifest_X.acf → {biblioteca}
+        var steamapps = Path.GetDirectoryName(manifestPath);
+        var library = steamapps is null ? null : Path.GetDirectoryName(steamapps);
+        return library is null ? null : ParseManifest(manifestPath, library);
+    }
+
+    /// <summary>Extrae el AppID del nombre de archivo <c>appmanifest_{id}.acf</c>.</summary>
+    public static string? AppIdFromManifestPath(string manifestPath)
+    {
+        var name = Path.GetFileNameWithoutExtension(manifestPath);
+        const string prefix = "appmanifest_";
+        return name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? name[prefix.Length..] : null;
     }
 
     private GameEntry? ParseManifest(string manifestPath, string libraryPath)
@@ -129,6 +230,8 @@ public sealed class SteamLibraryScanner
 
             _ = int.TryParse(state.GetValue("StateFlags"), out var flags);
             _ = long.TryParse(state.GetValue("SizeOnDisk"), out var size);
+            _ = long.TryParse(state.GetValue("BytesToDownload"), out var toDownload);
+            _ = long.TryParse(state.GetValue("BytesDownloaded"), out var downloaded);
 
             return new GameEntry
             {
@@ -142,6 +245,8 @@ public sealed class SteamLibraryScanner
                 LibraryPath = libraryPath,
                 SizeOnDisk = size,
                 IsFullyInstalled = (flags & StateFullyInstalled) != 0,
+                BytesToDownload = toDownload,
+                BytesDownloaded = downloaded,
                 CoverImagePath = FindCoverImage(appId),
             };
         }
