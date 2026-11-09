@@ -1,12 +1,12 @@
-# LightLauncher
+# Purgine
 
-Launcher de videojuegos ultraligero para Windows (Código visible, Todos los derechos reservados). Gestiona tu biblioteca de Steam
+**Purgine Launcher** es un launcher de videojuegos ultraligero para Windows (código visible, todos los derechos reservados). Gestiona tu biblioteca de Steam
 —licencias, descargas, actualizaciones y desinstalaciones— **hablando directamente con los servidores de
 Steam**, sin abrir el cliente de escritorio. El cliente oficial solo se despierta para **jugar** y se cierra
 al terminar.
 
 > **No es un emulador de DRM ni un crack.** Los juegos se siguen ejecutando a través del cliente oficial
-> de Steam, que valida la licencia. LightLauncher solo decide *cuándo* está abierto y se ocupa del resto.
+> de Steam, que valida la licencia. Purgine solo decide *cuándo* está abierto y se ocupa del resto.
 
 ## Requisitos
 
@@ -22,7 +22,7 @@ dotnet build
 ```
 
 ```bash
-dotnet run --project src/LightLauncher
+dotnet run --project src/Purgine
 ```
 
 El repositorio incluye un `nuget.config` con nuget.org, así que restaura los paquetes aunque el equipo no
@@ -31,13 +31,13 @@ tenga orígenes de NuGet configurados.
 Ejecutable autocontenido de un solo archivo:
 
 ```bash
-dotnet publish src/LightLauncher -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish
+dotnet publish src/Purgine -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish
 ```
 
 ## Arquitectura
 
 ```
-                    ┌──────────────────────────────── LightLauncher ───────────────────────────────┐
+                    ┌──────────────────────────────── Purgine ───────────────────────────────┐
                     │                                                                              │
   Servidores CM ◄───┤ SteamSession ──► SteamOwnershipService   licencias → paquetes → apps (PICS)    │
   de Steam          │ (SteamKit2)      (owned-games.json)       nombre, carpeta, build pública      │
@@ -61,7 +61,7 @@ dotnet publish src/LightLauncher -c Release -r win-x64 --self-contained -p:Publi
 - **La contraseña nunca se guarda.** Solo se guarda el *refresh token* que emite Steam, cifrado con DPAPI
   (ámbito del usuario de Windows) en `steam-session.bin`. Se puede revocar desde la web de Steam →
   «Dispositivos autorizados», o con «Cerrar sesión» en Ajustes.
-- `LoginID` propio: la sesión de LightLauncher convive con la del cliente de escritorio sin expulsarla.
+- `LoginID` propio: la sesión de Purgine convive con la del cliente de escritorio sin expulsarla.
 - La conexión se abre bajo demanda y se cierra tras 3 minutos sin uso (y sin descargas en curso), para que
   el launcher siga ocupando el mínimo de memoria.
 
@@ -89,7 +89,7 @@ Patrón [DepotDownloader](https://github.com/SteamRE/DepotDownloader), 100 % en 
 5. Al terminar, `AppManifestWriter` registra el juego en Steam (`appmanifest_{id}.acf` con `StateFlags 4`,
    build e `InstalledDepots`, y los manifiestos en `Steam/depotcache`) para que el cliente oficial lo
    reconozca como instalado y al día. Se hace **con Steam cerrado** (abierto, reescribiría el manifiesto);
-   si está abierto, se espera a que se cierre (LightLauncher lo cierra al terminar cada partida).
+   si está abierto, se espera a que se cierre (Purgine lo cierra al terminar cada partida).
 
 La cola (una descarga a la vez) se guarda en `download-queue.json` y vuelve en pausa al reiniciar. El
 progreso, la velocidad y el tiempo restante son los **bytes reales recibidos de la CDN**.
@@ -122,8 +122,8 @@ La **única** función de `steam.exe`:
 ## Estructura
 
 ```
-LightLauncher.sln · nuget.config · Directory.Build.props
-src/LightLauncher/
+Purgine.sln · nuget.config · Directory.Build.props
+src/Purgine/
 ├─ SteamNet/        Red de Steam (SteamKit2): sesión, propiedad, motor de depots, cola, registro en Steam
 ├─ Core/            Orquestador de partidas, vigilancia de procesos, limitador de Steam, ventana de Steam
 ├─ Library/         Escáner de manifiestos locales, VDF/appinfo, tiempo de Steam, etiquetas, ejecutables locales
@@ -136,7 +136,7 @@ src/LightLauncher/
 
 ## Datos locales
 
-Todo en `%LocalAppData%\LightLauncher\` (botón «Abrir carpeta de datos» en Ajustes):
+Todo en `%LocalAppData%\Purgine\` (botón «Abrir carpeta de datos» en Ajustes):
 
 | Archivo | Contenido |
 |---|---|
@@ -144,7 +144,11 @@ Todo en `%LocalAppData%\LightLauncher\` (botón «Abrir carpeta de datos» en Aj
 | `owned-games.json` | Juegos de la cuenta según Steam (caché) |
 | `download-queue.json` | Cola de descargas pendientes |
 | `settings.json` · `library.json` · `playtime.json` | Ajustes, etiquetas/ejecutables locales, tiempo jugado |
-| `lightlauncher.log` | Registro de diagnóstico |
+| `purgine.log` | Registro de diagnóstico |
+
+> Si vienes de una versión anterior (cuando la app se llamaba «LightLauncher»), al primer arranque la carpeta
+> `%LocalAppData%\LightLauncher\` se mueve entera a `%LocalAppData%\Purgine\`: no pierdes ajustes, etiquetas,
+> tiempo jugado ni la sesión de Steam.
 
 ## Limitaciones y avisos
 
