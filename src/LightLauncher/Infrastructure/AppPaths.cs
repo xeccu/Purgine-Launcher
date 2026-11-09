@@ -14,6 +14,8 @@ public static class AppPaths
     public static string LibraryFile => Path.Combine(DataDir, "library.json");
     public static string CoversDir => Path.Combine(DataDir, "covers");
     public static string AppNamesFile => Path.Combine(DataDir, "app-names.json");
+    /// <summary>PIDs de Steam congelados por «Pausar descargas» (para reanudarlos tras un cierre inesperado).</summary>
+    public static string SuspendedStateFile => Path.Combine(DataDir, "steam-suspended.json");
     public static string LogFile => Path.Combine(DataDir, "lightlauncher.log");
 
     public static void EnsureCreated() => Directory.CreateDirectory(DataDir);

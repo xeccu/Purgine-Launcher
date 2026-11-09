@@ -36,10 +36,11 @@ public sealed class LauncherSettings
     public const int MaxCoverWidth = 240;
 
     /// <summary>Versión del esquema de ajustes (para migrar valores por defecto antiguos).</summary>
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
 
-    public const string DefaultSteamArguments = "-silent -nofriendsui -nochatui -minimized -vgui -nolightbox";
+    public const string DefaultSteamArguments = "-silent -nofriendsui -nochatui -minimized -vgui -fulldesktopres 0";
     public const string LegacySteamArguments = "-silent -nofriendsui -nochatui";
+    public const string V2SteamArguments = "-silent -nofriendsui -nochatui -minimized -vgui -nolightbox";
 
     /// <summary>0 = archivo anterior a las migraciones (o recién creado).</summary>
     public int SettingsVersion { get; set; }
@@ -130,8 +131,10 @@ public sealed class LauncherSettings
     {
         if (SettingsVersion >= CurrentVersion) return false;
 
-        if (SettingsVersion < 2 &&
-            string.Equals(SteamClientArguments?.Trim(), LegacySteamArguments, StringComparison.OrdinalIgnoreCase))
+        // Solo se sustituyen valores por defecto antiguos; los argumentos personalizados se respetan.
+        var args = SteamClientArguments?.Trim();
+        if (string.Equals(args, LegacySteamArguments, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(args, V2SteamArguments, StringComparison.OrdinalIgnoreCase))
         {
             SteamClientArguments = DefaultSteamArguments;
         }

@@ -66,10 +66,16 @@ public partial class App : Application
         var orchestrator = new ProcessOrchestrator(locator, scanner, tracker, settings);
         _store = new SteamStoreService(settings);
         var installer = new SteamInstaller(locator, scanner, orchestrator);
+        // Descargas: monitor en vivo + pausa global; el orquestador los consulta antes de cerrar Steam.
+        var suspender = new SteamSuspender(AppPaths.SuspendedStateFile);
+        var monitor = new DownloadMonitor(locator, scanner) { IsSteamSuspended = () => suspender.IsSuspended };
+        orchestrator.Downloads = monitor;
+        orchestrator.Suspender = suspender;
         var viewModel = new MainViewModel(
             scanner, orchestrator, tracker, library, settings, _store, new LibraryWatcher(), locator,
-            installer, new AppNameCache(AppPaths.AppNamesFile),
+            installer, new AppNameCache(AppPaths.AppNamesFile), monitor, suspender,
             saveSettings: () => JsonFileStore.Save(AppPaths.SettingsFile, settings));
+        monitor.Start();
 
         var window = new MainWindow(viewModel, settings, library);
         MainWindow = window;

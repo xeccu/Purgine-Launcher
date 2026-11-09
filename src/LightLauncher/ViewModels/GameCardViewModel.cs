@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using System.Windows.Media;
+using LightLauncher.Core;
 using LightLauncher.Infrastructure;
 using LightLauncher.Library;
 using LightLauncher.Stats;
@@ -64,6 +65,7 @@ public sealed class GameCardViewModel : ObservableObject
         InstallCommand = new RelayCommand(_ => _host.Install(this), _ => IsNotInstalled);
         InstallWithSteamCommand = new RelayCommand(_ => _host.InstallWithSteamDialog(this), _ => IsSteam && (IsNotInstalled || IsQueued));
         CancelInstallCommand = new RelayCommand(_ => _host.CancelInstall(this), _ => IsQueued);
+        UninstallCommand = new RelayCommand(_ => _host.Uninstall(this), _ => CanUninstall);
         NewTagCommand = new RelayCommand(_ => _host.CreateTagFor(this));
         OpenFolderCommand = new RelayCommand(_ => _host.OpenInstallFolder(this), _ => Entry.InstallDir is not null);
         ViewInStoreCommand = new RelayCommand(_ => _host.ViewInStore(this), _ => IsSteam);
@@ -122,6 +124,7 @@ public sealed class GameCardViewModel : ObservableObject
     public string OverlayText =>
         _isRunning ? "En curso"
         : IsNotInstalled ? "Instalar"
+        : _live is { IsActive: true } or { Phase: DownloadPhase.Paused } ? "Ver descarga"
         : IsDownloading ? "Descargando…"
         : IsQueued ? "En cola…"
         : Entry.IsFullyInstalled ? "Jugar"
@@ -136,15 +139,61 @@ public sealed class GameCardViewModel : ObservableObject
     /// <summary>Opción de menú «Instalar con el diálogo de Steam» (alternativa a la instalación en segundo plano).</summary>
     public bool ShowSteamInstallOption => IsSteam && (IsNotInstalled || IsQueued);
 
-    /// <summary>Barra/insignia de instalación visible (en cola o descargando).</summary>
-    public bool ShowInstallProgress => IsDownloading || IsQueued;
+    // ----- Progreso en vivo (monitor de descargas) -----
 
-    public bool IsDownloading => Entry.DownloadProgress is not null;
-    public double DownloadPercent => (Entry.DownloadProgress ?? 0) * 100;
-    public string DownloadText =>
-        Entry.DownloadProgress is double p
-            ? $"Descargando {p:P0} · {Formatting.Bytes(Entry.BytesDownloaded)} de {Formatting.Bytes(Entry.BytesToDownload)}"
-            : IsQueued ? "En cola · esperando a Steam…" : string.Empty;
+    private DownloadInfo? _live;
+
+    /// <summary>Estado en vivo de la descarga de este juego (null si no hay ninguna).</summary>
+    public DownloadInfo? Live => _live;
+
+    public void SetLive(DownloadInfo? live)
+    {
+        if (live == _live) return;
+        _live = live;
+        OnPropertyChanged(nameof(IsDownloading));
+        OnPropertyChanged(nameof(DownloadPercent));
+        OnPropertyChanged(nameof(DownloadText));
+        OnPropertyChanged(nameof(ShowInstallProgress));
+        OnPropertyChanged(nameof(IsIndeterminateProgress));
+        OnPropertyChanged(nameof(OverlayText));
+    }
+
+    /// <summary>Barra/insignia de instalación visible (en cola, descargando, en pausa…).</summary>
+    public bool ShowInstallProgress =>
+        _live is { } l ? l.IsActive || l.Phase == DownloadPhase.Paused || (l.Phase == DownloadPhase.Queued && l.IsRequested)
+        : IsQueued || Entry.DownloadProgress is not null;
+
+    public bool IsDownloading => _live is { Phase: DownloadPhase.Downloading } || (_live is null && Entry.DownloadProgress is not null);
+
+    public bool IsIndeterminateProgress => _live is { } l
+        ? l.Progress is null || l.Phase is not (DownloadPhase.Downloading or DownloadPhase.Paused)
+        : IsQueued;
+
+    public double DownloadPercent => ((_live?.Progress) ?? Entry.DownloadProgress ?? 0) * 100;
+
+    /// <summary>«Descargando 45,2 % · 12,3 MB/s · 4 min» / «En cola…» / «En pausa».</summary>
+    public string DownloadText
+    {
+        get
+        {
+            if (_live is { } l)
+            {
+                var text = l.PhaseText;
+                if (l.Progress is double p && l.Phase is DownloadPhase.Downloading or DownloadPhase.Paused) text += $" {p * 100:0.0} %";
+                if (l.Phase == DownloadPhase.Downloading && l.BytesPerSecond > 0) text += $" · {Formatting.Speed(l.BytesPerSecond)}";
+                if (l.Phase == DownloadPhase.Downloading && l.Eta is { } eta) text += $" · {Formatting.Eta(eta)}";
+                return text;
+            }
+            return Entry.DownloadProgress is double dp
+                ? $"Descargando {dp * 100:0.0} %"
+                : IsQueued ? "En cola · esperando a Steam…" : string.Empty;
+        }
+    }
+
+    /// <summary>Instalación nueva aún sin terminar (clic → panel de descargas en vez de jugar).</summary>
+    public bool IsFreshInstallInProgress => IsSteam && Entry.IsInstalling && Entry.SizeOnDisk == 0;
+
+    public bool CanUninstall => IsSteam && !IsNotInstalled && !IsRunning;
 
     public string PlaytimeText
     {
@@ -170,6 +219,7 @@ public sealed class GameCardViewModel : ObservableObject
     public ICommand InstallCommand { get; }
     public ICommand InstallWithSteamCommand { get; }
     public ICommand CancelInstallCommand { get; }
+    public ICommand UninstallCommand { get; }
     public ICommand NewTagCommand { get; }
     public ICommand OpenFolderCommand { get; }
     public ICommand ViewInStoreCommand { get; }

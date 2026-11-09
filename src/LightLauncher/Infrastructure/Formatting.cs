@@ -17,6 +17,14 @@ public static class Formatting
         _ => $"{bytes / 1024.0:0} KB",
     };
 
+    public static string Speed(double bytesPerSecond) =>
+        bytesPerSecond >= 1 << 20 ? $"{bytesPerSecond / (1 << 20):0.0} MB/s" : $"{bytesPerSecond / 1024:0} KB/s";
+
+    public static string Eta(TimeSpan t) =>
+        t.TotalMinutes < 1 ? "menos de 1 min"
+        : t.TotalHours < 1 ? $"{(int)Math.Ceiling(t.TotalMinutes)} min"
+        : $"{(int)t.TotalHours} h {t.Minutes} min";
+
     public static string RelativeDate(DateTimeOffset? utc)
     {
         if (utc is null) return string.Empty;

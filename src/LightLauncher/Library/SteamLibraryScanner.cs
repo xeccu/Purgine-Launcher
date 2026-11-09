@@ -245,6 +245,7 @@ public sealed class SteamLibraryScanner
                 LibraryPath = libraryPath,
                 SizeOnDisk = size,
                 IsFullyInstalled = (flags & StateFullyInstalled) != 0,
+                StateFlags = flags,
                 BytesToDownload = toDownload,
                 BytesDownloaded = downloaded,
                 CoverImagePath = FindCoverImage(appId),

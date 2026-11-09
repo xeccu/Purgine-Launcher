@@ -46,6 +46,14 @@ public sealed class ProcessOrchestrator
     public event EventHandler<OrchestratorStatus>? StatusChanged;
 
     public bool IsBusy => _sessionGate.CurrentCount == 0;
+
+    /// <summary>Monitor de descargas: Steam nunca se cierra mientras haya trabajo de descarga.</summary>
+    public DownloadMonitor? Downloads { get; set; }
+
+    /// <summary>Pausa global de Steam; se deshace antes de cualquier acción con Steam.</summary>
+    public SteamSuspender? Suspender { get; set; }
+
+    private bool DownloadsKeepSteamAlive => Downloads?.HasActiveDownloads == true;
     public bool IsSteamInstalled => _steam.SteamExe is not null;
     public LaunchPhase CurrentPhase { get; private set; } = LaunchPhase.Idle;
 
@@ -96,6 +104,7 @@ public sealed class ProcessOrchestrator
             var steamExe = _steam.SteamExe;
             if (steamExe is null)
                 return Fail(game, "No se encontró Steam en este equipo (HKCU\\Software\\Valve\\Steam).");
+            Suspender?.Resume(); // un Steam congelado no puede lanzar juegos
 
             // 1-2) Cliente oficial en modo ligero.
             steamStartedByUs = await EnsureSteamRunningAsync(steamExe, game, ct).ConfigureAwait(false);
@@ -171,6 +180,7 @@ public sealed class ProcessOrchestrator
 
         try
         {
+            Suspender?.Resume();
             if (!SteamLocator.IsClientRunning())
                 await EnsureSteamRunningAsync(steamExe, null, ct).ConfigureAwait(false);
 
@@ -208,32 +218,129 @@ public sealed class ProcessOrchestrator
         var steamExe = _steam.SteamExe;
         if (steamExe is null || IsBusy) return false;
         if (SteamLocator.GetRunningAppId() != 0) return false; // hay un juego de Steam abierto fuera del launcher
+        if (Downloads?.IsSteamWorking == true) return false;  // regla de supervivencia: no interrumpir descargas
 
         Report(LaunchPhase.Idle, "Reiniciando Steam en segundo plano…", null);
-        await ShutdownSteamAsync(steamExe).ConfigureAwait(false);
+        if (!await ShutdownSteamAsync(steamExe).ConfigureAwait(false)) return false;
         await EnsureSteamRunningAsync(steamExe, null, ct).ConfigureAwait(false);
         return true;
     }
 
-    /// <summary>
-    /// Cierra Steam de forma ordenada si no hay partidas en curso (tras terminar una descarga que
-    /// abrimos nosotros). Respeta la política de limpieza del usuario.
-    /// </summary>
-    public async Task<bool> CloseSteamIfIdleAsync()
+    /// <summary>Desinstala con el comando oficial (<c>steam://uninstall</c>); Steam pide su propia confirmación.</summary>
+    public async Task<bool> UninstallAsync(GameEntry game)
     {
-        var steamExe = _steam.SteamExe;
-        if (steamExe is null || IsBusy || _settings.SteamCleanupPolicy == CleanupPolicy.Never) return false;
-        if (!SteamLocator.IsClientRunning() || SteamLocator.GetRunningAppId() != 0) return false;
-
-        Report(LaunchPhase.CleaningUp, "Descarga terminada. Cerrando Steam de forma segura…", null);
-        await ShutdownSteamAsync(steamExe).ConfigureAwait(false);
-        Report(LaunchPhase.Idle, "Steam cerrado tras la descarga.", null);
-        return true;
+        var wasRunning = SteamLocator.IsClientRunning();
+        var ok = await OpenSteamUriAsync($"steam://uninstall/{game.AppId}",
+            $"Steam: confirma la desinstalación de {game.Name}. La tarjeta se actualizará sola.").ConfigureAwait(false);
+        // Si abrimos Steam solo para esto, se cierra cuando termine (con margen para confirmar el diálogo).
+        if (ok && !wasRunning) ScheduleShutdownWhenIdle(TimeSpan.FromMinutes(3));
+        return ok;
     }
 
-    /// <summary>Cierre ordenado (<c>-shutdown</c>) y, si vence el plazo, cierre forzado de residuos.</summary>
-    private async Task ShutdownSteamAsync(string steamExe)
+    private int _closerRunning;
+
+    /// <summary>
+    /// Cierra Steam cuando no quede trabajo: espera a que todas las descargas, instalaciones y
+    /// desinstalaciones terminen, deja un periodo de calma, hace una cuenta atrás y lo cierra de forma
+    /// ordenada. Se cancela si empieza una partida. Si quedan instalaciones en cola que este Steam no puede
+    /// ver (manifiesto creado con Steam ya abierto), lo reinicia en lugar de cerrarlo.
+    /// </summary>
+    /// <param name="minimumWait">Tiempo mínimo antes de poder cerrar (p. ej. para responder un diálogo de Steam).</param>
+    public void ScheduleShutdownWhenIdle(TimeSpan minimumWait) => StartIdleLoop(minimumWait, closeAtEnd: true);
+
+    /// <summary>
+    /// Para un Steam abierto por el usuario: cuando termine lo que está descargando, lo reinicia en segundo
+    /// plano para que empiecen las instalaciones en cola, y no lo cierra después.
+    /// </summary>
+    public void ScheduleRestartWhenIdle() => StartIdleLoop(TimeSpan.Zero, closeAtEnd: false);
+
+    private void StartIdleLoop(TimeSpan minimumWait, bool closeAtEnd)
     {
+        if (Interlocked.Exchange(ref _closerRunning, 1) == 1)
+        {
+            if (closeAtEnd) _closeRequested = true; // amplía un bucle de «solo reiniciar» ya en marcha
+            return;
+        }
+        _closeRequested = closeAtEnd;
+        _ = Task.Run(async () =>
+        {
+            try { await CloseWhenIdleLoopAsync(minimumWait).ConfigureAwait(false); }
+            catch (Exception ex) { Log.Error("Cierre diferido de Steam", ex); }
+            finally { Interlocked.Exchange(ref _closerRunning, 0); }
+        });
+    }
+
+    private volatile bool _closeRequested;
+
+    private async Task CloseWhenIdleLoopAsync(TimeSpan minimumWait)
+    {
+        var earliest = DateTime.UtcNow + minimumWait;
+        var quietSince = (DateTime?)null;
+        var announced = false;
+
+        while (true)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            var steamExe = _steam.SteamExe;
+            if (steamExe is null || !SteamLocator.IsClientRunning()) return;
+            if (IsBusy || SteamLocator.GetRunningAppId() != 0) return;          // una partida se ocupará
+            if (_closeRequested && _settings.SteamCleanupPolicy == CleanupPolicy.Never) _closeRequested = false;
+
+            // Instalaciones en cola que este Steam no ve: reiniciarlo (ya sin descargas activas).
+            if (Downloads is { } d && !d.IsSteamWorking && d.NeedsSteamRestartForQueued())
+            {
+                Log.Info("Reiniciando Steam para que empiece las instalaciones en cola.");
+                await RestartSteamInBackgroundAsync().ConfigureAwait(false);
+                quietSince = null;
+                continue;
+            }
+
+            // Modo «solo reiniciar»: hecho en cuanto no queden peticiones invisibles para Steam.
+            if (!_closeRequested)
+            {
+                if (Downloads?.NeedsSteamRestartForQueued() != true) return;
+                continue;
+            }
+
+            if (DownloadsKeepSteamAlive || DateTime.UtcNow < earliest)
+            {
+                quietSince = null;
+                if (!announced && DownloadsKeepSteamAlive)
+                {
+                    announced = true;
+                    Report(LaunchPhase.Idle, "Steam seguirá abierto en segundo plano hasta que terminen las descargas.", null);
+                }
+                continue;
+            }
+
+            quietSince ??= DateTime.UtcNow;
+            if (DateTime.UtcNow - quietSince < TimeSpan.FromSeconds(15)) continue;
+
+            // Cuenta atrás de cierre seguro (se aborta si vuelve a haber actividad).
+            var aborted = false;
+            for (int left = Math.Max(5, _settings.CloudSyncGraceSeconds); left > 0; left--)
+            {
+                Report(LaunchPhase.SyncingCloud, "Descargas terminadas. Cerrando Steam de forma segura…", null, left);
+                await Task.Delay(1000).ConfigureAwait(false);
+                if (DownloadsKeepSteamAlive || IsBusy) { aborted = true; break; }
+            }
+            if (aborted) { quietSince = null; announced = false; continue; }
+
+            if (await ShutdownSteamAsync(steamExe).ConfigureAwait(false))
+                Report(LaunchPhase.Idle, "Descargas terminadas. Steam cerrado.", null);
+            return;
+        }
+    }
+
+    /// <summary>
+    /// Cierre ordenado (<c>-shutdown</c>) y, si vence el plazo, cierre forzado de residuos.
+    /// Prohibido con descargas activas o con Steam pausado: devuelve false y no toca nada.
+    /// </summary>
+    private async Task<bool> ShutdownSteamAsync(string steamExe)
+    {
+        if (DownloadsKeepSteamAlive && Downloads?.HasQueuedRequests != true) return false;
+        if (Downloads?.IsSteamWorking == true || Suspender?.IsSuspended == true) return false;
+
         if (SteamLocator.IsClientRunning())
         {
             ProcessUtils.Start(steamExe, "-shutdown");
@@ -243,6 +350,7 @@ public sealed class ProcessOrchestrator
                 .ConfigureAwait(false);
         }
         ProcessUtils.KillByNames(_settings.SteamProcessesToClean);
+        return true;
     }
 
     // =====================================================================================
@@ -383,6 +491,8 @@ public sealed class ProcessOrchestrator
         Report(LaunchPhase.StartingClient, "Iniciando Steam en modo ligero…", game);
         ProcessUtils.Start(steamExe, _settings.SteamClientArguments);
         Log.Info($"steam.exe {_settings.SteamClientArguments}");
+        // Anti-popups: si Steam muestra su ventana principal al arrancar, se oculta y se devuelve el foco.
+        SteamWindowGuard.Watch(TimeSpan.FromSeconds(90));
 
         // Esperar a que publique PID + usuario; si no llega (p. ej. pide login), seguimos igualmente:
         // el comando steam:// se encola y se ejecutará cuando el cliente esté listo.
@@ -426,11 +536,26 @@ public sealed class ProcessOrchestrator
             return;
         }
 
+        // Regla de supervivencia: con descargas activas Steam no se cierra; se cerrará cuando terminen.
+        if (DownloadsKeepSteamAlive)
+        {
+            Report(LaunchPhase.Finished,
+                "Partida terminada. Steam sigue abierto en segundo plano porque hay descargas en curso; se cerrará al terminar.", game);
+            ScheduleShutdownWhenIdle(TimeSpan.Zero);
+            return;
+        }
+
         // Temporizador de seguridad: nunca cerramos Steam mientras puede estar subiendo partidas.
         for (int left = Math.Max(0, _settings.CloudSyncGraceSeconds); left > 0; left--)
         {
             Report(LaunchPhase.SyncingCloud, "Sincronizando partidas guardadas con Steam Cloud…", game, left);
             await Task.Delay(1000).ConfigureAwait(false);
+            if (DownloadsKeepSteamAlive)
+            {
+                Report(LaunchPhase.Finished, "Ha empezado una descarga: Steam sigue abierto y se cerrará al terminar.", game);
+                ScheduleShutdownWhenIdle(TimeSpan.Zero);
+                return;
+            }
         }
 
         Report(LaunchPhase.CleaningUp, "Cerrando Steam de forma segura (termina de sincronizar y sale)…", game);
@@ -444,6 +569,13 @@ public sealed class ProcessOrchestrator
                 .ConfigureAwait(false);
         }
 
+        // Nunca se fuerza el cierre si en el último momento hay una descarga (o Steam sigue vivo con trabajo).
+        if (DownloadsKeepSteamAlive)
+        {
+            Report(LaunchPhase.Finished, "Steam sigue abierto: hay descargas en curso.", game);
+            ScheduleShutdownWhenIdle(TimeSpan.Zero);
+            return;
+        }
         var killed = ProcessUtils.KillByNames(_settings.SteamProcessesToClean);
         var msg = killed > 0
             ? $"Partidas sincronizadas. Steam cerrado ({killed} procesos residuales forzados)."

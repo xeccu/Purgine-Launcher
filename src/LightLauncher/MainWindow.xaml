@@ -46,6 +46,18 @@
                             <TextBlock Text="Tienda" />
                         </StackPanel>
                     </RadioButton>
+                    <RadioButton Style="{StaticResource NavTab}" GroupName="Nav" IsChecked="{Binding IsDownloadsView, Mode=TwoWay}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE896;" FontFamily="{StaticResource IconFont}" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <TextBlock Text="Descargas" />
+                            <Border CornerRadius="9" MinWidth="18" Height="18" Padding="5,0" Margin="8,0,0,0" VerticalAlignment="Center"
+                                    Background="{StaticResource AccentBrush}"
+                                    Visibility="{Binding Downloads.HasBadge, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="{Binding Downloads.BadgeCount}" FontSize="11" FontWeight="Bold" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                        </StackPanel>
+                    </RadioButton>
                     <RadioButton Style="{StaticResource NavTab}" GroupName="Nav" IsChecked="{Binding IsSettingsView, Mode=TwoWay}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE713;" FontFamily="{StaticResource IconFont}" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0" />
@@ -78,6 +90,9 @@
             <views:LibraryView Visibility="{Binding IsLibraryView, Converter={StaticResource BoolToVis}}" />
             <Grid Visibility="{Binding IsStoreView, Converter={StaticResource BoolToVis}}">
                 <views:StoreView DataContext="{Binding Store}" />
+            </Grid>
+            <Grid Visibility="{Binding IsDownloadsView, Converter={StaticResource BoolToVis}}">
+                <views:DownloadsView DataContext="{Binding Downloads}" />
             </Grid>
             <Grid Visibility="{Binding IsSettingsView, Converter={StaticResource BoolToVis}}">
                 <views:SettingsView DataContext="{Binding Settings}" />

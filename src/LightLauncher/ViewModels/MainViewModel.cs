@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Media;
 using LightLauncher.Core;
 using LightLauncher.Infrastructure;
 using LightLauncher.Library;
@@ -17,6 +18,7 @@ public enum AppView
 {
     Library,
     Store,
+    Downloads,
     Settings,
 }
 
@@ -47,8 +49,10 @@ public sealed class TagFilterViewModel : ObservableObject
 /// Estado de la ventana principal: navegación, biblioteca (búsqueda, etiquetas, vistas),
 /// sesión en curso y banner de sincronización en la nube.
 /// </summary>
-public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions
+public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, IDownloadActions
 {
+    private readonly DownloadMonitor _monitor;
+    private readonly SteamSuspender _suspender;
     private readonly SteamLibraryScanner _scanner;
     private readonly ProcessOrchestrator _orchestrator;
     private readonly GameTimeTracker _tracker;
@@ -93,8 +97,12 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions
         SteamLocator steam,
         SteamInstaller installer,
         AppNameCache names,
+        DownloadMonitor monitor,
+        SteamSuspender suspender,
         Action saveSettings)
     {
+        _monitor = monitor;
+        _suspender = suspender;
         _installer = installer;
         _names = names;
         _storeService = store;
@@ -107,6 +115,9 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions
         _saveSettings = new DebouncedAction(saveSettings, TimeSpan.FromMilliseconds(600));
 
         Store = new StoreViewModel(store, this);
+        Downloads = new DownloadsViewModel(this);
+        _monitor.Changed += list => OnUi(() => OnDownloadsChanged(list));
+        _monitor.Finished += info => OnUi(() => Downloads.AddFinished(info));
         Settings = new SettingsViewModel(settings, library, steam, _saveSettings.Request, () => Dialogs);
 
         GamesView = CollectionViewSource.GetDefaultView(Games);
@@ -136,6 +147,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions
 
     public StoreViewModel Store { get; }
     public SettingsViewModel Settings { get; }
+    public DownloadsViewModel Downloads { get; }
 
     /// <summary>Lo asigna la ventana tras construirse.</summary>
     public IDialogService? Dialogs { get; set; }
@@ -161,6 +173,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions
             if (!SetProperty(ref _currentView, value)) return;
             OnPropertyChanged(nameof(IsLibraryView));
             OnPropertyChanged(nameof(IsStoreView));
+            OnPropertyChanged(nameof(IsDownloadsView));
             OnPropertyChanged(nameof(IsSettingsView));
             if (value == AppView.Store) _ = Store.EnsureInitializedAsync();
         }
@@ -169,6 +182,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions
     public bool IsLibraryView { get => _currentView == AppView.Library; set { if (value) CurrentView = AppView.Library; } }
     public bool IsStoreView { get => _currentView == AppView.Store; set { if (value) CurrentView = AppView.Store; } }
     public bool IsSettingsView { get => _currentView == AppView.Settings; set { if (value) CurrentView = AppView.Settings; } }
+    public bool IsDownloadsView { get => _currentView == AppView.Downloads; set { if (value) CurrentView = AppView.Downloads; } }
 
     // =====================================================================================
     // Biblioteca
@@ -450,11 +464,96 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions
         Notify("Instalación completada", $"{entry.Name} está listo para jugar.");
 
         _pendingInstalls.Remove(entry.AppId);
-        if (_pendingInstalls.Count == 0 && _steamOpenedForInstall && !IsSessionActive)
+        // Si abrimos Steam para descargar, se cerrará cuando TODAS las colas terminen (nunca antes).
+        if (_steamOpenedForInstall && !IsSessionActive)
+            _orchestrator.ScheduleShutdownWhenIdle(TimeSpan.Zero);
+        if (_pendingInstalls.Count == 0) _steamOpenedForInstall = false;
+    }
+
+    // =====================================================================================
+    // Descargas (IDownloadActions)
+    // =====================================================================================
+
+    private void OnDownloadsChanged(IReadOnlyList<DownloadInfo> list)
+    {
+        Downloads.Apply(list);
+        var byId = list.ToDictionary(d => GameEntry.MakeSteamId(d.AppId));
+        foreach (var g in Games)
+            if (g.IsSteam) g.SetLive(byId.GetValueOrDefault(g.Entry.Id));
+    }
+
+    public bool IsSteamPaused => _suspender.IsSuspended;
+
+    public void PauseDownloads()
+    {
+        if (IsSessionActive) { StatusText = "Hay una partida en curso: no se puede pausar Steam ahora."; return; }
+        var error = _suspender.Suspend();
+        StatusText = error ?? "Descargas en pausa. Steam está congelado hasta que pulses «Reanudar».";
+        _monitor.PollSoon();
+    }
+
+    public void ResumeDownloads()
+    {
+        _suspender.Resume();
+        StatusText = "Descargas reanudadas.";
+        _monitor.PollSoon();
+    }
+
+    public void CancelDownload(DownloadItemViewModel item)
+    {
+        var card = Games.FirstOrDefault(g => g.IsSteam && g.Entry.AppId == item.AppId);
+
+        // En cola y sin empezar: basta con quitar el manifiesto (sin Steam).
+        if (_installer.CancelPending(item.AppId))
         {
-            _steamOpenedForInstall = false;
-            _ = _orchestrator.CloseSteamIfIdleAsync();
+            _monitor.Forget(item.AppId);
+            _pendingInstalls.Remove(item.AppId);
+            StatusText = $"Instalación de {item.Name} cancelada.";
+            return;
         }
+
+        var fresh = card?.IsFreshInstallInProgress ?? item.Info.IsRequested;
+        var message = fresh
+            ? $"¿Cancelar la instalación de «{item.Name}»? Steam borrará lo descargado."
+            : $"Steam no permite cancelar solo la actualización de «{item.Name}» sin abrir su ventana de descargas. " +
+              "La única forma silenciosa es desinstalar el juego. ¿Desinstalarlo?";
+        if (!(Dialogs?.Confirm("Cancelar descarga", message) ?? false)) return;
+
+        _pendingInstalls.Remove(item.AppId);
+        var entry = card?.Entry ?? _scanner.FindGame(item.AppId);
+        if (entry is not null) _ = UninstallEntryAsync(entry);
+    }
+
+    public void PlayDownloaded(string appId)
+    {
+        var card = Games.FirstOrDefault(g => g.IsSteam && g.Entry.AppId == appId && !g.IsNotInstalled);
+        if (card is null) return;
+        CurrentView = AppView.Library;
+        Launch(card);
+    }
+
+    public ImageSource? CoverFor(string appId) =>
+        Games.FirstOrDefault(g => g.IsSteam && g.Entry.AppId == appId)?.Cover;
+
+    // =====================================================================================
+    // Desinstalación
+    // =====================================================================================
+
+    public void Uninstall(GameCardViewModel card)
+    {
+        if (!card.CanUninstall) return;
+        if (!(Dialogs?.Confirm("Desinstalar",
+                $"¿Desinstalar «{card.Name}»?\n\nSteam borrará los archivos del juego de este equipo. Las partidas en la nube y el tiempo jugado se conservan.\n\nSteam mostrará su propia confirmación.") ?? false))
+            return;
+        _ = UninstallEntryAsync(card.Entry);
+    }
+
+    private async Task UninstallEntryAsync(GameEntry entry)
+    {
+        StatusText = $"Desinstalando {entry.Name}… confirma en el diálogo de Steam.";
+        if (!await _orchestrator.UninstallAsync(entry))
+            StatusText = $"No se pudo pedir a Steam que desinstale {entry.Name}.";
+        _monitor.PollSoon();
     }
 
     /// <summary>
@@ -618,6 +717,12 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions
     public void Launch(GameCardViewModel card)
     {
         if (card.IsNotInstalled) { Install(card); return; }
+        // Instalación nueva aún descargándose (o en cola): se muestra la descarga, no se intenta jugar.
+        if (card.IsFreshInstallInProgress || card.Live is { IsActive: true } or { Phase: DownloadPhase.Paused })
+        {
+            CurrentView = AppView.Downloads;
+            return;
+        }
         _ = LaunchAsync(card);
     }
 
@@ -834,7 +939,11 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions
             case InstallStart.StartedAfterSteamRestart:
             case InstallStart.QueuedUntilSteamRestart:
                 _pendingInstalls.Add(entry.AppId);
+                _monitor.MarkRequested(entry.AppId, entry.Name); // progreso en vivo + Steam no se cierra
                 if (outcome.SteamStartedByUs) _steamOpenedForInstall = true;
+                // Se aceptó reiniciar pero Steam estaba ocupado descargando: reiniciar en cuanto quede libre.
+                if (outcome.Result == InstallStart.QueuedUntilSteamRestart && restart) _orchestrator.ScheduleRestartWhenIdle();
+                if (outcome.Result != InstallStart.QueuedUntilSteamRestart) CurrentView = AppView.Downloads;
                 // El vigilante de manifiestos refleja la cola y el progreso; por si el evento se retrasa:
                 if (await Task.Run(() => _scanner.FindGame(entry.AppId)) is { } created) UpsertGame(created);
                 if (outcome.Result != InstallStart.QueuedUntilSteamRestart)
@@ -910,6 +1019,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions
     /// <summary>Guardar lo pendiente al salir.</summary>
     public void Shutdown()
     {
+        _suspender.Resume(); // nunca dejar Steam congelado al salir
+        _monitor.Dispose();
         _saveSettings.Flush();
         _saveSettings.Dispose();
         _watcher.Dispose();

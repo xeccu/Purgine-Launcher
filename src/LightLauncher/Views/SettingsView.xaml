@@ -153,7 +153,7 @@
                     <TextBlock Text="Argumentos al arrancar Steam" Margin="0,0,0,4" />
                     <TextBox Style="{StaticResource SearchBox}" Text="{Binding SteamClientArguments, UpdateSourceTrigger=LostFocus}" />
                     <TextBlock Style="{StaticResource MutedText}" Margin="0,4,0,12"
-                               Text="Solo se usan si LightLauncher es quien abre Steam. Por defecto: -silent -nofriendsui -nochatui -minimized -vgui -nolightbox (los dos últimos se ignoran en el Steam actual; -no-browser ya no funciona)." />
+                               Text="Solo se usan si LightLauncher es quien abre Steam. Por defecto: -silent -nofriendsui -nochatui -minimized -vgui -fulldesktopres 0. Además, durante 90 s tras abrir Steam se oculta su ventana principal si aparece (los diálogos que necesitan tu respuesta no se tocan)." />
 
                     <TextBlock Text="País de la tienda (precios)" Margin="0,0,0,4" />
                     <TextBox Style="{StaticResource SearchBox}" Width="80" HorizontalAlignment="Left" MaxLength="2"

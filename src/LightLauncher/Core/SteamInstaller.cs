@@ -78,7 +78,7 @@ public sealed class SteamInstaller
 
             if (!await _orchestrator.RestartSteamInBackgroundAsync(ct).ConfigureAwait(false))
                 return new InstallOutcome(InstallStart.QueuedUntilSteamRestart,
-                    $"{game.Name} está en cola. No se reinició Steam porque hay una partida en curso; empezará al cerrarla y reabrir Steam.");
+                    $"{game.Name} está en cola. Steam está ocupado (partida o descargas en curso): se reiniciará en segundo plano cuando termine para empezarla.");
 
             return new InstallOutcome(InstallStart.StartedAfterSteamRestart,
                 $"Descargando {game.Name} en segundo plano…", SteamStartedByUs: true);

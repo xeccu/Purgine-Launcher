@@ -36,6 +36,12 @@ public sealed record GameEntry
     /// <summary>Portada local (caché de Steam o imagen elegida por el usuario). Puede ser null.</summary>
     public string? CoverImagePath { get; init; }
 
+    /// <summary>StateFlags crudos del manifiesto (4 = instalado sin nada pendiente; 2 = actualización requerida).</summary>
+    public int StateFlags { get; init; }
+
+    /// <summary>Instalado y con una actualización pendiente.</summary>
+    public bool HasPendingUpdate => IsInstalled && (StateFlags & 2) != 0;
+
     // ----- Progreso de descarga (Steam) -----
     public long BytesToDownload { get; init; }
     public long BytesDownloaded { get; init; }

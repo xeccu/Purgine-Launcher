@@ -30,6 +30,8 @@
             <MenuItem Header="Abrir carpeta del juego" Command="{Binding OpenFolderCommand}" />
             <MenuItem Header="Ver en la tienda" Command="{Binding ViewInStoreCommand}"
                       Visibility="{Binding IsSteam, Converter={StaticResource BoolToVis}}" />
+            <MenuItem Header="Desinstalar…" Command="{Binding UninstallCommand}"
+                      Visibility="{Binding CanUninstall, Converter={StaticResource BoolToVis}}" />
             <MenuItem Header="Editar…" Command="{Binding EditCommand}"
                       Visibility="{Binding IsLocal, Converter={StaticResource BoolToVis}}" />
             <MenuItem Header="Quitar de la biblioteca" Command="{Binding RemoveCommand}"
@@ -98,7 +100,7 @@
                             <StackPanel>
                                 <TextBlock Text="{Binding DownloadText}" FontSize="11" Margin="0,0,0,4" TextWrapping="Wrap" />
                                 <ProgressBar Style="{StaticResource SlimProgress}" Value="{Binding DownloadPercent, Mode=OneWay}"
-                                             IsIndeterminate="{Binding IsQueued, Mode=OneWay}" />
+                                             IsIndeterminate="{Binding IsIndeterminateProgress, Mode=OneWay}" />
                             </StackPanel>
                         </Border>
 
@@ -188,7 +190,7 @@
                         <StackPanel Orientation="Horizontal" Margin="0,5,0,0"
                                     Visibility="{Binding ShowInstallProgress, Converter={StaticResource BoolToVis}}">
                             <ProgressBar Style="{StaticResource SlimProgress}" Width="140" Value="{Binding DownloadPercent, Mode=OneWay}"
-                                         IsIndeterminate="{Binding IsQueued, Mode=OneWay}" />
+                                         IsIndeterminate="{Binding IsIndeterminateProgress, Mode=OneWay}" />
                             <TextBlock Text="{Binding DownloadText}" Style="{StaticResource MutedText}" Margin="8,0,0,0" />
                         </StackPanel>
                     </StackPanel>

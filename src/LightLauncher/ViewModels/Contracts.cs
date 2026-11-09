@@ -13,6 +13,8 @@ public interface ICardHost
     void InstallWithSteamDialog(GameCardViewModel card);
     /// <summary>Quita de la cola una instalación que aún no ha empezado a descargar.</summary>
     void CancelInstall(GameCardViewModel card);
+    /// <summary>Desinstala con el comando oficial de Steam.</summary>
+    void Uninstall(GameCardViewModel card);
     void CreateTagFor(GameCardViewModel card);
     void OpenInstallFolder(GameCardViewModel card);
     void ViewInStore(GameCardViewModel card);
