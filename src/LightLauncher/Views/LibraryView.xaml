@@ -14,6 +14,8 @@
                       Visibility="{Binding ShowSteamInstallOption, Converter={StaticResource BoolToVis}}" />
             <MenuItem Header="Cancelar instalación" Command="{Binding CancelInstallCommand}"
                       Visibility="{Binding IsQueued, Converter={StaticResource BoolToVis}}" />
+            <MenuItem Header="{Binding UpdateButtonText}" Command="{Binding UpdateCommand}" FontWeight="SemiBold"
+                      Visibility="{Binding ShowUpdateButton, Converter={StaticResource BoolToVis}}" />
             <Separator />
             <MenuItem Header="Etiquetas" ItemsSource="{Binding TagToggles}">
                 <MenuItem.ItemContainerStyle>
@@ -134,6 +136,17 @@
                                            FontWeight="SemiBold" Foreground="White" />
                             </StackPanel>
                         </Border>
+
+                        <!-- Actualización pendiente: botón propio (por encima del overlay para recibir el clic) -->
+                        <Button Style="{StaticResource PrimaryButton}" VerticalAlignment="Bottom" HorizontalAlignment="Stretch"
+                                Margin="8" Padding="8,6" Command="{Binding UpdateCommand}"
+                                ToolTip="Despierta Steam en segundo plano, actualiza y lo cierra al terminar"
+                                Visibility="{Binding ShowUpdateButton, Converter={StaticResource BoolToVis}}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE777;" FontFamily="{StaticResource IconFont}" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                <TextBlock Text="{Binding UpdateButtonText}" FontSize="12" />
+                            </StackPanel>
+                        </Button>
                     </Grid>
 
                     <TextBlock Text="{Binding Name}" Margin="2,8,2,0" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
@@ -195,10 +208,18 @@
                         </StackPanel>
                     </StackPanel>
 
-                    <Border Grid.Column="2" CornerRadius="4" Padding="7,2" Margin="0,0,16,0" VerticalAlignment="Center"
-                            BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
-                        <TextBlock Text="{Binding PlatformLabel}" FontSize="11" Foreground="{StaticResource MutedBrush}" />
-                    </Border>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
+                        <Button Style="{StaticResource PrimaryButton}" Padding="10,4" Margin="0,0,10,0" Command="{Binding UpdateCommand}"
+                                Visibility="{Binding ShowUpdateButton, Converter={StaticResource BoolToVis}}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE777;" FontFamily="{StaticResource IconFont}" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                <TextBlock Text="{Binding UpdateButtonText}" FontSize="12" />
+                            </StackPanel>
+                        </Button>
+                        <Border CornerRadius="4" Padding="7,2" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding PlatformLabel}" FontSize="11" Foreground="{StaticResource MutedBrush}" />
+                        </Border>
+                    </StackPanel>
 
                     <TextBlock Grid.Column="3" Text="{Binding PlaytimeText}" VerticalAlignment="Center"
                                Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis" />

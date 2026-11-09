@@ -61,7 +61,7 @@ public sealed record DownloadInfo(
         DownloadPhase.Paused => Detail ?? "En pausa",
         DownloadPhase.Uninstalling => "Desinstalando…",
         DownloadPhase.Completed => "Completado",
-        DownloadPhase.Canceled => "Cancelado",
+        DownloadPhase.Canceled => Detail ?? "Cancelado",
         _ => "Quitado",
     };
 }
@@ -130,10 +130,17 @@ public sealed partial class DownloadMonitor : IDisposable
             if (IsSteamSuspended?.Invoke() == true) return true;
             lock (_gate)
             {
-                return _current.Any(d => d.IsActive || (d.Phase == DownloadPhase.Queued && d.IsRequested));
+                return _downloadFolderActive ||
+                       _current.Any(d => d.IsActive || (d.Phase == DownloadPhase.Queued && d.IsRequested));
             }
         }
     }
+
+    /// <summary>Hubo escrituras recientes en alguna carpeta <c>steamapps/downloading</c>.</summary>
+    private bool _downloadFolderActive;
+
+    /// <summary>Plazo para que Steam empiece una tarea pedida antes de darla por no iniciada.</summary>
+    private static readonly TimeSpan RequestStartTimeout = TimeSpan.FromMinutes(6);
 
     /// <summary>¿Hay instalaciones pedidas desde aquí que Steam todavía no ha empezado?</summary>
     public bool HasQueuedRequests
@@ -231,9 +238,11 @@ public sealed partial class DownloadMonitor : IDisposable
         {
             ReadNewLogLines();
             var ioRate = MeasureSteamIoRate(out var dt);
+            var folderActive = IsDownloadFolderActive();
 
             lock (_gate)
             {
+                _downloadFolderActive = folderActive;
                 var steamRunning = SteamLocator.IsClientRunning();
                 var suspended = IsSteamSuspended?.Invoke() == true;
                 var list = new List<DownloadInfo>();
@@ -242,6 +251,7 @@ public sealed partial class DownloadMonitor : IDisposable
                 {
                     RefreshFromManifest(appId, s);
                     UpdateEstimate(s, ioRate, dt);
+                    CheckRequestTimeout(appId, s, steamRunning);
 
                     var phase = s.Phase;
                     string? detail = null;
@@ -261,6 +271,7 @@ public sealed partial class DownloadMonitor : IDisposable
                     var speed = phase == DownloadPhase.Downloading ? s.SpeedEma : 0;
                     TimeSpan? eta = speed > 50_000 && total > done ? TimeSpan.FromSeconds((total - done) / speed) : null;
 
+                    if (s.NotStarted) detail = "Steam no la empezó";
                     var info = new DownloadInfo(appId, s.Name ?? _requested.GetValueOrDefault(appId) ?? $"App {appId}",
                         phase, done, total, speed, eta, s.EstimatedBytes > s.ManifestBytes, _requested.ContainsKey(appId), detail);
 
@@ -442,6 +453,47 @@ public sealed partial class DownloadMonitor : IDisposable
             s.Phase = DownloadPhase.Completed;
     }
 
+    /// <summary>
+    /// Una tarea pedida que sigue «en cola» tras <see cref="RequestStartTimeout"/> con Steam abierto se da
+    /// por no iniciada (p. ej. la app está en uso o Steam tiene restricciones de descarga), para no
+    /// mantener Steam abierto indefinidamente.
+    /// </summary>
+    private void CheckRequestTimeout(string appId, AppState s, bool steamRunning)
+    {
+        if (!_requested.ContainsKey(appId) || s.Phase != DownloadPhase.Queued || !steamRunning)
+        {
+            s.WaitingSince = null;
+            return;
+        }
+        s.WaitingSince ??= DateTime.UtcNow;
+        if (DateTime.UtcNow - s.WaitingSince > RequestStartTimeout)
+        {
+            s.Phase = DownloadPhase.Canceled;
+            s.NotStarted = true;
+            Log.Warn($"Steam no empezó la tarea pedida para {s.Name ?? appId} en {RequestStartTimeout.TotalMinutes:0} min.");
+        }
+    }
+
+    /// <summary>¿Algún archivo de <c>steamapps/downloading</c> se escribió en los últimos 20 s?</summary>
+    private bool IsDownloadFolderActive()
+    {
+        var threshold = DateTime.UtcNow - TimeSpan.FromSeconds(20);
+        try
+        {
+            foreach (var library in _scanner.GetLibraryFolders())
+            {
+                var dir = Path.Combine(library, "steamapps", "downloading");
+                if (!Directory.Exists(dir)) continue;
+                foreach (var file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+                {
+                    if (File.GetLastWriteTimeUtc(file) > threshold) return true;
+                }
+            }
+        }
+        catch (Exception) { /* carpeta en uso o desaparecida a mitad: se reintenta en la próxima pasada */ }
+        return false;
+    }
+
     // ----- Velocidad real (transferencia de steam.exe) -----
 
     private void UpdateEstimate(AppState s, double ioRate, double dt)
@@ -508,6 +560,8 @@ public sealed partial class DownloadMonitor : IDisposable
         public long EstimatedBytes;
         public double SpeedEma;
         public DateTimeOffset LastEventUtc;
+        public DateTime? WaitingSince;
+        public bool NotStarted;
         public bool IsTerminal => Phase is DownloadPhase.Completed or DownloadPhase.Canceled or DownloadPhase.Removed;
     }
 

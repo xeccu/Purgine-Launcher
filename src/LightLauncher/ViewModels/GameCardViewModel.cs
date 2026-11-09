@@ -66,6 +66,7 @@ public sealed class GameCardViewModel : ObservableObject
         InstallWithSteamCommand = new RelayCommand(_ => _host.InstallWithSteamDialog(this), _ => IsSteam && (IsNotInstalled || IsQueued));
         CancelInstallCommand = new RelayCommand(_ => _host.CancelInstall(this), _ => IsQueued);
         UninstallCommand = new RelayCommand(_ => _host.Uninstall(this), _ => CanUninstall);
+        UpdateCommand = new RelayCommand(_ => _host.Update(this), _ => ShowUpdateButton);
         NewTagCommand = new RelayCommand(_ => _host.CreateTagFor(this));
         OpenFolderCommand = new RelayCommand(_ => _host.OpenInstallFolder(this), _ => Entry.InstallDir is not null);
         ViewInStoreCommand = new RelayCommand(_ => _host.ViewInStore(this), _ => IsSteam);
@@ -81,7 +82,11 @@ public sealed class GameCardViewModel : ObservableObject
     public string Name => Entry.Name;
     public bool IsLocal => Entry.Platform == GamePlatform.Local;
     public bool IsSteam => Entry.Platform == GamePlatform.Steam;
-    public string PlatformLabel => IsLocal ? "Local" : IsNotInstalled ? "No instalado" : "Steam";
+    public string PlatformLabel =>
+        IsLocal ? "Local"
+        : IsNotInstalled ? "No instalado"
+        : Entry.HasPendingUpdate ? "Actualización pendiente"
+        : "Steam";
 
     public string Tooltip
     {
@@ -156,6 +161,7 @@ public sealed class GameCardViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowInstallProgress));
         OnPropertyChanged(nameof(IsIndeterminateProgress));
         OnPropertyChanged(nameof(OverlayText));
+        OnPropertyChanged(nameof(ShowUpdateButton));
     }
 
     /// <summary>Barra/insignia de instalación visible (en cola, descargando, en pausa…).</summary>
@@ -195,6 +201,13 @@ public sealed class GameCardViewModel : ObservableObject
 
     public bool CanUninstall => IsSteam && !IsNotInstalled && !IsRunning;
 
+    /// <summary>Botón «Actualizar» visible: hay actualización pendiente y Steam no está ya con ella.</summary>
+    public bool ShowUpdateButton =>
+        IsSteam && Entry.HasPendingUpdate && !IsRunning &&
+        _live is not ({ IsActive: true } or { Phase: DownloadPhase.Queued, IsRequested: true });
+
+    public string UpdateButtonText => Entry.IsUpdatePaused ? "Reanudar actualización" : "Actualizar";
+
     public string PlaytimeText
     {
         get => _playtimeText;
@@ -220,6 +233,7 @@ public sealed class GameCardViewModel : ObservableObject
     public ICommand InstallWithSteamCommand { get; }
     public ICommand CancelInstallCommand { get; }
     public ICommand UninstallCommand { get; }
+    public ICommand UpdateCommand { get; }
     public ICommand NewTagCommand { get; }
     public ICommand OpenFolderCommand { get; }
     public ICommand ViewInStoreCommand { get; }

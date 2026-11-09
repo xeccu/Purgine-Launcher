@@ -15,6 +15,8 @@ public interface ICardHost
     void CancelInstall(GameCardViewModel card);
     /// <summary>Desinstala con el comando oficial de Steam.</summary>
     void Uninstall(GameCardViewModel card);
+    /// <summary>Aplica la actualización pendiente (despierta Steam, actualiza y lo cierra al terminar).</summary>
+    void Update(GameCardViewModel card);
     void CreateTagFor(GameCardViewModel card);
     void OpenInstallFolder(GameCardViewModel card);
     void ViewInStore(GameCardViewModel card);

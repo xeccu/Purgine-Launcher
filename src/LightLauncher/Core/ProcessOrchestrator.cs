@@ -232,8 +232,12 @@ public sealed class ProcessOrchestrator
         var wasRunning = SteamLocator.IsClientRunning();
         var ok = await OpenSteamUriAsync($"steam://uninstall/{game.AppId}",
             $"Steam: confirma la desinstalación de {game.Name}. La tarjeta se actualizará sola.").ConfigureAwait(false);
-        // Si abrimos Steam solo para esto, se cierra cuando termine (con margen para confirmar el diálogo).
-        if (ok && !wasRunning) ScheduleShutdownWhenIdle(TimeSpan.FromMinutes(3));
+        // Ciclo de tarea: se cierra en cuanto el manifiesto desaparezca (o a los 3 min si no se confirma el diálogo).
+        if (ok)
+        {
+            lock (_awaitingUninstall) _awaitingUninstall.Add(game.AppId);
+            TrackSteamTask(steamWokenByUs: !wasRunning, minimumWait: TimeSpan.FromMinutes(3));
+        }
         return ok;
     }
 
@@ -254,8 +258,23 @@ public sealed class ProcessOrchestrator
     /// </summary>
     public void ScheduleRestartWhenIdle() => StartIdleLoop(TimeSpan.Zero, closeAtEnd: false);
 
+    /// <summary>Instante mínimo de cierre (ticks UTC), ampliable por cada tarea nueva.</summary>
+    private long _earliestCloseTicks;
+
+    private void ExtendEarliestClose(TimeSpan minimumWait)
+    {
+        var target = (DateTime.UtcNow + minimumWait).Ticks;
+        long current;
+        do
+        {
+            current = Interlocked.Read(ref _earliestCloseTicks);
+            if (current >= target) return;
+        } while (Interlocked.CompareExchange(ref _earliestCloseTicks, target, current) != current);
+    }
+
     private void StartIdleLoop(TimeSpan minimumWait, bool closeAtEnd)
     {
+        ExtendEarliestClose(minimumWait);
         if (Interlocked.Exchange(ref _closerRunning, 1) == 1)
         {
             if (closeAtEnd) _closeRequested = true; // amplía un bucle de «solo reiniciar» ya en marcha
@@ -264,7 +283,7 @@ public sealed class ProcessOrchestrator
         _closeRequested = closeAtEnd;
         _ = Task.Run(async () =>
         {
-            try { await CloseWhenIdleLoopAsync(minimumWait).ConfigureAwait(false); }
+            try { await CloseWhenIdleLoopAsync().ConfigureAwait(false); }
             catch (Exception ex) { Log.Error("Cierre diferido de Steam", ex); }
             finally { Interlocked.Exchange(ref _closerRunning, 0); }
         });
@@ -272,9 +291,8 @@ public sealed class ProcessOrchestrator
 
     private volatile bool _closeRequested;
 
-    private async Task CloseWhenIdleLoopAsync(TimeSpan minimumWait)
+    private async Task CloseWhenIdleLoopAsync()
     {
-        var earliest = DateTime.UtcNow + minimumWait;
         var quietSince = (DateTime?)null;
         var announced = false;
 
@@ -302,34 +320,97 @@ public sealed class ProcessOrchestrator
                 continue;
             }
 
+            // Desinstalación pedida: en cuanto el manifiesto desaparece ya no hace falta esperar al diálogo.
+            var earliest = new DateTime(Interlocked.Read(ref _earliestCloseTicks), DateTimeKind.Utc);
+            if (DateTime.UtcNow < earliest && AwaitedUninstallsDone())
+            {
+                Interlocked.Exchange(ref _earliestCloseTicks, DateTime.UtcNow.Ticks);
+                earliest = DateTime.UtcNow;
+            }
+
             if (DownloadsKeepSteamAlive || DateTime.UtcNow < earliest)
             {
                 quietSince = null;
                 if (!announced && DownloadsKeepSteamAlive)
                 {
                     announced = true;
-                    Report(LaunchPhase.Idle, "Steam seguirá abierto en segundo plano hasta que terminen las descargas.", null);
+                    Report(LaunchPhase.Idle, "Steam trabaja en segundo plano; se cerrará solo en cuanto termine.", null);
                 }
                 continue;
             }
 
+            // Confirmación corta: Steam encadena «instalando → nada → siguiente de la cola» en pocos segundos.
             quietSince ??= DateTime.UtcNow;
-            if (DateTime.UtcNow - quietSince < TimeSpan.FromSeconds(15)) continue;
+            if (DateTime.UtcNow - quietSince < TaskQuietConfirmation) continue;
 
-            // Cuenta atrás de cierre seguro (se aborta si vuelve a haber actividad).
-            var aborted = false;
-            for (int left = Math.Max(5, _settings.CloudSyncGraceSeconds); left > 0; left--)
-            {
-                Report(LaunchPhase.SyncingCloud, "Descargas terminadas. Cerrando Steam de forma segura…", null, left);
-                await Task.Delay(1000).ConfigureAwait(false);
-                if (DownloadsKeepSteamAlive || IsBusy) { aborted = true; break; }
-            }
-            if (aborted) { quietSince = null; announced = false; continue; }
-
+            // Tarea terminada al 100 %: cierre inmediato y limpio.
+            Report(LaunchPhase.CleaningUp, "Tarea terminada. Cerrando Steam para liberar la memoria…", null);
             if (await ShutdownSteamAsync(steamExe).ConfigureAwait(false))
-                Report(LaunchPhase.Idle, "Descargas terminadas. Steam cerrado.", null);
+            {
+                _wokenForTasks = false;
+                lock (_awaitingUninstall) _awaitingUninstall.Clear();
+                Report(LaunchPhase.Idle, "Tarea terminada. Steam cerrado.", null);
+            }
             return;
         }
+    }
+
+    /// <summary>Tiempo sin actividad que confirma que la cola de Steam terminó (evita cerrar entre dos elementos).</summary>
+    private static readonly TimeSpan TaskQuietConfirmation = TimeSpan.FromSeconds(5);
+
+    /// <summary>Steam lo despertamos nosotros para una tarea (cuenta para la política «solo si lo abrió LightLauncher»).</summary>
+    private volatile bool _wokenForTasks;
+
+    private readonly HashSet<string> _awaitingUninstall = [];
+
+    private bool AwaitedUninstallsDone()
+    {
+        lock (_awaitingUninstall)
+            return _awaitingUninstall.Count > 0 && _awaitingUninstall.All(id => _scanner.FindGame(id) is null);
+    }
+
+    /// <summary>
+    /// Registra una tarea de Steam (instalar / actualizar / desinstalar) para el ciclo
+    /// «despertar → tarea → apagado automático»: en cuanto todas las colas terminan, Steam se cierra
+    /// con <c>-shutdown</c>. Respeta la política de cierre: con «solo si lo abrió LightLauncher»,
+    /// únicamente si fuimos nosotros quienes lo despertamos.
+    /// </summary>
+    public void TrackSteamTask(bool steamWokenByUs, TimeSpan? minimumWait = null)
+    {
+        if (steamWokenByUs) _wokenForTasks = true;
+        var policy = _settings.SteamCleanupPolicy;
+        if (policy == CleanupPolicy.Never) return;
+        if (policy == CleanupPolicy.OnlyIfStartedByLauncher && !_wokenForTasks) return;
+        ScheduleShutdownWhenIdle(minimumWait ?? TimeSpan.Zero);
+    }
+
+    /// <summary>
+    /// Actualizar: despierta Steam en segundo plano y deja que su planificador aplique la actualización
+    /// pendiente (Steam no tiene un comando para actualizar un juego concreto sin abrir su ventana; con la
+    /// actualización automática activada la empieza en cuanto arranca). Después, apagado automático.
+    /// </summary>
+    public async Task<(bool Ok, string Message)> StartUpdateAsync(GameEntry game, CancellationToken ct = default)
+    {
+        var steamExe = _steam.SteamExe;
+        if (steamExe is null) return (false, "No se encontró Steam en este equipo.");
+        if (!game.HasPendingUpdate) return (false, $"{game.Name} no tiene actualizaciones pendientes.");
+
+        Suspender?.Resume();
+        Downloads?.MarkRequested(game.AppId, game.Name); // progreso en vivo + Steam no se cierra a medias
+        var wasRunning = SteamLocator.IsClientRunning();
+        if (!wasRunning)
+        {
+            Report(LaunchPhase.StartingClient, $"Despertando Steam en segundo plano para actualizar {game.Name}…", null);
+            await EnsureSteamRunningAsync(steamExe, null, ct).ConfigureAwait(false);
+        }
+
+        TrackSteamTask(steamWokenByUs: !wasRunning);
+        var msg = wasRunning
+            ? $"Steam ya estaba abierto: actualizará {game.Name} en segundo plano."
+            : $"Actualizando {game.Name} en segundo plano. Steam se cerrará solo al terminar.";
+        Report(LaunchPhase.Idle, msg, null);
+        Log.Info($"Actualización solicitada: {game.Name} ({game.AppId}).");
+        return (true, msg);
     }
 
     /// <summary>

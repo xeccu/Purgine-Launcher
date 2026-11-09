@@ -69,8 +69,6 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     private IReadOnlyDictionary<string, SteamAppBasics> _appInfo = new Dictionary<string, SteamAppBasics>();
     /// <summary>Instalaciones en segundo plano lanzadas desde aquí que aún no han terminado.</summary>
     private readonly HashSet<string> _pendingInstalls = [];
-    /// <summary>Steam lo abrimos nosotros para descargar: se cierra al acabar (según la política).</summary>
-    private bool _steamOpenedForInstall;
 
     private CancellationTokenSource? _sessionCts;
     private IReadOnlyDictionary<string, SteamAppUsage> _steamUsage = new Dictionary<string, SteamAppUsage>();
@@ -117,7 +115,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         Store = new StoreViewModel(store, this);
         Downloads = new DownloadsViewModel(this);
         _monitor.Changed += list => OnUi(() => OnDownloadsChanged(list));
-        _monitor.Finished += info => OnUi(() => Downloads.AddFinished(info));
+        _monitor.Finished += info => OnUi(() => OnDownloadFinished(info));
         Settings = new SettingsViewModel(settings, library, steam, _saveSettings.Request, () => Dialogs);
 
         GamesView = CollectionViewSource.GetDefaultView(Games);
@@ -463,11 +461,47 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         StatusText = $"{entry.Name} está instalado y listo para jugar.";
         Notify("Instalación completada", $"{entry.Name} está listo para jugar.");
 
+        // El cierre de Steam lo gestiona el ciclo de tarea del orquestador (cuando terminen TODAS las colas).
         _pendingInstalls.Remove(entry.AppId);
-        // Si abrimos Steam para descargar, se cerrará cuando TODAS las colas terminen (nunca antes).
-        if (_steamOpenedForInstall && !IsSessionActive)
-            _orchestrator.ScheduleShutdownWhenIdle(TimeSpan.Zero);
-        if (_pendingInstalls.Count == 0) _steamOpenedForInstall = false;
+    }
+
+    // =====================================================================================
+    // Actualizar
+    // =====================================================================================
+
+    public void Update(GameCardViewModel card) => _ = UpdateAsync(card);
+
+    private async Task UpdateAsync(GameCardViewModel card)
+    {
+        if (card.IsRunning || !card.ShowUpdateButton) return;
+        StatusText = $"Preparando la actualización de {card.Name}…";
+        var (ok, message) = await Task.Run(() => _orchestrator.StartUpdateAsync(card.Entry));
+        StatusText = message;
+        if (!ok)
+        {
+            Notify("No se pudo actualizar", message);
+            return;
+        }
+        Notify("Actualización", message);
+        CurrentView = AppView.Downloads;
+    }
+
+    private void OnDownloadFinished(DownloadInfo info)
+    {
+        Downloads.AddFinished(info);
+        if (info.Phase == DownloadPhase.Canceled && info.Detail is not null)
+        {
+            // Steam no empezó la tarea (app en uso, restricciones de descarga…): se avisa y se libera.
+            StatusText = $"Steam no empezó la tarea de {info.Name}. Si el juego o la app están abiertos, ciérralos y vuelve a intentarlo.";
+            Notify("Steam no empezó la tarea", $"{info.Name}: ¿está abierto el juego o la app? Ciérralo y vuelve a intentarlo.");
+            _pendingInstalls.Remove(info.AppId);
+        }
+        else if (info.Phase == DownloadPhase.Completed && info.IsRequested && !_pendingInstalls.Contains(info.AppId))
+        {
+            // Actualización terminada (las instalaciones nuevas se notifican al detectar el manifiesto completo).
+            StatusText = $"{info.Name} está actualizado.";
+            Notify("Actualización completada", $"{info.Name} está actualizado y listo para jugar.");
+        }
     }
 
     // =====================================================================================
@@ -940,10 +974,17 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             case InstallStart.QueuedUntilSteamRestart:
                 _pendingInstalls.Add(entry.AppId);
                 _monitor.MarkRequested(entry.AppId, entry.Name); // progreso en vivo + Steam no se cierra
-                if (outcome.SteamStartedByUs) _steamOpenedForInstall = true;
-                // Se aceptó reiniciar pero Steam estaba ocupado descargando: reiniciar en cuanto quede libre.
-                if (outcome.Result == InstallStart.QueuedUntilSteamRestart && restart) _orchestrator.ScheduleRestartWhenIdle();
-                if (outcome.Result != InstallStart.QueuedUntilSteamRestart) CurrentView = AppView.Downloads;
+                if (outcome.Result != InstallStart.QueuedUntilSteamRestart)
+                {
+                    // Ciclo de tarea: Steam se cerrará solo en cuanto termine la instalación (y el resto de la cola).
+                    _orchestrator.TrackSteamTask(outcome.SteamStartedByUs);
+                    CurrentView = AppView.Downloads;
+                }
+                else if (restart)
+                {
+                    // Se aceptó reiniciar pero Steam estaba ocupado: reiniciarlo en cuanto quede libre.
+                    _orchestrator.ScheduleRestartWhenIdle();
+                }
                 // El vigilante de manifiestos refleja la cola y el progreso; por si el evento se retrasa:
                 if (await Task.Run(() => _scanner.FindGame(entry.AppId)) is { } created) UpsertGame(created);
                 if (outcome.Result != InstallStart.QueuedUntilSteamRestart)

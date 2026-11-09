@@ -39,8 +39,19 @@ public sealed record GameEntry
     /// <summary>StateFlags crudos del manifiesto (4 = instalado sin nada pendiente; 2 = actualización requerida).</summary>
     public int StateFlags { get; init; }
 
-    /// <summary>Instalado y con una actualización pendiente.</summary>
-    public bool HasPendingUpdate => IsInstalled && (StateFlags & 2) != 0;
+    // Bits de EAppState de Steam relevantes para actualizaciones.
+    private const int FlagUpdateRequired = 2, FlagFullyInstalled = 4, FlagUpdatePaused = 512, FlagUpdateStarted = 1024;
+
+    /// <summary>
+    /// Instalado y con una actualización pendiente, empezada o en pausa (StateFlags con los bits
+    /// 2 = UpdateRequired, 512 = UpdatePaused o 1024 = UpdateStarted, además de 4 = FullyInstalled).
+    /// </summary>
+    public bool HasPendingUpdate =>
+        IsInstalled && (StateFlags & FlagFullyInstalled) != 0 &&
+        (StateFlags & (FlagUpdateRequired | FlagUpdatePaused | FlagUpdateStarted)) != 0;
+
+    /// <summary>La actualización estaba en pausa en Steam.</summary>
+    public bool IsUpdatePaused => HasPendingUpdate && (StateFlags & FlagUpdatePaused) != 0;
 
     // ----- Progreso de descarga (Steam) -----
     public long BytesToDownload { get; init; }
