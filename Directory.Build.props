@@ -9,8 +9,8 @@
 
     <Version>0.1.0</Version>
     <Product>LightLauncher</Product>
-    <Authors>LightLauncher contributors</Authors>
-    <Copyright>Copyright (c) 2026 LightLauncher contributors. MIT License.</Copyright>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Authors>xeccu (XCC Studios)</Authors>
+    <Copyright>Copyright (c) 2026 xeccu (XCC Studios). All rights reserved.</Copyright>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
   </PropertyGroup>
 </Project>
