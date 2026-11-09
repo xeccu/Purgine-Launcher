@@ -172,14 +172,8 @@
                     <TextBlock Text="Avanzado" Style="{StaticResource SectionTitle}" />
                     <TextBlock Text="Argumentos al arrancar Steam" Margin="0,0,0,4" />
                     <TextBox Style="{StaticResource SearchBox}" Text="{Binding SteamClientArguments, UpdateSourceTrigger=LostFocus}" />
-                    <TextBlock Style="{StaticResource MutedText}" Margin="0,4,0,12"
-                               Text="Solo se usan si Purgine es quien abre Steam. Por defecto: -silent -nofriendsui -nochatui -minimized -vgui -fulldesktopres 0. Además, durante 90 s tras abrir Steam se oculta su ventana principal si aparece (los diálogos que necesitan tu respuesta no se tocan)." />
-
-                    <TextBlock Text="País de la tienda (precios)" Margin="0,0,0,4" />
-                    <TextBox Style="{StaticResource SearchBox}" Width="80" HorizontalAlignment="Left" MaxLength="2"
-                             Text="{Binding StoreCountryCode, UpdateSourceTrigger=LostFocus}" />
                     <TextBlock Style="{StaticResource MutedText}" Margin="0,4,0,0"
-                               Text="Código de 2 letras (ES, MX, AR, US…). Vacío = región de Windows." />
+                               Text="Solo se usan si Purgine es quien abre Steam. Por defecto: -silent -nofriendsui -nochatui -minimized -vgui -fulldesktopres 0. Además, durante 90 s tras abrir Steam se oculta su ventana principal si aparece (los diálogos que necesitan tu respuesta no se tocan)." />
                 </StackPanel>
             </Border>
 

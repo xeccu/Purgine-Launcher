@@ -6,7 +6,6 @@ using Purgine.Library;
 using Purgine.Settings;
 using Purgine.Stats;
 using Purgine.SteamNet;
-using Purgine.Store;
 using Purgine.ViewModels;
 
 namespace Purgine;
@@ -20,7 +19,7 @@ public partial class App : Application
     private Mutex? _singleInstance;
     private EventWaitHandle? _showEvent;
     private RegisteredWaitHandle? _showWait;
-    private SteamStoreService? _store;
+    private SteamArtService? _art;
     private SteamSession? _steamSession;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -66,14 +65,14 @@ public partial class App : Application
         var tracker = new GameTimeTracker(AppPaths.PlaytimeFile);
         var library = new UserLibrary(AppPaths.LibraryFile, AppPaths.CoversDir);
         var orchestrator = new ProcessOrchestrator(locator, scanner, tracker, settings);
-        _store = new SteamStoreService(settings);
+        _art = new SteamArtService(locator, AppPaths.ArtCacheDir);
         // Red de Steam (SteamKit2): sesión, propiedad y descargas sin el cliente de escritorio.
         _steamSession = new SteamSession(new SteamCredentialStore(AppPaths.SteamSessionFile));
         var ownership = new SteamOwnershipService(_steamSession, AppPaths.OwnedGamesFile);
         var downloads = new SteamDownloadManager(_steamSession, ownership, locator, scanner, AppPaths.DownloadQueueFile);
 
         var viewModel = new MainViewModel(
-            scanner, orchestrator, tracker, library, settings, _store, new LibraryWatcher(), locator,
+            scanner, orchestrator, tracker, library, settings, _art, new LibraryWatcher(), locator,
             _steamSession, ownership, downloads,
             saveSettings: () => JsonFileStore.Save(AppPaths.SettingsFile, settings));
         downloads.TryRegisterPending();
@@ -93,7 +92,7 @@ public partial class App : Application
         Log.Info("Purgine cerrado.");
         _showWait?.Unregister(null);
         _showEvent?.Dispose();
-        _store?.Dispose();
+        _art?.Dispose();
         try { _steamSession?.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(3)); }
         catch (Exception ex) { Log.Warn($"Cierre de la sesión de Steam: {ex.Message}"); }
         if (_singleInstance is not null)

@@ -1,228 +1,66 @@
 <UserControl x:Class="Purgine.Views.StoreView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="clr-namespace:Purgine.ViewModels">
-    <UserControl.Resources>
-        <!-- Bloque de precio con descuento (lo comparten filas y ficha) -->
-        <Style x:Key="Strike" TargetType="TextBlock">
-            <Setter Property="TextDecorations" Value="Strikethrough" />
-            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-        </Style>
-    </UserControl.Resources>
-
-    <Grid Margin="24,16,24,12">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" MinWidth="320" />
-            <ColumnDefinition Width="Auto" />
-        </Grid.ColumnDefinitions>
 
-        <!-- ===== Búsqueda ===== -->
-        <DockPanel Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,14" LastChildFill="False">
-            <Grid DockPanel.Dock="Left" Width="340">
-                <TextBox x:Name="QueryBox" Style="{StaticResource SearchBox}" Padding="32,7,10,7"
-                         Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}">
-                    <TextBox.InputBindings>
-                        <KeyBinding Key="Enter" Command="{Binding SearchCommand}" />
-                    </TextBox.InputBindings>
-                </TextBox>
-                <TextBlock Text="&#xE721;" FontFamily="{StaticResource IconFont}" Margin="11,0,0,0" FontSize="13"
-                           VerticalAlignment="Center" IsHitTestVisible="False" Foreground="{StaticResource MutedBrush}" />
-                <TextBlock Text="Buscar en la tienda de Steam…" Margin="33,0,0,0" VerticalAlignment="Center"
-                           IsHitTestVisible="False" Foreground="{StaticResource MutedBrush}">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding Text, ElementName=QueryBox}" Value="">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
-            </Grid>
-            <Button DockPanel.Dock="Left" Style="{StaticResource PrimaryButton}" Content="Buscar" Margin="8,0,0,0"
-                    Command="{Binding SearchCommand}" />
-            <Button DockPanel.Dock="Left" Style="{StaticResource GhostButton}" Margin="8,0,0,0"
-                    Command="{Binding SpecialsCommand}">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE8EC;" FontFamily="{StaticResource IconFont}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
-                    <TextBlock Text="Ofertas" />
-                </StackPanel>
-            </Button>
-        </DockPanel>
-
-        <!-- ===== Resultados ===== -->
-        <Grid Grid.Row="1" Grid.Column="0">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
-            <DockPanel Margin="0,0,0,8">
-                <ProgressBar DockPanel.Dock="Right" Style="{StaticResource SlimProgress}" Width="80" IsIndeterminate="True"
-                             VerticalAlignment="Center" Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}" />
-                <TextBlock Text="{Binding ListTitle}" Style="{StaticResource SectionTitle}" Margin="0" />
-            </DockPanel>
-
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <ItemsControl ItemsSource="{Binding Items}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="{x:Type vm:StoreItemViewModel}">
-                            <Button Style="{StaticResource RowButton}" Margin="0,1"
-                                    Command="{Binding DataContext.SelectCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                    CommandParameter="{Binding}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="138" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <Border Width="138" Height="52" CornerRadius="4" Background="{StaticResource CardBrush}">
-                                        <Border CornerRadius="4" Visibility="{Binding Image, Converter={StaticResource NullToVis}}">
-                                            <Border.Background>
-                                                <ImageBrush ImageSource="{Binding Image}" Stretch="UniformToFill" />
-                                            </Border.Background>
-                                        </Border>
-                                    </Border>
-                                    <StackPanel Grid.Column="1" Margin="14,0" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Text="✓ Instalado" FontSize="11" Margin="0,3,0,0" Foreground="{StaticResource AccentBrush}"
-                                                   Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVis}}" />
-                                        <TextBlock Text="En tu cuenta · no instalado" FontSize="11" Margin="0,3,0,0" Foreground="{StaticResource MutedBrush}"
-                                                   Visibility="{Binding IsOwnedNotInstalled, Converter={StaticResource BoolToVis}}" />
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <Border Background="{StaticResource DiscountBgBrush}" CornerRadius="3" Padding="6,2" Margin="0,0,8,0"
-                                                Visibility="{Binding HasDiscount, Converter={StaticResource BoolToVis}}">
-                                            <TextBlock Text="{Binding DiscountText}" Foreground="{StaticResource DiscountFgBrush}" FontWeight="Bold" FontSize="12" />
-                                        </Border>
-                                        <TextBlock Text="{Binding OriginalPriceText}" Style="{StaticResource Strike}" Margin="0,0,8,0"
-                                                   Visibility="{Binding OriginalPriceText, Converter={StaticResource NullToVis}}" />
-                                        <TextBlock Text="{Binding PriceText}" VerticalAlignment="Center" MinWidth="64" TextAlignment="Right" />
-                                    </StackPanel>
-                                </Grid>
-                            </Button>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
-
-            <TextBlock Grid.Row="1" Text="{Binding ErrorText}" Style="{StaticResource MutedText}" FontSize="13"
-                       HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" MaxWidth="360"
-                       Visibility="{Binding ErrorText, Converter={StaticResource NullToVis}}" />
-        </Grid>
-
-        <!-- ===== Ficha de producto ===== -->
-        <Border Grid.Row="1" Grid.Column="1" Width="440" Margin="16,0,0,0" Style="{StaticResource Panel}" Padding="0"
-                Visibility="{Binding HasDetails, Converter={StaticResource BoolToVis}}">
-            <Grid DataContext="{Binding Details}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel>
-                        <Grid>
-                            <Border Height="206" CornerRadius="10,10,0,0" Background="{StaticResource CardBrush}">
-                                <Border CornerRadius="10,10,0,0" Visibility="{Binding HeaderImage, Converter={StaticResource NullToVis}}">
-                                    <Border.Background>
-                                        <ImageBrush ImageSource="{Binding HeaderImage}" Stretch="UniformToFill" />
-                                    </Border.Background>
-                                </Border>
-                            </Border>
-                            <Button Style="{StaticResource IconButton}" Content="&#xE711;" HorizontalAlignment="Right" VerticalAlignment="Top"
-                                    Margin="8" Background="#CC0E1014" BorderThickness="0" ToolTip="Cerrar ficha"
-                                    Command="{Binding DataContext.CloseDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                        </Grid>
-
-                        <StackPanel Margin="20,16,20,20">
-                            <TextBlock Text="{Binding Name}" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap" />
-                            <TextBlock Text="{Binding MetaLine}" Style="{StaticResource MutedText}" Margin="0,6,0,0" />
-                            <TextBlock Text="{Binding Developers}" Style="{StaticResource MutedText}" Margin="0,2,0,0"
-                                       Visibility="{Binding Developers, Converter={StaticResource NullToVis}}" />
-
-                            <!-- Precio -->
-                            <StackPanel Orientation="Horizontal" Margin="0,16,0,0"
-                                        Visibility="{Binding PriceText, Converter={StaticResource NullToVis}}">
-                                <Border Background="{StaticResource DiscountBgBrush}" CornerRadius="4" Padding="8,3" Margin="0,0,10,0"
-                                        Visibility="{Binding HasDiscount, Converter={StaticResource BoolToVis}}">
-                                    <TextBlock Text="{Binding DiscountText}" Foreground="{StaticResource DiscountFgBrush}" FontWeight="Bold" FontSize="15" />
-                                </Border>
-                                <TextBlock Text="{Binding OriginalPriceText}" Style="{StaticResource Strike}" FontSize="13" Margin="0,0,10,0"
-                                           Visibility="{Binding OriginalPriceText, Converter={StaticResource NullToVis}}" />
-                                <TextBlock Text="{Binding PriceText}" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
-                            </StackPanel>
-
-                            <!-- Acciones: instalado -->
-                            <StackPanel Margin="0,16,0,0" Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVis}}">
-                                <TextBlock Text="{Binding InstalledText}" Foreground="{StaticResource AccentBrush}" Margin="0,0,0,8" />
-                                <Button Style="{StaticResource PrimaryButton}" Command="{Binding PlayCommand}" HorizontalAlignment="Left" Padding="22,9">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="&#xE768;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                        <TextBlock Text="Jugar" />
-                                    </StackPanel>
-                                </Button>
-                            </StackPanel>
-
-                            <!-- Acciones: no instalado -->
-                            <StackPanel Margin="0,16,0,0" Visibility="{Binding IsInstalled, Converter={StaticResource InverseBoolToVis}}">
-                                <TextBlock Text="{Binding OwnershipText}" Style="{StaticResource MutedText}" Margin="0,0,0,8" />
-                                <WrapPanel>
-                                    <!-- Gratis o ya es tuyo: instalar con el diálogo oficial de Steam -->
-                                    <Button Style="{StaticResource PrimaryButton}" Content="{Binding InstallText}" Padding="18,9" Margin="0,0,8,8"
-                                            Command="{Binding InstallCommand}"
-                                            Visibility="{Binding CanInstall, Converter={StaticResource BoolToVis}}" />
-                                    <!-- De pago sin licencia: compra en la web, nunca steam://install -->
-                                    <Button Style="{StaticResource PrimaryButton}" Content="{Binding BuyText}" Padding="18,9" Margin="0,0,8,8"
-                                            Command="{Binding BuyCommand}"
-                                            Visibility="{Binding NeedsPurchase, Converter={StaticResource BoolToVis}}" />
-                                    <Button Style="{StaticResource GhostButton}" Padding="14,9" Margin="0,0,8,8"
-                                            Command="{Binding CartCommand}"
-                                            Visibility="{Binding NeedsPurchase, Converter={StaticResource BoolToVis}}"
-                                            ToolTip="Abrir tu carrito en la web de Steam">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="&#xE7BF;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                            <TextBlock Text="Carrito" />
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Style="{StaticResource GhostButton}" Content="Instalar" Padding="14,9" Margin="0,0,8,8"
-                                            IsEnabled="False" ToolTipService.ShowOnDisabled="True"
-                                            ToolTip="Primero cómpralo en la web. Así Steam nunca muestra el error «no hay licencias»."
-                                            Visibility="{Binding ShowLockedInstall, Converter={StaticResource BoolToVis}}" />
-                                </WrapPanel>
-                                <TextBlock Style="{StaticResource MutedText}" Margin="0,2,0,0"
-                                           Visibility="{Binding ShowLockedInstall, Converter={StaticResource BoolToVis}}"
-                                           Text="La compra se abre en tu navegador, en la web oficial de Steam. Cuando Steam lo añada a tu cuenta aparecerá en tu Biblioteca, listo para instalar." />
-                            </StackPanel>
-
-                            <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Margin="0,12,0,0" LineHeight="20"
-                                       Foreground="{StaticResource TextBrush}" Opacity="0.9" />
-
-                            <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Margin="0,16,0,0" Padding="12,6"
-                                    Command="{Binding BrowserCommand}">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xE8A7;" FontFamily="{StaticResource IconFont}" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                    <TextBlock Text="Abrir en el navegador" FontSize="12" />
-                                </StackPanel>
-                            </Button>
-                        </StackPanel>
+        <!-- ===== Barra de navegación ===== -->
+        <Border Grid.Row="0" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,0,0,1" Padding="12,6">
+            <Grid>
+                <DockPanel LastChildFill="True">
+                    <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                        <Button x:Name="BackButton" Style="{StaticResource IconButton}" Content="&#xE72B;" Click="OnBack"
+                                ToolTip="Atrás" IsEnabled="False" />
+                        <Button x:Name="ForwardButton" Style="{StaticResource IconButton}" Content="&#xE72A;" Click="OnForward"
+                                ToolTip="Adelante" IsEnabled="False" Margin="4,0,0,0" />
+                        <Button x:Name="ReloadButton" Style="{StaticResource IconButton}" Content="&#xE72C;" Click="OnReload"
+                                ToolTip="Recargar" Margin="4,0,0,0" />
+                        <Button Style="{StaticResource IconButton}" Content="&#xE80F;" Click="OnHome"
+                                ToolTip="Portada de la tienda" Margin="4,0,0,0" />
                     </StackPanel>
-                </ScrollViewer>
+                    <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE8A7;" Click="OnOpenExternal"
+                            ToolTip="Abrir esta página en tu navegador" Margin="8,0,0,0" />
+                    <Border CornerRadius="6" Background="{StaticResource BgBrush}" BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1" Padding="10,5" Margin="12,0,0,0" VerticalAlignment="Center">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Left" Text="&#xE72E;" FontFamily="{StaticResource IconFont}" FontSize="11"
+                                       Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <TextBlock x:Name="AddressText" Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center" Text="store.steampowered.com" />
+                        </DockPanel>
+                    </Border>
+                </DockPanel>
+                <ProgressBar x:Name="LoadingBar" Style="{StaticResource SlimProgress}" Height="2" VerticalAlignment="Bottom"
+                             Margin="-12,0,-12,-6" IsIndeterminate="True" Background="Transparent" Visibility="Collapsed" />
             </Grid>
         </Border>
 
-        <!-- Cargando ficha -->
-        <Border Grid.Row="1" Grid.Column="1" Width="440" Margin="16,0,0,0" Style="{StaticResource Panel}"
-                Visibility="{Binding IsDetailsLoading, Converter={StaticResource BoolToVis}}">
-            <StackPanel VerticalAlignment="Center">
-                <TextBlock Text="Cargando ficha…" HorizontalAlignment="Center" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,10" />
-                <ProgressBar Style="{StaticResource SlimProgress}" Width="140" IsIndeterminate="True" />
+        <!-- ===== Navegador (el WebView2 se crea al abrir la pestaña y se libera al salir) ===== -->
+        <Grid Grid.Row="1" x:Name="Host" Background="{StaticResource BgBrush}">
+            <StackPanel x:Name="StartingPanel" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <ProgressBar Style="{StaticResource SlimProgress}" Width="180" IsIndeterminate="True" />
+                <TextBlock Text="Abriendo la tienda de Steam…" Margin="0,12,0,0" HorizontalAlignment="Center"
+                           Foreground="{StaticResource MutedBrush}" />
             </StackPanel>
-        </Border>
 
-        <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Text="{Binding RegionNote}" Style="{StaticResource MutedText}" Margin="0,10,0,0" />
+            <StackPanel x:Name="ErrorPanel" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="460"
+                        Visibility="Collapsed">
+                <TextBlock Text="&#xE783;" FontFamily="{StaticResource IconFont}" FontSize="32" HorizontalAlignment="Center"
+                           Foreground="{StaticResource MutedBrush}" />
+                <TextBlock x:Name="ErrorTitle" FontSize="16" FontWeight="SemiBold" Margin="0,12,0,0" HorizontalAlignment="Center"
+                           TextAlignment="Center" TextWrapping="Wrap" />
+                <TextBlock x:Name="ErrorDetail" Style="{StaticResource MutedText}" Margin="0,6,0,0" TextAlignment="Center"
+                           TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
+                    <Button x:Name="RuntimeButton" Style="{StaticResource PrimaryButton}" Content="Descargar WebView2"
+                            Click="OnGetRuntime" Margin="0,0,8,0" Visibility="Collapsed" />
+                    <Button Style="{StaticResource GhostButton}" Content="Reintentar" Click="OnRetry" />
+                </StackPanel>
+            </StackPanel>
+        </Grid>
     </Grid>
 </UserControl>

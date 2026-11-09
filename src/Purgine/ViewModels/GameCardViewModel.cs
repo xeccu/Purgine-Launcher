@@ -41,11 +41,16 @@ public sealed class GameCardViewModel : ObservableObject
     /// </summary>
     private const int CoverDecodeWidth = 180;
 
+    /// <summary>Icono de la lista lateral: se muestra a 24 px; 48 cubre pantallas con escalado 200 %.</summary>
+    private const int IconDecodeWidth = 48;
+
     private readonly GameTimeTracker _tracker;
     private readonly UserLibrary _library;
     private readonly ICardHost _host;
     private ImageSource? _cover;
     private ImageSource? _appIcon;
+    private ImageSource? _smallIcon;
+    private bool _iconRequested;
     private bool _coverRequested;
     private bool _isRunning;
     private string _playtimeText = string.Empty;
@@ -58,7 +63,11 @@ public sealed class GameCardViewModel : ObservableObject
         _library = library;
         _host = host;
 
-        // Clic en la tarjeta: jugar si está instalado; instalar si no.
+        ShowDetailsCommand = new RelayCommand(_ => _host.ShowDetails(this));
+        PrimaryActionCommand = new RelayCommand(
+            _ => { if (ShowUpdateButton) _host.Update(this); else if (IsNotInstalled && !HasActiveJob) _host.Install(this); else _host.Launch(this); },
+            _ => !IsRunning && (IsNotInstalled || HasActiveJob || ShowUpdateButton || _host.CanLaunch));
+        // Botón de jugar de la tarjeta: jugar si está instalado; instalar si no.
         PlayCommand = new RelayCommand(
             _ => { if (IsNotInstalled) _host.Install(this); else _host.Launch(this); },
             _ => IsNotInstalled || _host.CanLaunch);
@@ -110,6 +119,13 @@ public sealed class GameCardViewModel : ObservableObject
 
     public bool HasCover => _cover is not null;
 
+    /// <summary>Icono cuadrado de la lista lateral (icono de Steam, o el del .exe en los locales).</summary>
+    public ImageSource? SmallIcon
+    {
+        get => _smallIcon;
+        private set => SetProperty(ref _smallIcon, value);
+    }
+
     /// <summary>Icono del .exe (solo ejecutables locales sin portada).</summary>
     public ImageSource? AppIcon
     {
@@ -122,7 +138,35 @@ public sealed class GameCardViewModel : ObservableObject
     public bool IsRunning
     {
         get => _isRunning;
-        set { if (SetProperty(ref _isRunning, value)) OnPropertyChanged(nameof(OverlayText)); }
+        set
+        {
+            if (!SetProperty(ref _isRunning, value)) return;
+            OnPropertyChanged(nameof(OverlayText));
+            RaisePrimaryAction();
+        }
+    }
+
+    // ----- Acción principal (botón grande de la ficha) -----
+
+    public string PrimaryActionText =>
+        _isRunning ? "EN CURSO"
+        : HasActiveJob ? "VER DESCARGA"
+        : ShowUpdateButton ? "ACTUALIZAR"
+        : IsNotInstalled ? "INSTALAR"
+        : "JUGAR";
+
+    /// <summary>Glifo de Segoe Fluent Icons del botón principal.</summary>
+    public string PrimaryActionGlyph =>
+        _isRunning ? "\uE916"
+        : HasActiveJob ? "\uE896"
+        : ShowUpdateButton ? "\uE777"
+        : IsNotInstalled ? "\uE896"
+        : "\uE768";
+
+    private void RaisePrimaryAction()
+    {
+        OnPropertyChanged(nameof(PrimaryActionText));
+        OnPropertyChanged(nameof(PrimaryActionGlyph));
     }
 
     public string OverlayText =>
@@ -158,6 +202,7 @@ public sealed class GameCardViewModel : ObservableObject
         OnPropertyChanged(nameof(OverlayText));
         OnPropertyChanged(nameof(ShowUpdateButton));
         OnPropertyChanged(nameof(CanUninstall));
+        RaisePrimaryAction();
     }
 
     public bool IsQueued => _job?.State == DownloadJobState.Queued;
@@ -183,6 +228,7 @@ public sealed class GameCardViewModel : ObservableObject
         OnPropertyChanged(nameof(HasUpdate));
         OnPropertyChanged(nameof(ShowUpdateButton));
         OnPropertyChanged(nameof(PlatformLabel));
+        RaisePrimaryAction();
     }
 
     /// <summary>Hay actualización: según el manifiesto local o según la build pública de Steam.</summary>
@@ -199,6 +245,15 @@ public sealed class GameCardViewModel : ObservableObject
         private set => SetProperty(ref _playtimeText, value);
     }
 
+    /// <summary>Horas jugadas (para ordenar por tiempo de juego).</summary>
+    public double TotalPlaytimeHours { get; private set; }
+
+    /// <summary>«12 h 30 min» / «Sin jugar» (ficha del juego).</summary>
+    public string TotalPlaytimeText { get; private set; } = string.Empty;
+
+    /// <summary>«hoy» / «hace 3 días» / «4 mar 2026» / «Nunca» (ficha del juego).</summary>
+    public string LastPlayedText { get; private set; } = string.Empty;
+
     // ----- Etiquetas -----
 
     public ObservableCollection<TagToggleViewModel> TagToggles { get; } = [];
@@ -214,6 +269,8 @@ public sealed class GameCardViewModel : ObservableObject
     // ----- Comandos (menú contextual) -----
 
     public ICommand PlayCommand { get; }
+    public ICommand ShowDetailsCommand { get; }
+    public ICommand PrimaryActionCommand { get; }
     public ICommand InstallCommand { get; }
     public ICommand CancelInstallCommand { get; }
     public ICommand UninstallCommand { get; }
@@ -237,6 +294,7 @@ public sealed class GameCardViewModel : ObservableObject
             Cover = null;
             AppIcon = null;
             _ = LoadCoverAsync();
+            if (IsLocal) { _iconRequested = false; SmallIcon = null; }
         }
         OnPropertyChanged(string.Empty); // refresca todos los bindings
     }
@@ -248,6 +306,13 @@ public sealed class GameCardViewModel : ObservableObject
         PlaytimeText = b.Total == TimeSpan.Zero
             ? "Sin jugar"
             : last is null ? Formatting.Duration(b.Total) : $"{Formatting.Duration(b.Total)} · {Formatting.RelativeDate(last)}";
+        TotalPlaytimeHours = b.Total.TotalHours;
+        TotalPlaytimeText = b.Total == TimeSpan.Zero ? "Sin jugar" : Formatting.Duration(b.Total);
+        LastPlayedText = last is null ? "Nunca" : Formatting.RelativeDate(last);
+        LastPlayedText = LastPlayedText.Length > 0 ? char.ToUpper(LastPlayedText[0]) + LastPlayedText[1..] : LastPlayedText;
+        OnPropertyChanged(nameof(TotalPlaytimeHours));
+        OnPropertyChanged(nameof(TotalPlaytimeText));
+        OnPropertyChanged(nameof(LastPlayedText));
 
         _playtimeDetail = b.Total == TimeSpan.Zero ? null
             : IsSteam && b.LocalExtra > TimeSpan.Zero
@@ -292,5 +357,24 @@ public sealed class GameCardViewModel : ObservableObject
 
         if (IsLocal && Entry.ExecutablePath is { } exe)
             AppIcon = await Task.Run(() => ImageLoader.IconFromExecutable(exe));
+    }
+
+    /// <summary>
+    /// Icono de la lista lateral, una sola vez: el de Steam (caché del cliente o CDN con el hash de PICS) o,
+    /// en los ejecutables locales, el del propio .exe.
+    /// </summary>
+    public async Task LoadIconAsync(SteamArtService art, string? iconHash)
+    {
+        if (_iconRequested) return;
+        _iconRequested = true;
+
+        if (IsLocal)
+        {
+            if (AppIcon is null && Entry.ExecutablePath is { } exe)
+                AppIcon = await Task.Run(() => ImageLoader.IconFromExecutable(exe));
+            SmallIcon = AppIcon ?? Cover;
+            return;
+        }
+        SmallIcon = await art.LoadIconAsync(Entry.AppId, iconHash, IconDecodeWidth);
     }
 }

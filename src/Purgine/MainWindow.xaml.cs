@@ -72,7 +72,9 @@ public partial class MainWindow : Window, IDialogService
     /// <summary>Muestra la ventana (desde la bandeja o desde una segunda instancia del .exe).</summary>
     public void RestoreFromTray()
     {
+        var wasHidden = !IsVisible;
         Show();
+        if (wasHidden) _vm.OnRestoredFromTray();
         if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
         Activate();
         Topmost = true;   // truco habitual para traerla al frente de verdad

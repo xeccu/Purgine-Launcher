@@ -13,6 +13,7 @@ al terminar.
 - Windows 10/11 (x64)
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) para compilar (`winget install Microsoft.DotNet.SDK.10`)
 - Steam instalado (para jugar)
+- Microsoft Edge WebView2 Runtime para la pestaña Tienda (viene con Windows 11; en Windows 10 se instala gratis)
 - Una cuenta de Steam (para ver la biblioteca completa y descargar)
 
 ## Compilar y ejecutar
@@ -96,7 +97,7 @@ progreso, la velocidad y el tiempo restante son los **bytes reales recibidos de 
 
 **Desinstalar** borra la carpeta del juego y su appmanifest (con Steam cerrado), sin pasar por el cliente.
 **Juegos gratuitos** que aún no están en la cuenta: se pide su licencia gratuita por la red y se descargan.
-**Comprar** sigue siendo en la web oficial de Steam (navegador).
+**Comprar** se hace en la tienda oficial de Steam, dentro de la pestaña Tienda.
 
 ### 4. Jugar (`Core/ProcessOrchestrator.cs`)
 
@@ -110,12 +111,42 @@ La **única** función de `steam.exe`:
 4. Al salir: cuenta atrás para que Steam suba las partidas a la nube, `steam.exe -shutdown` y cierre de
    procesos residuales. Después se registran en Steam las descargas que esperaban.
 
+### 5. Biblioteca (`Views/LibraryView.xaml`, `Views/GameDetailView.xaml`)
+
+Organizada como la biblioteca de un cliente de escritorio:
+
+- **Lista lateral** virtualizada con todos los juegos (icono de 24 px + nombre), búsqueda rápida, filtros
+  «Todos / Instalados» y orden alfabético o por tiempo de juego. Doble clic = botón principal.
+- **Inicio**: cuadrícula o lista de portadas, con etiquetas y tamaño ajustable.
+- **Ficha del juego** (clic en una portada o en la lista): imagen panorámica con degradado y logo, botón
+  principal **JUGAR / INSTALAR / ACTUALIZAR**, **última sesión** y **tiempo de juego**, progreso de
+  **logros** (servicio Player de Steam vía SteamKit2: desbloqueados/total y los más destacados) y enlaces a la
+  página de la tienda, comunidad, discusiones, guías y soporte.
+- **Arte** (`Library/SteamArtService.cs`): primero la caché que ya mantiene el cliente de Steam
+  (`appcache\librarycache`), sin red; si falta, la CDN pública de Steam, guardando una copia en `art\`.
+  Todo se decodifica al tamaño en que se muestra y la imagen panorámica se suelta al cambiar de juego o al
+  ocultar la ventana.
+
+### 6. Tienda (`Views/StoreView.xaml`)
+
+- La tienda oficial (`store.steampowered.com`, en español) dentro de un **WebView2** (motor de Edge), con
+  atrás/adelante/recargar/inicio y «abrir en el navegador». El inicio de sesión web y el carrito son los de
+  Steam; el perfil del navegador se guarda en `webview\` (Purgine nunca ve ni guarda la contraseña, y el
+  guardado de contraseñas del navegador está desactivado).
+- Los botones de la web que abren el cliente (`steam://install`, `steam://run`…) los atiende Purgine: si el
+  juego está instalado se juega; si es de la cuenta se descarga con el motor nativo; si es gratuito y aún no
+  está en la cuenta se pide su licencia gratuita.
+- **Consumo**: el navegador se crea al abrir la pestaña. Al salir de ella se **suspende** (sin CPU y con la
+  memoria marcada como prescindible: de ~450 MB a ~35 MB en las pruebas) y, tras **60 s** fuera de la pestaña
+  o al ocultar la ventana en la bandeja, se **cierra del todo** (sus procesos `msedgewebview2.exe`
+  terminan). Al volver se reabre en la última página.
+
 ### Otras funciones
 
 - **Tiempo jugado**: histórico de Steam (`localconfig.vdf`) más las sesiones locales que Steam aún no ha
   volcado, sin doble conteo.
-- **Tienda**: búsqueda, ofertas y fichas con los endpoints públicos de la tienda; compra y carrito en la web.
-- **Organización**: etiquetas, filtros «Todos / Instalados», cuadrícula o lista, tamaño de portadas.
+- **Organización**: etiquetas, filtros «Todos / Instalados», orden A-Z o por tiempo, cuadrícula o lista,
+  tamaño de portadas.
 - **Ejecutables propios** (Godot, emuladores…): con portada y tiempo jugado.
 - **Bandeja del sistema** con `Shell_NotifyIcon` (sin WinForms): en la bandeja ocupa ~5–10 MB de RAM.
 
@@ -126,9 +157,8 @@ Purgine.sln · nuget.config · Directory.Build.props
 src/Purgine/
 ├─ SteamNet/        Red de Steam (SteamKit2): sesión, propiedad, motor de depots, cola, registro en Steam
 ├─ Core/            Orquestador de partidas, vigilancia de procesos, limitador de Steam, ventana de Steam
-├─ Library/         Escáner de manifiestos locales, VDF/appinfo, tiempo de Steam, etiquetas, ejecutables locales
+├─ Library/         Escáner de manifiestos locales, VDF/appinfo, tiempo de Steam, arte, etiquetas, ejecutables locales
 ├─ Stats/           Tiempo jugado
-├─ Store/           Cliente de la tienda (endpoints públicos)
 ├─ Settings/        Ajustes (settings.json)
 ├─ Infrastructure/  Rutas, log, JSON atómico, P/Invoke, bandeja, imágenes
 ├─ ViewModels/ · Views/   Interfaz WPF (MVVM, sin dependencias externas)
@@ -144,6 +174,8 @@ Todo en `%LocalAppData%\Purgine\` (botón «Abrir carpeta de datos» en Ajustes)
 | `owned-games.json` | Juegos de la cuenta según Steam (caché) |
 | `download-queue.json` | Cola de descargas pendientes |
 | `settings.json` · `library.json` · `playtime.json` | Ajustes, etiquetas/ejecutables locales, tiempo jugado |
+| `art\` | Iconos, imágenes panorámicas, logos e iconos de logros que no estaban en la caché de Steam |
+| `webview\` | Perfil del navegador de la Tienda (cookies y sesión web de Steam, caché) |
 | `purgine.log` | Registro de diagnóstico |
 
 > Si vienes de una versión anterior (cuando la app se llamaba «LightLauncher»), al primer arranque la carpeta
@@ -161,6 +193,9 @@ Todo en `%LocalAppData%\Purgine\` (botón «Abrir carpeta de datos» en Ajustes)
 - Si Steam detecta alguna diferencia con su propio registro, puede **verificar** el juego al lanzarlo
   (normalmente no descarga nada).
 - La desinstalación borra los archivos **de forma permanente** (no van a la papelera).
+- La interfaz se inspira en la organización de los clientes de escritorio (lista lateral, ficha con imagen
+  panorámica), pero Purgine no usa logotipos ni marcas de Valve en su propia interfaz; el arte de cada juego
+  es el que publica Steam para ese juego. Steam y el logotipo de Steam son marcas de Valve Corporation.
 
 ## Licencia
 

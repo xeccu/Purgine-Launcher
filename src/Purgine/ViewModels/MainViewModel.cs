@@ -11,7 +11,6 @@ using Purgine.Library;
 using Purgine.Settings;
 using Purgine.Stats;
 using Purgine.SteamNet;
-using Purgine.Store;
 
 namespace Purgine.ViewModels;
 
@@ -62,6 +61,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     private readonly SteamSession _session;
     private readonly SteamOwnershipService _ownership;
     private readonly SteamDownloadManager _downloads;
+    private readonly SteamArtService _art;
 
     /// <summary>AppIDs de la cuenta (red de Steam si hay sesión; si no, caché local del cliente).</summary>
     private IReadOnlySet<string> _owned = new HashSet<string>();
@@ -79,6 +79,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     private string _bannerDetail = string.Empty;
     private bool _cloudNotified;
     private TagFilterViewModel? _selectedTagFilter;
+    private GameCardViewModel? _selectedGame;
+    private GameDetailViewModel? _detail;
 
     public MainViewModel(
         SteamLibraryScanner scanner,
@@ -86,7 +88,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         GameTimeTracker tracker,
         UserLibrary library,
         LauncherSettings settings,
-        SteamStoreService store,
+        SteamArtService art,
         LibraryWatcher watcher,
         SteamLocator steam,
         SteamSession session,
@@ -103,15 +105,16 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         _session = session;
         _ownership = ownership;
         _downloads = downloads;
+        _art = art;
         _saveSettings = new DebouncedAction(saveSettings, TimeSpan.FromMilliseconds(600));
 
-        Store = new StoreViewModel(store, this);
+        Store = new StoreViewModel(this);
         Downloads = new DownloadsViewModel(this);
         Settings = new SettingsViewModel(settings, library, steam, _saveSettings.Request, () => Dialogs,
             login: LoginAsync, logout: LogoutAsync);
 
         GamesView = CollectionViewSource.GetDefaultView(Games);
-        GamesView.SortDescriptions.Add(new SortDescription(nameof(GameCardViewModel.Name), ListSortDirection.Ascending));
+        ApplySort();
         GamesView.Filter = FilterGame;
 
         RefreshCommand = new RelayCommand(async _ => await RefreshAsync(), _ => !IsScanning);
@@ -119,6 +122,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         OpenDataFolderCommand = new RelayCommand(_ => OpenPath(AppPaths.DataDir));
         AddLocalGameCommand = new RelayCommand(_ => AddLocalGame());
         NewTagCommand = new RelayCommand(_ => PromptNewTag());
+        ShowHomeCommand = new RelayCommand(_ => SelectedGame = null);
         ShowViewCommand = new RelayCommand(p => { if (p is AppView v) CurrentView = v; else if (p is string s && Enum.TryParse<AppView>(s, out var pv)) CurrentView = pv; });
 
         _orchestrator.StatusChanged += (_, s) => OnUi(() => OnOrchestratorStatus(s));
@@ -173,7 +177,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             OnPropertyChanged(nameof(IsStoreView));
             OnPropertyChanged(nameof(IsDownloadsView));
             OnPropertyChanged(nameof(IsSettingsView));
-            if (value == AppView.Store) _ = Store.EnsureInitializedAsync();
+            Store.IsActive = value == AppView.Store;
         }
     }
 
@@ -189,6 +193,78 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     public ObservableCollection<GameCardViewModel> Games { get; } = [];
     public ICollectionView GamesView { get; }
     public ObservableCollection<TagFilterViewModel> TagFilters { get; } = [];
+
+    // ----- Juego seleccionado (lista lateral / clic en una portada) → ficha -----
+
+    /// <summary>Juego cuya ficha se muestra (null = inicio de la biblioteca con la cuadrícula).</summary>
+    public GameCardViewModel? SelectedGame
+    {
+        get => _selectedGame;
+        set
+        {
+            if (ReferenceEquals(_selectedGame, value)) return;
+            _selectedGame = value;
+            _detail?.Close();
+            _detail = value is null ? null
+                : new GameDetailViewModel(value, _art, _session, OpenInStoreTab, ShowHomeCommand);
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(Detail));
+            OnPropertyChanged(nameof(IsHomeVisible));
+            if (_detail is not null) _ = _detail.LoadAsync();
+        }
+    }
+
+    public GameDetailViewModel? Detail => _detail;
+
+    public bool IsHomeVisible => _selectedGame is null;
+
+    public void ShowDetails(GameCardViewModel card)
+    {
+        CurrentView = AppView.Library;
+        SelectedGame = card;
+    }
+
+    /// <summary>Enlaces de la ficha (tienda, comunidad, soporte…): se abren en la pestaña Tienda.</summary>
+    private void OpenInStoreTab(string url)
+    {
+        Store.Navigate(url);
+        CurrentView = AppView.Store;
+    }
+
+    // ----- Orden -----
+
+    public bool SortByName
+    {
+        get => _settings.SortMode == LibrarySortMode.Name;
+        set { if (value) SetSortMode(LibrarySortMode.Name); }
+    }
+
+    public bool SortByPlaytime
+    {
+        get => _settings.SortMode == LibrarySortMode.Playtime;
+        set { if (value) SetSortMode(LibrarySortMode.Playtime); }
+    }
+
+    private void SetSortMode(LibrarySortMode mode)
+    {
+        if (_settings.SortMode == mode) return;
+        _settings.SortMode = mode;
+        OnPropertyChanged(nameof(SortByName));
+        OnPropertyChanged(nameof(SortByPlaytime));
+        ApplySort();
+        _saveSettings.Request();
+    }
+
+    private void ApplySort()
+    {
+        using (GamesView.DeferRefresh())
+        {
+            GamesView.SortDescriptions.Clear();
+            if (_settings.SortMode == LibrarySortMode.Playtime)
+                GamesView.SortDescriptions.Add(new SortDescription(nameof(GameCardViewModel.TotalPlaytimeHours), ListSortDirection.Descending));
+            GamesView.SortDescriptions.Add(new SortDescription(nameof(GameCardViewModel.Name), ListSortDirection.Ascending));
+        }
+    }
 
     public string SearchText
     {
@@ -352,6 +428,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     public ICommand AddLocalGameCommand { get; }
     public ICommand NewTagCommand { get; }
     public ICommand ShowViewCommand { get; }
+    public ICommand ShowHomeCommand { get; }
 
     // =====================================================================================
     // Carga de biblioteca
@@ -375,6 +452,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             _appInfo = snapshot.AppInfo;
 
             var running = Games.Where(g => g.IsRunning).Select(g => g.Entry.Id).ToHashSet();
+            var selectedId = _selectedGame?.Entry.Id;
+            SelectedGame = null;
             Games.Clear();
             foreach (var e in snapshot.Installed) Games.Add(CreateCard(e));
 
@@ -393,6 +472,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             foreach (var g in Games) g.IsRunning = running.Contains(g.Entry.Id);
             ApplyRemoteUpdates();
             SyncDownloads();
+            if (selectedId is not null) SelectedGame = Games.FirstOrDefault(g => g.Entry.Id == selectedId);
 
             _watcher.Watch(snapshot.LibraryFolders);
             StatusText = Games.Count > 0 ? "Listo. Haz clic en un juego para jugar, o en uno no instalado para instalarlo." : "Sin juegos.";
@@ -407,18 +487,26 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             IsScanning = false;
             RebuildTagFilters();
             RaiseLibraryTexts();
-            Store.RefreshInstalledState();
         }
 
         if (_session.HasSavedSession) _ = RefreshOwnershipAsync();
 
-        // Portadas una a una, sin bloquear la UI ni disparar picos de memoria.
+        // Iconos de la lista lateral (pequeños, casi siempre ya en la caché del cliente) y después las
+        // portadas, uno a uno, sin bloquear la UI ni disparar picos de memoria.
+        foreach (var card in Games.ToList())
+        {
+            if (generation != _refreshGeneration) return;
+            await LoadIconAsync(card);
+        }
         foreach (var card in Games.ToList())
         {
             if (generation != _refreshGeneration) break;
             await card.LoadCoverAsync();
         }
     }
+
+    private Task LoadIconAsync(GameCardViewModel card) =>
+        card.LoadIconAsync(_art, card.IsSteam && uint.TryParse(card.Entry.AppId, out var id) ? _ownership.Find(id)?.Icon : null);
 
     private GameCardViewModel CreateCard(GameEntry entry) => new(entry, _tracker, _library, this);
 
@@ -458,14 +546,17 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             // Quitar las aproximaciones locales que la red no confirma (y no estén instaladas).
             var ownedIds = cache.Apps.Select(a => a.AppId.ToString()).ToHashSet();
             foreach (var card in Games.Where(g => g.IsNotInstalled && !ownedIds.Contains(g.Entry.AppId) && !g.HasActiveJob).ToList())
+            {
+                if (ReferenceEquals(card, _selectedGame)) SelectedGame = null;
                 Games.Remove(card);
+            }
 
             AddOwnedFromNetwork(Games.Where(g => g.IsSteam && !g.IsNotInstalled).Select(g => g.Entry).ToList());
             ApplyRemoteUpdates();
             RebuildTagFilters();
             RaiseLibraryTexts();
-            Store.RefreshInstalledState();
             UpdateAccountText();
+            foreach (var card in Games.Where(g => g.SmallIcon is null).ToList()) await LoadIconAsync(card);
             foreach (var card in Games.Where(g => !g.HasCover).ToList()) await card.LoadCoverAsync();
         }
         catch (Exception ex)
@@ -483,6 +574,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             var usage = await Task.Run(_scanner.ReadSteamPlaytime);
             _tracker.SetSteamPlaytime(usage);
             foreach (var g in Games) g.RefreshStats();
+            if (_settings.SortMode == LibrarySortMode.Playtime) GamesView.Refresh();
             RaiseLibraryTexts();
         }
         catch (Exception ex)
@@ -504,11 +596,11 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             var card = CreateCard(entry);
             Games.Add(card);
             _ = card.LoadCoverAsync();
+            _ = LoadIconAsync(card);
         }
         ApplyRemoteUpdates();
         RebuildTagFilters();
         RaiseLibraryTexts();
-        Store.RefreshInstalledState();
     }
 
     /// <summary>Un manifiesto desapareció (desinstalación): si es de la cuenta vuelve a «no instalado».</summary>
@@ -529,12 +621,12 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         }
         else
         {
+            if (ReferenceEquals(card, _selectedGame)) SelectedGame = null;
             Games.Remove(card);
             StatusText = $"{card.Name} se ha quitado de la biblioteca.";
         }
         RebuildTagFilters();
         RaiseLibraryTexts();
-        Store.RefreshInstalledState();
     }
 
     private bool FilterGame(object o)
@@ -562,14 +654,24 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         foreach (var card in Games.Where(g => g.IsLocal).ToList())
         {
             if (defs.Remove(card.Entry.Id, out var def)) card.UpdateEntry(def.ToEntry());
-            else if (!card.IsRunning) Games.Remove(card);
+            else if (!card.IsRunning)
+            {
+                if (ReferenceEquals(card, _selectedGame)) SelectedGame = null;
+                Games.Remove(card);
+            }
         }
         foreach (var def in defs.Values)
         {
             var card = CreateCard(def.ToEntry());
             Games.Add(card);
-            _ = card.LoadCoverAsync();
+            _ = LoadLocalArtAsync(card);
         }
+    }
+
+    private async Task LoadLocalArtAsync(GameCardViewModel card)
+    {
+        await card.LoadCoverAsync();
+        await LoadIconAsync(card);
     }
 
     private void RebuildTagFilters()
@@ -906,8 +1008,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
 
     public void ViewInStore(GameCardViewModel card)
     {
+        Store.ShowApp(card.Entry.AppId);
         CurrentView = AppView.Store;
-        _ = Store.ShowDetailsAsync(card.Entry.AppId);
     }
 
     public void EditLocal(GameCardViewModel card)
@@ -944,75 +1046,81 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     }
 
     // =====================================================================================
-    // IStoreActions
+    // IStoreActions (enlaces steam:// de la tienda web)
     // =====================================================================================
 
-    /// <summary>Tarjeta de un juego de Steam instalado.</summary>
-    public GameCardViewModel? FindInstalled(string appId) =>
-        Games.FirstOrDefault(g => g.IsSteam && !g.IsNotInstalled && g.Entry.AppId == appId);
+    private bool IsKnownOwned(string appId) =>
+        Games.Any(g => g.IsSteam && !g.IsNotInstalled && g.Entry.AppId == appId) || _owned.Contains(appId);
 
-    public bool IsKnownOwned(string appId) =>
-        FindInstalled(appId) is not null || _owned.Contains(appId);
+    public void ReportStatus(string text) => StatusText = text;
+
+    public void PlayOrInstallFromStore(string appId, string? name, bool installOnly)
+    {
+        var card = Games.FirstOrDefault(g => g.IsSteam && g.Entry.AppId == appId);
+        if (card is { IsNotInstalled: false })
+        {
+            if (installOnly) { ShowDetails(card); StatusText = $"{card.Name} ya está instalado."; }
+            else Launch(card);
+            return;
+        }
+        _ = InstallFromStoreAsync(appId, card?.Name ?? name ?? $"App {appId}");
+    }
 
     /// <summary>
-    /// Instalar desde la Tienda, sin el cliente: de la cuenta → a la cola; gratuito aún no añadido → se pide
-    /// su licencia gratuita por la red (SteamKit2) y después a la cola; de pago sin licencia → compra en la web.
+    /// Instalar desde la Tienda, sin el cliente: de la cuenta → a la cola; si aún no consta en la cuenta se pide
+    /// su licencia gratuita por la red (SteamKit2): Steam solo la concede si el juego es gratuito.
     /// </summary>
-    public async Task InstallAsync(string appId, string name, bool isFree)
+    private async Task InstallFromStoreAsync(string appId, string name)
     {
+        if (!uint.TryParse(appId, out var id)) return;
+        if (!await EnsureSteamAccountAsync()) return;
+
         if (!IsKnownOwned(appId))
         {
-            if (!isFree)
-            {
-                StatusText = $"{name} no consta en tu cuenta: abriendo la compra en la web…";
-                OpenInBrowser(appId);
-                return;
-            }
-            if (!await EnsureSteamAccountAsync()) return;
-
-            StatusText = $"Añadiendo {name} (gratis) a tu cuenta…";
+            StatusText = $"Añadiendo {name} a tu cuenta…";
             var granted = await Task.Run(async () =>
                 await _session.LoginWithSavedSessionAsync(CancellationToken.None) &&
-                await _session.RequestFreeLicenseAsync(uint.Parse(appId)));
+                await _session.RequestFreeLicenseAsync(id));
             if (!granted)
             {
-                StatusText = $"Steam no concedió la licencia gratuita de {name}.";
+                StatusText = $"{name} no está en tu cuenta. Si es de pago, cómpralo en la tienda y vuelve a pulsar «Instalar».";
                 return;
             }
             await RefreshOwnershipAsync();
         }
 
         var card = Games.FirstOrDefault(g => g.IsSteam && g.Entry.AppId == appId);
-        var entry = card?.Entry ?? _scanner.CreateNotInstalledEntry(
-            appId, name, uint.TryParse(appId, out var id) ? _ownership.Find(id)?.InstallDir : null);
+        var owned = _ownership.Find(id);
+        var entry = card?.Entry ?? _scanner.CreateNotInstalledEntry(appId, owned?.Name ?? name, owned?.InstallDir);
         if (entry.IsInstalled) { CurrentView = AppView.Library; return; }
         await EnqueueAsync(entry, DownloadJobKind.Install);
     }
-
-    public void OpenInBrowser(string appId)
-    {
-        StatusText = "Abriendo la tienda de Steam en tu navegador…";
-        OpenPath($"https://store.steampowered.com/app/{Uri.EscapeDataString(appId)}/");
-    }
-
-    public void OpenCart()
-    {
-        StatusText = "Abriendo tu carrito de Steam en el navegador…";
-        OpenPath("https://store.steampowered.com/cart/");
-    }
-
-    public void Play(GameCardViewModel card) => Launch(card);
 
     // =====================================================================================
     // Ciclo de vida de la ventana
     // =====================================================================================
 
-    /// <summary>La ventana se ocultó en la bandeja: soltar recursos de red de la tienda.</summary>
-    public void OnHiddenToTray() => Store.OnHidden();
+    /// <summary>
+    /// La ventana se ocultó en la bandeja: cerrar el navegador de la tienda (sus procesos) y soltar las
+    /// imágenes grandes de la ficha abierta.
+    /// </summary>
+    public void OnHiddenToTray()
+    {
+        Store.Release();
+        _detail?.ReleaseImages();
+    }
+
+    /// <summary>La ventana vuelve de la bandeja: recargar lo que se soltó.</summary>
+    public void OnRestoredFromTray()
+    {
+        if (_detail is not null) _ = _detail.LoadAsync();
+    }
 
     /// <summary>Guardar lo pendiente al salir (las descargas quedan en pausa y se recuperan al volver).</summary>
     public void Shutdown()
     {
+        Store.Release();
+        _detail?.Close();
         _downloads.Dispose();
         _saveSettings.Flush();
         _saveSettings.Dispose();

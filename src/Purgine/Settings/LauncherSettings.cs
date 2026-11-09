@@ -26,6 +26,13 @@ public enum LibraryViewMode
     List,
 }
 
+/// <summary>Orden de la biblioteca (lista lateral y cuadrícula).</summary>
+public enum LibrarySortMode
+{
+    Name,
+    Playtime,
+}
+
 /// <summary>
 /// Ajustes del usuario. Se guardan en <c>settings.json</c> (carpeta de datos); se editan desde la
 /// pestaña Ajustes o a mano.
@@ -118,10 +125,8 @@ public sealed class LauncherSettings
     /// <summary>Ancho de las portadas en la cuadrícula (px). El alto mantiene la proporción 2:3.</summary>
     public int CoverWidth { get; set; } = 160;
 
-    // ===================== Tienda =====================
-
-    /// <summary>País para precios de la tienda (código ISO de 2 letras). Vacío = región de Windows.</summary>
-    public string StoreCountryCode { get; set; } = string.Empty;
+    /// <summary>Orden de la lista lateral y de la cuadrícula: alfabético o por tiempo jugado.</summary>
+    public LibrarySortMode SortMode { get; set; } = LibrarySortMode.Name;
 
     /// <summary>
     /// Actualiza ajustes guardados por versiones anteriores. Solo cambia valores que el usuario no tocó

@@ -112,12 +112,6 @@ public sealed class SettingsViewModel : ObservableObject
 
     public string SteamClientArguments { get => _s.SteamClientArguments; set => Set(v => _s.SteamClientArguments = v, value?.Trim() ?? string.Empty); }
 
-    public string StoreCountryCode
-    {
-        get => _s.StoreCountryCode;
-        set => Set(v => _s.StoreCountryCode = v, (value ?? string.Empty).Trim().ToUpperInvariant());
-    }
-
     // ===================== Etiquetas =====================
 
     public ObservableCollection<string> Tags { get; } = [];
@@ -207,7 +201,6 @@ public sealed class SettingsViewModel : ObservableObject
         _s.MinimizeToTray = d.MinimizeToTray;
         _s.ShowNotifications = d.ShowNotifications;
         _s.UseSoftwareRendering = d.UseSoftwareRendering;
-        _s.StoreCountryCode = d.StoreCountryCode;
         _s.SteamHelperPriority = d.SteamHelperPriority;
         _s.TrimSteamMemoryWhilePlaying = d.TrimSteamMemoryWhilePlaying;
         _s.KillSteamWebHelperWhilePlaying = d.KillSteamWebHelperWhilePlaying;

@@ -1,0 +1,238 @@
+using System.Collections.ObjectModel;
+using System.Windows.Input;
+using System.Windows.Media;
+using Purgine.Library;
+using Purgine.SteamNet;
+
+namespace Purgine.ViewModels;
+
+/// <summary>Un logro destacado de la ficha (icono + nombre y descripción en el tooltip).</summary>
+public sealed class AchievementItemViewModel : ObservableObject
+{
+    private ImageSource? _icon;
+
+    public AchievementItemViewModel(AchievementInfo info)
+    {
+        Name = info.Name;
+        Tooltip = string.IsNullOrEmpty(info.GlobalPercent) || !double.TryParse(info.GlobalPercent,
+                System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var pct)
+            ? $"{info.Name}\n{info.Description}"
+            : $"{info.Name}\n{info.Description}\nLo tiene el {pct:0.#} % de los jugadores";
+    }
+
+    public string Name { get; }
+    public string Tooltip { get; }
+
+    public ImageSource? Icon
+    {
+        get => _icon;
+        set => SetProperty(ref _icon, value);
+    }
+}
+
+/// <summary>
+/// Ficha de un juego al estilo del cliente de Steam: imagen panorámica con logo, barra de acción (botón
+/// principal, última sesión, tiempo de juego), progreso de logros y enlaces rápidos. Las imágenes grandes se
+/// cargan al abrir la ficha y se sueltan al cambiar de juego o al ocultar la ventana.
+/// </summary>
+public sealed class GameDetailViewModel : ObservableObject
+{
+    private const int HeroDecodeWidth = 1600;
+    private const int LogoDecodeWidth = 640;
+    private const int AchievementIconSize = 64;
+    private const int MaxTopAchievements = 8;
+
+    private readonly SteamArtService _art;
+    private readonly SteamSession _session;
+    private readonly Action<string> _openWeb;
+    private CancellationTokenSource _cts = new();
+    private ImageSource? _hero;
+    private ImageSource? _logo;
+    private bool _imagesLoaded;
+    private bool _achievementsLoaded;
+    private string _achievementsText = string.Empty;
+    private double _achievementsPercent;
+    private bool _hasAchievementProgress;
+    private bool _isLoadingAchievements;
+
+    public GameDetailViewModel(GameCardViewModel card, SteamArtService art, SteamSession session,
+        Action<string> openWeb, ICommand backCommand)
+    {
+        Card = card;
+        _art = art;
+        _session = session;
+        _openWeb = openWeb;
+        BackCommand = backCommand;
+
+        var id = Uri.EscapeDataString(card.Entry.AppId);
+        OpenStoreCommand = new RelayCommand(_ => _openWeb($"https://store.steampowered.com/app/{id}/?l=spanish"), _ => card.IsSteam);
+        OpenCommunityCommand = new RelayCommand(_ => _openWeb($"https://steamcommunity.com/app/{id}/?l=spanish"), _ => card.IsSteam);
+        OpenDiscussionsCommand = new RelayCommand(_ => _openWeb($"https://steamcommunity.com/app/{id}/discussions/?l=spanish"), _ => card.IsSteam);
+        OpenGuidesCommand = new RelayCommand(_ => _openWeb($"https://steamcommunity.com/app/{id}/guides/?l=spanish"), _ => card.IsSteam);
+        OpenSupportCommand = new RelayCommand(_ => _openWeb($"https://help.steampowered.com/es/wizard/HelpWithGame/?appid={id}"), _ => card.IsSteam);
+        OpenAchievementsCommand = new RelayCommand(
+            _ => _openWeb(_session.SteamId is { } sid
+                ? $"https://steamcommunity.com/profiles/{sid.ConvertToUInt64()}/stats/{id}/achievements/?l=spanish"
+                : $"https://steamcommunity.com/stats/{id}/achievements/?l=spanish"),
+            _ => card.IsSteam);
+    }
+
+    public GameCardViewModel Card { get; }
+
+    public ICommand BackCommand { get; }
+    public ICommand OpenStoreCommand { get; }
+    public ICommand OpenCommunityCommand { get; }
+    public ICommand OpenDiscussionsCommand { get; }
+    public ICommand OpenGuidesCommand { get; }
+    public ICommand OpenSupportCommand { get; }
+    public ICommand OpenAchievementsCommand { get; }
+
+    // ----- Imágenes -----
+
+    public ImageSource? Hero
+    {
+        get => _hero;
+        private set => SetProperty(ref _hero, value);
+    }
+
+    public ImageSource? Logo
+    {
+        get => _logo;
+        private set { if (SetProperty(ref _logo, value)) OnPropertyChanged(nameof(ShowTitleText)); }
+    }
+
+    /// <summary>Sin logo (juegos locales o sin arte): el nombre se escribe sobre el héroe.</summary>
+    public bool ShowTitleText => _logo is null;
+
+    // ----- Logros -----
+
+    public bool ShowAchievements => Card.IsSteam;
+
+    public string AchievementsText
+    {
+        get => _achievementsText;
+        private set => SetProperty(ref _achievementsText, value);
+    }
+
+    public double AchievementsPercent
+    {
+        get => _achievementsPercent;
+        private set => SetProperty(ref _achievementsPercent, value);
+    }
+
+    public bool HasAchievementProgress
+    {
+        get => _hasAchievementProgress;
+        private set => SetProperty(ref _hasAchievementProgress, value);
+    }
+
+    public bool IsLoadingAchievements
+    {
+        get => _isLoadingAchievements;
+        private set => SetProperty(ref _isLoadingAchievements, value);
+    }
+
+    public ObservableCollection<AchievementItemViewModel> TopAchievements { get; } = [];
+
+    // ----- Carga y liberación -----
+
+    /// <summary>Carga héroe, logo y logros (lo que falte). Seguro de llamar varias veces.</summary>
+    public async Task LoadAsync()
+    {
+        var ct = _cts.Token;
+        var tasks = new List<Task>();
+        if (!_imagesLoaded) tasks.Add(LoadImagesAsync(ct));
+        if (!_achievementsLoaded && Card.IsSteam) tasks.Add(LoadAchievementsAsync(ct));
+        try { await Task.WhenAll(tasks); }
+        catch (OperationCanceledException) { /* se cambió de juego */ }
+    }
+
+    private async Task LoadImagesAsync(CancellationToken ct)
+    {
+        _imagesLoaded = true;
+        if (!Card.IsSteam)
+        {
+            Hero = Card.Cover; // los locales solo tienen portada (si la hay)
+            return;
+        }
+        var heroTask = _art.LoadHeroAsync(Card.Entry.AppId, HeroDecodeWidth, ct);
+        var logoTask = _art.LoadLogoAsync(Card.Entry.AppId, LogoDecodeWidth, ct);
+        var hero = await heroTask;
+        if (ct.IsCancellationRequested) return;
+        Hero = hero ?? Card.Cover;
+        var logo = await logoTask;
+        if (!ct.IsCancellationRequested) Logo = logo;
+    }
+
+    private async Task LoadAchievementsAsync(CancellationToken ct)
+    {
+        _achievementsLoaded = true;
+        if (!_session.HasSavedSession)
+        {
+            AchievementsText = "Inicia sesión en Steam (Ajustes) para ver tus logros.";
+            return;
+        }
+        if (!uint.TryParse(Card.Entry.AppId, out var appId)) return;
+
+        IsLoadingAchievements = true;
+        AchievementsText = "Consultando tus logros en Steam…";
+        try
+        {
+            var summary = await Task.Run(() => _session.GetAchievementsAsync(appId, MaxTopAchievements, ct), ct);
+            if (ct.IsCancellationRequested) return;
+            if (summary is null)
+            {
+                AchievementsText = "No se pudieron consultar los logros (¿sin conexión?).";
+                _achievementsLoaded = false; // reintentar la próxima vez que se abra la ficha
+                return;
+            }
+            if (summary.Total == 0)
+            {
+                AchievementsText = "Este juego no tiene logros de Steam.";
+                return;
+            }
+
+            var percent = summary.Unlocked * 100.0 / summary.Total;
+            AchievementsPercent = percent;
+            HasAchievementProgress = true;
+            AchievementsText = $"Has desbloqueado {summary.Unlocked} de {summary.Total} ({percent:0} %)";
+
+            TopAchievements.Clear();
+            var items = summary.Top.Select(a => (Info: a, Vm: new AchievementItemViewModel(a))).ToList();
+            foreach (var (_, vm) in items) TopAchievements.Add(vm);
+            foreach (var (info, vm) in items)
+            {
+                if (info.IconUrl is null) continue;
+                var cacheName = $"ach_{appId}_{Path.GetFileName(new Uri(info.IconUrl).AbsolutePath)}";
+                vm.Icon = await _art.LoadRemoteAsync(info.IconUrl, cacheName, AchievementIconSize, ct);
+                if (ct.IsCancellationRequested) return;
+            }
+        }
+        finally
+        {
+            IsLoadingAchievements = false;
+        }
+    }
+
+    /// <summary>Suelta las imágenes grandes (ventana en la bandeja). <see cref="LoadAsync"/> las recupera.</summary>
+    public void ReleaseImages()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+        _cts = new CancellationTokenSource();
+        Hero = null;
+        Logo = null;
+        _imagesLoaded = false;
+        // Los iconos de logros (8 de 64 px) apenas ocupan: se quedan, y así no se vuelve a consultar Steam.
+        if (IsLoadingAchievements) _achievementsLoaded = false; // se canceló a medias: reintentar
+    }
+
+    /// <summary>Ficha cerrada: cancelar cargas pendientes y soltar todo.</summary>
+    public void Close()
+    {
+        _cts.Cancel();
+        Hero = null;
+        Logo = null;
+        TopAchievements.Clear();
+    }
+}

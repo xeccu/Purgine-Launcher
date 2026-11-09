@@ -2,6 +2,7 @@ using Purgine.Infrastructure;
 using SteamKit2;
 using SteamKit2.Authentication;
 using SteamKit2.CDN;
+using SteamKit2.Internal;
 
 namespace Purgine.SteamNet;
 
@@ -151,6 +152,7 @@ public sealed class SteamSession : IAsyncDisposable
     {
         _store.Clear();
         AccountName = null;
+        SteamId = null;
         await DisconnectAsync().ConfigureAwait(false);
         SetState(SteamSessionState.Disconnected, "Sesión de Steam cerrada.");
     }
@@ -172,6 +174,7 @@ public sealed class SteamSession : IAsyncDisposable
 
         IsAnonymous = false;
         AccountName = accountName;
+        SteamId = result.ClientSteamID ?? _client!.SteamID;
         CellId = result.CellID;
         SetState(SteamSessionState.LoggedIn, $"Conectado como {accountName}.");
     }
@@ -259,6 +262,60 @@ public sealed class SteamSession : IAsyncDisposable
         Touch();
         var cb = await _apps!.RequestFreeLicense(appId);
         return cb.Result == EResult.OK && (cb.GrantedApps.Contains(appId) || cb.GrantedPackages.Count > 0);
+    }
+
+    /// <summary>
+    /// Progreso de logros del usuario en un juego (servicio Player de Steam) y sus logros más destacados
+    /// (con nombre, descripción e icono). Null si no hay sesión o Steam no responde.
+    /// </summary>
+    public async Task<AchievementSummary?> GetAchievementsAsync(uint appId, int maxTop, CancellationToken ct)
+    {
+        if (!await LoginWithSavedSessionAsync(ct).ConfigureAwait(false) || SteamId is null) return null;
+        Hold();
+        try
+        {
+            var player = _client!.GetHandler<SteamUnifiedMessages>()!.CreateService<Player>();
+            var steamId = SteamId.ConvertToUInt64();
+
+            var progressRequest = new CPlayer_GetAchievementsProgress_Request { steamid = steamId, language = "spanish" };
+            progressRequest.appids.Add(appId);
+            var progress = await player.GetAchievementsProgress(progressRequest).ToTask().WaitAsync(ct).ConfigureAwait(false);
+            if (progress.Result != EResult.OK) return null;
+            var entry = progress.Body.achievement_progress.FirstOrDefault(a => a.appid == appId);
+            if (entry is null || entry.total == 0) return new AchievementSummary(0, 0, []);
+
+            var top = new List<AchievementInfo>();
+            if (entry.unlocked > 0 && maxTop > 0)
+            {
+                var topRequest = new CPlayer_GetTopAchievementsForGames_Request
+                {
+                    steamid = steamId,
+                    language = "spanish",
+                    max_achievements = (uint)maxTop,
+                };
+                topRequest.appids.Add(appId);
+                var topResponse = await player.GetTopAchievementsForGames(topRequest).ToTask().WaitAsync(ct).ConfigureAwait(false);
+                if (topResponse.Result == EResult.OK)
+                {
+                    foreach (var a in topResponse.Body.games.FirstOrDefault(g => g.appid == appId)?.achievements ?? [])
+                    {
+                        var icon = string.IsNullOrEmpty(a.icon) ? null
+                            : $"https://cdn.fastly.steamstatic.com/steamcommunity/public/images/apps/{appId}/{a.icon}";
+                        top.Add(new AchievementInfo(a.name ?? string.Empty, a.desc ?? string.Empty, icon, a.player_percent_unlocked));
+                    }
+                }
+            }
+            return new AchievementSummary(entry.unlocked, entry.total, top);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Warn($"Steam (red): no se pudieron leer los logros de {appId}: {ex.Message}");
+            return null;
+        }
+        finally
+        {
+            Release();
+        }
     }
 
     // =====================================================================================
@@ -394,6 +451,12 @@ public sealed class SteamSession : IAsyncDisposable
 }
 
 /// <summary>Steam rechazó el inicio de sesión.</summary>
+/// <summary>Logros de un juego: desbloqueados / total y los más destacados del usuario.</summary>
+public sealed record AchievementSummary(uint Unlocked, uint Total, IReadOnlyList<AchievementInfo> Top);
+
+/// <summary>Un logro desbloqueado (icono en la CDN de Steam; porcentaje global de jugadores que lo tienen).</summary>
+public sealed record AchievementInfo(string Name, string Description, string? IconUrl, string? GlobalPercent);
+
 public sealed class SteamLoginException(EResult result)
     : Exception($"Steam rechazó el inicio de sesión: {result}")
 {

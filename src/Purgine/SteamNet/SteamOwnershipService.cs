@@ -13,6 +13,8 @@ public sealed class OwnedApp
     public string? InstallDir { get; set; }
     /// <summary>Build actual de la rama pública (para detectar actualizaciones).</summary>
     public uint PublicBuildId { get; set; }
+    /// <summary>Hash del icono pequeño (PICS common/icon) para descargarlo de la CDN si no está en disco.</summary>
+    public string? Icon { get; set; }
 }
 
 /// <summary>Contenido de <c>owned-games.json</c> (caché para arrancar sin red).</summary>
@@ -92,6 +94,7 @@ public sealed class SteamOwnershipService
                     Type = (common["type"].Value ?? string.Empty).ToLowerInvariant(),
                     InstallDir = kv["config"]["installdir"].Value,
                     PublicBuildId = kv["depots"]["branches"]["public"]["buildid"].AsUnsignedInteger(),
+                    Icon = common["icon"].Value,
                 });
             }
 

@@ -373,5 +373,148 @@
             <Setter Property="UseLayoutRounding" Value="True" />
         </Style>
 
+
+        <!-- ===== Biblioteca estilo Steam ===== -->
+        <SolidColorBrush x:Key="SteamBlueBrush" Color="#1A9FFF" />
+        <SolidColorBrush x:Key="SteamBlueHoverBrush" Color="#47B2FF" />
+        <SolidColorBrush x:Key="SteamBluePressedBrush" Color="#1488D8" />
+        <SolidColorBrush x:Key="SidebarSelectedBrush" Color="#2A3550" />
+
+        <!-- Botón principal de la ficha (JUGAR / INSTALAR / ACTUALIZAR) -->
+        <Style x:Key="SteamPlayButton" TargetType="Button">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Background" Value="{StaticResource SteamBlueBrush}" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Padding" Value="26,0" />
+            <Setter Property="MinWidth" Value="180" />
+            <Setter Property="Height" Value="48" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource SteamBlueHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource SteamBluePressedBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Background" Value="#3A4250" />
+                                <Setter Property="Foreground" Value="#B0B6C3" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Botón redondo de jugar/instalar sobre portadas y filas -->
+        <Style x:Key="RoundPlayButton" TargetType="Button">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Background" Value="{StaticResource SteamBlueBrush}" />
+            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+            <Setter Property="Width" Value="52" />
+            <Setter Property="Height" Value="52" />
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="26">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource SteamBlueHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Lista lateral de juegos (virtualizada) -->
+        <Style x:Key="SidebarList" TargetType="ListBox">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
+            <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+            <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+            <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
+            <Setter Property="IsSynchronizedWithCurrentItem" Value="False" />
+            <Setter Property="ItemContainerStyle">
+                <Setter.Value>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                        <Setter Property="Cursor" Value="Hand" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="8,4" Margin="6,0">
+                                        <ContentPresenter />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}" />
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource SidebarSelectedBrush}" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Menú contextual de un juego (portadas, lista lateral, botón de opciones de la ficha) -->
+        <ContextMenu x:Key="CardMenu" x:Shared="False">
+            <MenuItem Header="Jugar" Command="{Binding PlayCommand}" FontWeight="SemiBold"
+                      Visibility="{Binding IsNotInstalled, Converter={StaticResource InverseBoolToVis}}" />
+            <MenuItem Header="Instalar" Command="{Binding InstallCommand}" FontWeight="SemiBold"
+                      Visibility="{Binding IsNotInstalled, Converter={StaticResource BoolToVis}}" />
+            <MenuItem Header="Cancelar descarga" Command="{Binding CancelInstallCommand}"
+                      Visibility="{Binding HasActiveJob, Converter={StaticResource BoolToVis}}" />
+            <MenuItem Header="{Binding UpdateButtonText}" Command="{Binding UpdateCommand}" FontWeight="SemiBold"
+                      Visibility="{Binding ShowUpdateButton, Converter={StaticResource BoolToVis}}" />
+            <MenuItem Header="Ver ficha" Command="{Binding ShowDetailsCommand}" />
+            <Separator />
+            <MenuItem Header="Etiquetas" ItemsSource="{Binding TagToggles}">
+                <MenuItem.ItemContainerStyle>
+                    <Style TargetType="MenuItem">
+                        <Setter Property="Header" Value="{Binding Name}" />
+                        <Setter Property="IsCheckable" Value="True" />
+                        <Setter Property="IsChecked" Value="{Binding IsChecked, Mode=TwoWay}" />
+                        <Setter Property="StaysOpenOnClick" Value="True" />
+                    </Style>
+                </MenuItem.ItemContainerStyle>
+            </MenuItem>
+            <MenuItem Header="Nueva etiqueta…" Command="{Binding NewTagCommand}" />
+            <Separator />
+            <MenuItem Header="Abrir carpeta del juego" Command="{Binding OpenFolderCommand}" />
+            <MenuItem Header="Ver en la tienda" Command="{Binding ViewInStoreCommand}"
+                      Visibility="{Binding IsSteam, Converter={StaticResource BoolToVis}}" />
+            <MenuItem Header="Desinstalar…" Command="{Binding UninstallCommand}"
+                      Visibility="{Binding CanUninstall, Converter={StaticResource BoolToVis}}" />
+            <MenuItem Header="Editar…" Command="{Binding EditCommand}"
+                      Visibility="{Binding IsLocal, Converter={StaticResource BoolToVis}}" />
+            <MenuItem Header="Quitar de la biblioteca" Command="{Binding RemoveCommand}"
+                      Visibility="{Binding IsLocal, Converter={StaticResource BoolToVis}}" />
+        </ContextMenu>
     </Application.Resources>
 </Application>
