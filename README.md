@@ -1,6 +1,6 @@
 # LightLauncher
 
-Launcher de videojuegos ultraligero y Open Source (MIT) para Windows. Gestiona tu biblioteca de Steam
+Launcher de videojuegos ultraligero para Windows (Código visible, Todos los derechos reservados). Gestiona tu biblioteca de Steam
 —licencias, descargas, actualizaciones y desinstalaciones— **hablando directamente con los servidores de
 Steam**, sin abrir el cliente de escritorio. El cliente oficial solo se despierta para **jugar** y se cierra
 al terminar.
@@ -160,4 +160,4 @@ Todo en `%LocalAppData%\LightLauncher\` (botón «Abrir carpeta de datos» en Aj
 
 ## Licencia
 
-[MIT](LICENSE)
+Este proyecto es de código visible únicamente para fines de auditoría e inspección. Todos los derechos reservados © 2026 xeccu (XCC Studios). Ver el archivo [LICENSE](LICENSE) para más detalles.
