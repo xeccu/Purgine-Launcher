@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- .NET 10 es la LTS vigente (soporte hasta nov-2028). .NET 8 sale de soporte el 10-nov-2026. -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>LightLauncher</RootNamespace>
+    <AssemblyName>LightLauncher</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!-- ===== Perfil de bajo consumo ===== -->
+    <!-- GC de estación de trabajo sin hilo concurrente: menos hilos y menos heap reservado. -->
+    <ServerGarbageCollector>false</ServerGarbageCollector>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <!-- Solo copiamos los recursos satélite que usamos. -->
+    <SatelliteResourceLanguages>es;en</SatelliteResourceLanguages>
+    <!-- Sin dependencias NuGet: todo el stack sale del propio runtime. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Pide al GC que priorice compactar memoria frente a throughput (0-9). -->
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="7" />
+    <!-- Devolver al SO los segmentos liberados en lugar de retenerlos. -->
+    <RuntimeHostConfigurationOption Include="System.GC.RetainVM" Value="false" />
+  </ItemGroup>
+
+</Project>

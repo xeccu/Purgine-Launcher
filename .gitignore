@@ -1,0 +1,22 @@
+# Build
+bin/
+obj/
+*_wpftmp.csproj
+publish/
+artifacts/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Datos locales en modo portable
+data/
+portable.txt
+
+# Varios
+*.log
+.DS_Store
+Thumbs.db

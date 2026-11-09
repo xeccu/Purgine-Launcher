@@ -1,0 +1,16 @@
+<Project>
+  <!-- Propiedades comunes a todos los proyectos del repositorio. -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+
+    <Version>0.1.0</Version>
+    <Product>LightLauncher</Product>
+    <Authors>LightLauncher contributors</Authors>
+    <Copyright>Copyright (c) 2026 LightLauncher contributors. MIT License.</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+</Project>

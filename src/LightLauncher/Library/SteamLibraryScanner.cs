@@ -1,0 +1,192 @@
+using LightLauncher.Core;
+using LightLauncher.Infrastructure;
+
+namespace LightLauncher.Library;
+
+/// <summary>
+/// Detecta los juegos de Steam instalados leyendo únicamente archivos locales:
+/// <list type="number">
+///   <item><c>steamapps/libraryfolders.vdf</c> → todas las carpetas de biblioteca (todos los discos).</item>
+///   <item><c>appmanifest_{appid}.acf</c> de cada biblioteca → AppID, nombre, carpeta, estado.</item>
+///   <item><c>appcache/librarycache</c> → portadas ya descargadas por el propio cliente.</item>
+/// </list>
+/// No hace ninguna petición de red.
+/// </summary>
+public sealed class SteamLibraryScanner
+{
+    /// <summary>AppIDs que no son juegos (redistribuibles, herramientas).</summary>
+    private static readonly HashSet<string> IgnoredAppIds =
+    [
+        "228980", // Steamworks Common Redistributables
+        "1070560", "1391110", "1628350", // Steam Linux Runtime (no aplica en Windows)
+    ];
+
+    /// <summary>Bit "FullyInstalled" del campo StateFlags del manifiesto.</summary>
+    private const int StateFullyInstalled = 4;
+
+    private readonly SteamLocator _locator;
+
+    public SteamLibraryScanner(SteamLocator locator) => _locator = locator;
+
+    /// <summary>Rutas raíz de todas las bibliotecas de Steam (sin duplicados).</summary>
+    public IReadOnlyList<string> GetLibraryFolders()
+    {
+        var steamPath = _locator.SteamPath;
+        if (steamPath is null) return [];
+
+        var folders = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void Add(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return;
+            try
+            {
+                var full = Path.GetFullPath(raw.Replace('/', Path.DirectorySeparatorChar)).TrimEnd(Path.DirectorySeparatorChar);
+                if (Directory.Exists(Path.Combine(full, "steamapps")) && seen.Add(full))
+                    folders.Add(full);
+            }
+            catch (Exception) { /* ruta inválida */ }
+        }
+
+        Add(steamPath); // la biblioteca principal siempre existe
+
+        var vdfPath = Path.Combine(steamPath, "steamapps", "libraryfolders.vdf");
+        if (!File.Exists(vdfPath))
+            vdfPath = Path.Combine(steamPath, "config", "libraryfolders.vdf");
+        if (!File.Exists(vdfPath))
+            return folders;
+
+        try
+        {
+            var root = VdfParser.ParseFile(vdfPath);
+            var libs = root["libraryfolders"] ?? root["LibraryFolders"];
+            if (libs is null) return folders;
+
+            // Formato moderno: "0" { "path" "D:\\SteamLibrary" "apps" { ... } }
+            foreach (var child in libs.Children.Values)
+                Add(child.GetValue("path"));
+
+            // Formato antiguo: "1" "D:\\SteamLibrary"
+            foreach (var (key, value) in libs.Values)
+                if (int.TryParse(key, out _)) Add(value);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Error leyendo {vdfPath}", ex);
+        }
+
+        return folders;
+    }
+
+    /// <summary>Escanea todas las bibliotecas y devuelve los juegos instalados ordenados por nombre.</summary>
+    public IReadOnlyList<GameEntry> Scan()
+    {
+        var games = new Dictionary<string, GameEntry>();
+        foreach (var library in GetLibraryFolders())
+        {
+            var steamapps = Path.Combine(library, "steamapps");
+            IEnumerable<string> manifests;
+            try { manifests = Directory.EnumerateFiles(steamapps, "appmanifest_*.acf"); }
+            catch (Exception ex) { Log.Warn($"No se puede leer {steamapps}: {ex.Message}"); continue; }
+
+            foreach (var manifest in manifests)
+            {
+                var game = ParseManifest(manifest, library);
+                if (game is not null) games.TryAdd(game.AppId, game);
+            }
+        }
+
+        Log.Info($"Escaneo de Steam: {games.Count} juegos.");
+        return games.Values.OrderBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+    }
+
+    /// <summary>Busca un juego concreto por AppID (lee solo los manifiestos necesarios).</summary>
+    public GameEntry? FindGame(string appId)
+    {
+        foreach (var library in GetLibraryFolders())
+        {
+            var manifest = Path.Combine(library, "steamapps", $"appmanifest_{appId}.acf");
+            if (File.Exists(manifest)) return ParseManifest(manifest, library);
+        }
+        return null;
+    }
+
+    private GameEntry? ParseManifest(string manifestPath, string libraryPath)
+    {
+        try
+        {
+            var state = VdfParser.ParseFile(manifestPath)["AppState"];
+            if (state is null) return null;
+
+            var appId = state.GetValue("appid");
+            var name = state.GetValue("name");
+            var installDirName = state.GetValue("installdir");
+            if (string.IsNullOrEmpty(appId) || string.IsNullOrEmpty(name) || IgnoredAppIds.Contains(appId))
+                return null;
+            if (string.Equals(installDirName, "Steamworks Shared", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            _ = int.TryParse(state.GetValue("StateFlags"), out var flags);
+            _ = long.TryParse(state.GetValue("SizeOnDisk"), out var size);
+
+            return new GameEntry
+            {
+                Id = GameEntry.MakeSteamId(appId),
+                Platform = GamePlatform.Steam,
+                AppId = appId,
+                Name = name,
+                InstallDir = string.IsNullOrEmpty(installDirName)
+                    ? null
+                    : Path.Combine(libraryPath, "steamapps", "common", installDirName),
+                LibraryPath = libraryPath,
+                SizeOnDisk = size,
+                IsFullyInstalled = (flags & StateFullyInstalled) != 0,
+                CoverImagePath = FindCoverImage(appId),
+            };
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Manifiesto ilegible {manifestPath}: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Busca la portada vertical (600x900) en la caché local de Steam. Soporta el formato antiguo
+    /// (<c>{appid}_library_600x900.jpg</c>) y el nuevo (<c>{appid}/[hash/]library_600x900.jpg</c>).
+    /// </summary>
+    private string? FindCoverImage(string appId)
+    {
+        var steamPath = _locator.SteamPath;
+        if (steamPath is null) return null;
+        var cache = Path.Combine(steamPath, "appcache", "librarycache");
+        if (!Directory.Exists(cache)) return null;
+
+        foreach (var flat in new[] { $"{appId}_library_600x900.jpg", $"{appId}_library_600x900_2x.jpg" })
+        {
+            var p = Path.Combine(cache, flat);
+            if (File.Exists(p)) return p;
+        }
+
+        var dir = Path.Combine(cache, appId);
+        if (Directory.Exists(dir))
+        {
+            try
+            {
+                foreach (var name in new[] { "library_600x900.jpg", "library_600x900_2x.jpg", "library_capsule.jpg" })
+                {
+                    var hit = Directory.EnumerateFiles(dir, name, SearchOption.AllDirectories).FirstOrDefault();
+                    if (hit is not null) return hit;
+                }
+            }
+            catch (Exception) { /* permisos */ }
+        }
+
+        // Último recurso: cabecera horizontal (se recorta en la tarjeta).
+        var header = Path.Combine(cache, $"{appId}_header.jpg");
+        if (File.Exists(header)) return header;
+        var headerNew = Path.Combine(dir, "header.jpg");
+        return File.Exists(headerNew) ? headerNew : null;
+    }
+}
