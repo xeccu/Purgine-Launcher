@@ -127,6 +127,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
 
         RefreshCommand = new RelayCommand(async _ => await RefreshAsync(), _ => !IsScanning);
         CancelCommand = new RelayCommand(_ => _sessionCts?.Cancel(), _ => IsSessionActive);
+        ForceCloseCommand = new RelayCommand(_ => ForceCloseRunning(), _ => IsSessionActive);
         OpenDataFolderCommand = new RelayCommand(_ => OpenPath(AppPaths.DataDir));
         AddLocalGameCommand = new RelayCommand(_ => AddLocalGame());
         NewTagCommand = new RelayCommand(_ => PromptNewTag());
@@ -503,6 +504,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
 
     public ICommand RefreshCommand { get; }
     public ICommand CancelCommand { get; }
+    /// <summary>Forzar cierre del juego en curso (botón de la barra de estado).</summary>
+    public ICommand ForceCloseCommand { get; }
     public ICommand OpenDataFolderCommand { get; }
     public ICommand AddLocalGameCommand { get; }
     public ICommand NewTagCommand { get; }
@@ -1203,6 +1206,31 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     // =====================================================================================
     // ICardHost (menú contextual de las tarjetas)
     // =====================================================================================
+
+    public void ForceClose(GameCardViewModel card) => ForceCloseRunning();
+
+    public void ShowProperties(GameCardViewModel card)
+    {
+        if (!card.IsSteam || card.IsNotInstalled) return;
+        Dialogs?.ShowGameProperties(new GamePropertiesViewModel(card, _session, _ownership, _community));
+    }
+
+    /// <summary>
+    /// Forzar cierre: confirma (se pierde lo no guardado), termina el juego y sus procesos hijos y cancela la
+    /// sesión; la interfaz vuelve a «Listo para jugar» al momento y Steam se cierra en segundo plano si toca.
+    /// </summary>
+    private void ForceCloseRunning()
+    {
+        if (!IsSessionActive) return;
+        var name = Games.FirstOrDefault(g => g.IsRunning)?.Name ?? "el juego";
+        if (!(Dialogs?.Confirm("Forzar cierre",
+                $"¿Cerrar {name} a la fuerza?\n\nSe terminan el juego y todos sus procesos al instante: se perderá lo que no esté guardado. " +
+                "El tiempo jugado se registra igualmente.") ?? false))
+            return;
+        var killed = _orchestrator.ForceStopGame();
+        _sessionCts?.Cancel();
+        StatusText = killed > 0 ? $"{name} cerrado a la fuerza. Listo para jugar." : $"No quedaba ningún proceso de {name}. Listo para jugar.";
+    }
 
     public void CreateTagFor(GameCardViewModel card)
     {

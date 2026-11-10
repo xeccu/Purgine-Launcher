@@ -133,6 +133,17 @@ Organizada como la biblioteca de un cliente de escritorio:
     Steam…» copia el texto y abre la sección de reseñas de la página oficial: la publicas tú allí; Purgine
     nunca publica nada en tu nombre.
   - Los datos de Steam se guardan 10 minutos en memoria para no repetir consultas al volver a una ficha.
+- **Forzar cierre**: si un juego se cuelga, el botón «FORZAR CIERRE» (junto a EN CURSO, en la barra de
+  estado o en el menú del juego) termina el juego y todos sus procesos hijos, registra el tiempo jugado y deja
+  Purgine «Listo para jugar» al momento; Steam se cierra después en segundo plano si los ajustes lo piden.
+- **Propiedades…** (menú del juego o enlace de la ficha, juegos instalados):
+  - **DLC**: los DLC que tienes; los que tienen archivos propios se pueden desactivar. Se guarda en el
+    appmanifest (`UserConfig/DisabledDLC`, como el cliente de Steam, con copia `.purgine.bak`) y Steam y
+    Purgine dejan de instalarlos y actualizarlos. Requiere Steam cerrado.
+  - **Workshop**: los mods descargados (`steamapps\workshop\content\{appid}`) con nombre y tamaño. Desactivar
+    uno mueve su carpeta a `steamapps\workshop\purgine-disabled\{appid}` (no se borra); Steam puede volver a
+    descargarlo mientras sigas suscrito.
+- Enlaces a **Steam Workshop** y a la **Tienda de puntos** del juego.
 - **Espacio necesario**: los juegos no instalados muestran «Tamaño: X GB» en su portada y, en la ficha,
   «ESPACIO NECESARIO» junto a INSTALAR con el espacio libre del disco donde se instalaría (en rojo si no
   cabe). Es la suma de los depots que se descargarían en este equipo según PICS (Windows, 64 bits, idioma,

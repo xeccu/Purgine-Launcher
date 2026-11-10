@@ -7,6 +7,10 @@ public interface ICardHost
 {
     bool CanLaunch { get; }
     void Launch(GameCardViewModel card);
+    /// <summary>Forzar cierre: termina el juego en curso (árbol de procesos) y deja Purgine listo para jugar.</summary>
+    void ForceClose(GameCardViewModel card);
+    /// <summary>Diálogo de propiedades: DLC y mods de Workshop.</summary>
+    void ShowProperties(GameCardViewModel card);
     /// <summary>Abre la ficha del juego (vista de detalle con héroe, logros y enlaces).</summary>
     void ShowDetails(GameCardViewModel card);
     /// <summary>Instala descargando de la CDN de Steam (SteamKit2, sin el cliente).</summary>
@@ -43,5 +47,7 @@ public interface IDialogService
     /// <summary>Inicio de sesión en Steam (usuario/contraseña + Steam Guard). True si se completó.</summary>
     Task<bool> SteamLoginAsync();
     LocalGameDefinition? EditLocalGame(LocalGameDefinition? existing);
+    /// <summary>Diálogo de propiedades de un juego (DLC y mods).</summary>
+    void ShowGameProperties(GamePropertiesViewModel properties);
     bool Confirm(string title, string message);
 }

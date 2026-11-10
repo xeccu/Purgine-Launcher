@@ -54,6 +54,60 @@ public sealed class ProcessOrchestrator
     public bool IsSteamInstalled => _steam.SteamExe is not null;
     public LaunchPhase CurrentPhase { get; private set; } = LaunchPhase.Idle;
 
+    // ----- Forzar cierre -----
+    /// <summary>Carpeta y PID raíz del juego en curso (para encontrar sus procesos al forzar el cierre).</summary>
+    private volatile string? _currentWatchDir;
+    private int _currentRootPid;
+    /// <summary>El usuario pidió forzar el cierre: la cancelación posterior no es un «dejar de vigilar».</summary>
+    private volatile bool _forceStopRequested;
+
+    /// <summary>
+    /// Forzar cierre: termina el juego en curso y todos sus procesos hijos (árbol completo). Devuelve cuántos
+    /// procesos raíz se terminaron. Después hay que cancelar la sesión (token): el orquestador la cierra al
+    /// momento, registra el tiempo jugado y, en segundo plano, cierra Steam si los ajustes lo piden.
+    /// </summary>
+    public int ForceStopGame()
+    {
+        _forceStopRequested = true;
+        var pids = new HashSet<int>();
+        if (_currentWatchDir is { } dir && GameProcessWatcher.IsSafeWatchDirectory(dir))
+            foreach (var pid in ProcessUtils.FindProcessesUnder(dir)) pids.Add(pid);
+        if (Volatile.Read(ref _currentRootPid) is > 0 and var root && ProcessUtils.IsAlive(root)) pids.Add(root);
+
+        var killed = 0;
+        foreach (var pid in pids)
+        {
+            try
+            {
+                using var p = Process.GetProcessById(pid);
+                p.Kill(entireProcessTree: true);
+                killed++;
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                // ya había terminado, o sin permiso (juego elevado): se registra y se sigue
+                Log.Warn($"Forzar cierre: no se pudo terminar el PID {pid}: {ex.Message}");
+            }
+        }
+        Log.Info($"Forzar cierre: {killed} proceso(s) terminados (con sus hijos).");
+        return killed;
+    }
+
+    /// <summary>
+    /// Tras un cierre forzado: espera a que Steam suelte el juego y lo cierra (si los ajustes lo piden) sin
+    /// bloquear la interfaz. Si entretanto empieza otra partida, no hace nada.
+    /// </summary>
+    private async Task CleanupAfterForceStopAsync(bool steamStartedByUs)
+    {
+        var policy = _settings.SteamCleanupPolicy;
+        if (policy == CleanupPolicy.Never || (policy == CleanupPolicy.OnlyIfStartedByLauncher && !steamStartedByUs)) return;
+        await ProcessUtils.WaitUntilAsync(() => SteamLocator.GetRunningAppId() == 0, TimeSpan.FromSeconds(20), CancellationToken.None)
+            .ConfigureAwait(false);
+        if (IsBusy) return; // ya hay otra partida en marcha
+        try { await CloseSteamAsync("Cerrando Steam tras el cierre forzado…").ConfigureAwait(false); }
+        catch (Exception ex) { Log.Warn($"Cierre de Steam tras forzar cierre: {ex.Message}"); }
+    }
+
     public ProcessOrchestrator(SteamLocator steam, SteamLibraryScanner scanner, GameTimeTracker tracker, LauncherSettings settings)
     {
         _steam = steam;
@@ -108,6 +162,7 @@ public sealed class ProcessOrchestrator
             ProcessUtils.Start(steamExe, $"-- \"steam://run/{game.AppId}\"");
             Log.Info($"steam://run/{game.AppId} enviado ({game.Name}).");
 
+            _currentWatchDir = game.InstallDir;
             var watcher = new GameProcessWatcher(game.AppId, game.InstallDir, rootPid: null,
                 TimeSpan.FromSeconds(_settings.RelaunchGraceSeconds));
             Report(LaunchPhase.WaitingForGame, $"Esperando a que arranque {game.Name}…", game);
@@ -121,6 +176,15 @@ public sealed class ProcessOrchestrator
             var session = await TrackSessionAsync(game, watcher, ct).ConfigureAwait(false);
             var played = session is null ? TimeSpan.Zero : TimeSpan.FromSeconds(session.DurationSeconds);
             return new LaunchResult(true, $"{game.Name}: sesión de {Formatting.Duration(played)}.", session);
+        }
+        catch (OperationCanceledException) when (_forceStopRequested)
+        {
+            // Forzar cierre: la sesión termina ya (tiempo registrado) y Steam se cierra en segundo plano.
+            runCleanup = false;
+            var session = _tracker.EndSession();
+            Report(LaunchPhase.Finished, $"{game.Name} se cerró a la fuerza. Listo para jugar.", game);
+            _ = Task.Run(() => CleanupAfterForceStopAsync(steamStartedByUs));
+            return new LaunchResult(true, $"{game.Name} se cerró a la fuerza.", session);
         }
         catch (OperationCanceledException)
         {
@@ -149,10 +213,18 @@ public sealed class ProcessOrchestrator
             }
             finally
             {
+                ResetForceStopState();
                 ProcessUtils.TrimCurrentProcess();
                 _sessionGate.Release();
             }
         }
+    }
+
+    private void ResetForceStopState()
+    {
+        _forceStopRequested = false;
+        _currentWatchDir = null;
+        Volatile.Write(ref _currentRootPid, 0);
     }
 
     // =====================================================================================
@@ -190,6 +262,8 @@ public sealed class ProcessOrchestrator
 
             var exeDir = Path.GetDirectoryName(exe);
             var watchDir = GameProcessWatcher.IsSafeWatchDirectory(exeDir) ? exeDir : null;
+            _currentWatchDir = watchDir;
+            Volatile.Write(ref _currentRootPid, rootPid ?? 0);
             var watcher = new GameProcessWatcher(null, watchDir, rootPid, TimeSpan.FromSeconds(_settings.RelaunchGraceSeconds));
 
             var started = await watcher.WaitForStartAsync(TimeSpan.FromSeconds(15), ct).ConfigureAwait(false);
@@ -201,6 +275,12 @@ public sealed class ProcessOrchestrator
             var msg = $"{game.Name}: sesión de {Formatting.Duration(played)}.";
             Report(LaunchPhase.Finished, msg, game);
             return new LaunchResult(true, msg, session);
+        }
+        catch (OperationCanceledException) when (_forceStopRequested)
+        {
+            var session = _tracker.EndSession();
+            Report(LaunchPhase.Finished, $"{game.Name} se cerró a la fuerza. Listo para jugar.", game);
+            return new LaunchResult(true, $"{game.Name} se cerró a la fuerza.", session);
         }
         catch (OperationCanceledException)
         {
@@ -220,6 +300,7 @@ public sealed class ProcessOrchestrator
         }
         finally
         {
+            ResetForceStopState();
             ProcessUtils.TrimCurrentProcess();
             _sessionGate.Release();
         }
@@ -357,13 +438,15 @@ public sealed class ProcessOrchestrator
     /// Cierra Steam de forma ordenada fuera de una partida (p. ej. para que reconozca un juego instalado por
     /// Purgine mientras estaba abierto). No hace nada si hay un juego de Steam en marcha.
     /// </summary>
-    public async Task<bool> CloseSteamAsync()
+    public Task<bool> CloseSteamAsync() => CloseSteamAsync("Reiniciando Steam para que reconozca el juego recién instalado…");
+
+    private async Task<bool> CloseSteamAsync(string reason)
     {
         var steamExe = _steam.SteamExe;
         if (steamExe is null || !SteamLocator.IsClientRunning()) return true;
         if (SteamLocator.GetRunningAppId() != 0) return false;
 
-        Report(LaunchPhase.CleaningUp, "Reiniciando Steam para que reconozca el juego recién instalado…", null);
+        Report(LaunchPhase.CleaningUp, reason, null);
         ProcessUtils.Start(steamExe, "-shutdown");
         await ProcessUtils
             .WaitUntilAsync(() => !SteamLocator.IsClientRunning(),

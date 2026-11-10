@@ -83,6 +83,8 @@ public sealed partial class GameDetailViewModel : ObservableObject
         OpenCommunityCommand = new RelayCommand(_ => _openWeb($"https://steamcommunity.com/app/{id}/?l=spanish"), _ => card.IsSteam);
         OpenDiscussionsCommand = new RelayCommand(_ => _openWeb($"https://steamcommunity.com/app/{id}/discussions/?l=spanish"), _ => card.IsSteam);
         OpenGuidesCommand = new RelayCommand(_ => _openWeb($"https://steamcommunity.com/app/{id}/guides/?l=spanish"), _ => card.IsSteam);
+        OpenWorkshopCommand = new RelayCommand(_ => _openWeb($"https://steamcommunity.com/app/{id}/workshop/"), _ => card.IsSteam);
+        OpenPointsShopCommand = new RelayCommand(_ => _openWeb($"https://store.steampowered.com/points/shop/app/{id}"), _ => card.IsSteam);
         OpenSupportCommand = new RelayCommand(_ => _openWeb($"https://help.steampowered.com/es/wizard/HelpWithGame/?appid={id}"), _ => card.IsSteam);
         OpenAchievementsCommand = new RelayCommand(
             _ => _openWeb(_session.SteamId is { } sid
@@ -106,6 +108,8 @@ public sealed partial class GameDetailViewModel : ObservableObject
     public ICommand OpenDiscussionsCommand { get; }
     public ICommand OpenGuidesCommand { get; }
     public ICommand OpenSupportCommand { get; }
+    public ICommand OpenWorkshopCommand { get; }
+    public ICommand OpenPointsShopCommand { get; }
     public ICommand OpenAchievementsCommand { get; }
 
     // ----- Imágenes -----

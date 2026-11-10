@@ -15,12 +15,65 @@ namespace Purgine.SteamNet;
 /// </summary>
 public static class AppManifestWriter
 {
+    /// <summary>DLC desactivados por el usuario (<c>UserConfig/DisabledDLC</c> del appmanifest, lista separada por comas).</summary>
+    public static HashSet<uint> ReadDisabledDlc(string acfPath)
+    {
+        try
+        {
+            if (!File.Exists(acfPath)) return [];
+            var raw = VdfParser.ParseFile(acfPath)["AppState"]?["UserConfig"]?.GetValue("DisabledDLC") ?? string.Empty;
+            return raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(s => uint.TryParse(s, out var id) ? id : 0).Where(id => id != 0).ToHashSet();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"No se pudo leer DisabledDLC de {acfPath}: {ex.Message}");
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Guarda qué DLC están desactivados en <c>UserConfig/DisabledDLC</c> (como hace el cliente en Propiedades →
+    /// DLC). Edita solo esa clave y conserva el resto del archivo. Hay que hacerlo con Steam cerrado (abierto,
+    /// reescribe el manifiesto). Steam y Purgine dejan de instalar o actualizar los depots de esos DLC.
+    /// </summary>
+    public static void WriteDisabledDlc(string acfPath, IEnumerable<uint> disabled)
+    {
+        var text = File.ReadAllText(acfPath);
+        var value = string.Join(",", disabled.Distinct().Order());
+        var line = $"\t\t\"DisabledDLC\"\t\t\"{value}\"\n";
+
+        var user = text.IndexOf("\"UserConfig\"", StringComparison.Ordinal);
+        if (user >= 0)
+        {
+            var open = text.IndexOf('{', user);
+            var close = text.IndexOf('}', open);
+            var block = text[(open + 1)..close];
+            var kept = block.Split('\n')
+                .Where(l => l.Trim().Length > 0 && !l.Contains("\"DisabledDLC\"", StringComparison.Ordinal))
+                .Select(l => l.TrimEnd('\r') + "\n");
+            var newBlock = "\n" + string.Concat(kept) + (value.Length > 0 ? line : string.Empty);
+            text = text[..(open + 1)] + newBlock + "\t" + text[close..];
+        }
+        else if (value.Length > 0)
+        {
+            var end = text.LastIndexOf('}');
+            text = text[..end] + "\t\"UserConfig\"\n\t{\n" + line + "\t}\n" + text[end..];
+        }
+
+        var tmp = acfPath + ".tmp";
+        File.WriteAllText(tmp, text, new UTF8Encoding(false));
+        File.Copy(acfPath, acfPath + ".purgine.bak", overwrite: true);
+        File.Move(tmp, acfPath, overwrite: true);
+        Log.Info($"DLC desactivados en {Path.GetFileName(acfPath)}: {(value.Length == 0 ? "ninguno" : value)}");
+    }
+
     public static void Write(string steamPath, uint appId, string name, DepotDownloadResult result, ulong? ownerSteamId64)
     {
         var acfPath = Path.Combine(result.LibraryPath, "steamapps", $"appmanifest_{appId}.acf");
 
         // Ajustes del usuario que Steam guarda en el manifiesto (se conservan al actualizar).
-        string autoUpdate = "0", language = string.Empty;
+        string autoUpdate = "0", language = string.Empty, disabledDlc = string.Empty;
         if (File.Exists(acfPath))
         {
             try
@@ -28,6 +81,7 @@ public static class AppManifestWriter
                 var old = VdfParser.ParseFile(acfPath)["AppState"];
                 autoUpdate = old?.GetValue("AutoUpdateBehavior") ?? "0";
                 language = old?["UserConfig"]?.GetValue("language") ?? string.Empty;
+                disabledDlc = old?["UserConfig"]?.GetValue("DisabledDLC") ?? string.Empty;
             }
             catch (Exception ex) { Log.Warn($"Manifiesto anterior ilegible ({acfPath}): {ex.Message}"); }
         }
@@ -65,10 +119,11 @@ public static class AppManifestWriter
             sb.Append("\t\t}\n");
         }
         sb.Append("\t}\n");
-        if (language.Length > 0)
+        if (language.Length > 0 || disabledDlc.Length > 0)
         {
             sb.Append("\t\"UserConfig\"\n\t{\n");
-            Kv("\t\t", "language", language);
+            if (language.Length > 0) Kv("\t\t", "language", language);
+            if (disabledDlc.Length > 0) Kv("\t\t", "DisabledDLC", disabledDlc); // DLC desactivados (Propiedades)
             sb.Append("\t}\n");
         }
         sb.Append("}\n");

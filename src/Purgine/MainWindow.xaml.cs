@@ -197,6 +197,12 @@ public partial class MainWindow : Window, IDialogService
         return Task.FromResult(SteamLoginDialog.Show(this, _steamSession));
     }
 
+    public void ShowGameProperties(GamePropertiesViewModel properties)
+    {
+        if (!IsVisible) RestoreFromTray();
+        GamePropertiesDialog.Show(this, properties);
+    }
+
     public bool Confirm(string title, string message) =>
         MessageBox.Show(this, message, title, MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
 

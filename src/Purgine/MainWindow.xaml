@@ -110,6 +110,16 @@
         <Border Grid.Row="3" Padding="20,8" Background="{DynamicResource ChromeBrush}"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0">
             <DockPanel>
+                <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Padding="12,4" Margin="8,0,0,0"
+                        Command="{Binding ForceCloseCommand}" BorderBrush="{StaticResource DangerBrush}"
+                        Visibility="{Binding IsSessionActive, Converter={StaticResource BoolToVis}}"
+                        ToolTip="Termina el juego y todos sus procesos al instante (si se ha colgado)">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE71A;" FontFamily="{StaticResource IconFont}" FontSize="11" Foreground="{StaticResource DangerBrush}"
+                                   VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <TextBlock Text="Forzar cierre" />
+                    </StackPanel>
+                </Button>
                 <Button DockPanel.Dock="Right" Content="Dejar de vigilar" Style="{StaticResource GhostButton}" Padding="12,4"
                         Command="{Binding CancelCommand}"
                         Visibility="{Binding IsSessionActive, Converter={StaticResource BoolToVis}}"

@@ -64,6 +64,16 @@
                         </StackPanel>
                     </Button>
 
+                    <Button DockPanel.Dock="Left" Style="{StaticResource GhostButton}" Height="48" Padding="16,0" Margin="10,0,0,0"
+                            BorderBrush="{StaticResource DangerBrush}" Command="{Binding Card.ForceCloseCommand}"
+                            Visibility="{Binding Card.IsRunning, Converter={StaticResource BoolToVis}}"
+                            ToolTip="El juego se ha colgado: termínalo junto con todos sus procesos">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE71A;" FontFamily="{StaticResource IconFont}" FontSize="14" Foreground="{StaticResource DangerBrush}"
+                                       VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <TextBlock Text="FORZAR CIERRE" FontWeight="Bold" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
                     <StackPanel DockPanel.Dock="Left" Margin="32,0,0,0" VerticalAlignment="Center"
                                 Visibility="{Binding Card.ShowRequiredSize, Converter={StaticResource BoolToVis}}">
                         <TextBlock Text="ESPACIO NECESARIO" Style="{StaticResource StatLabel}" />
@@ -313,6 +323,27 @@
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="&#xE82D;" FontFamily="{StaticResource IconFont}" Width="22" VerticalAlignment="Center" />
                                 <TextBlock Text="Guías" Margin="6,0,0,0" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource LinkRow}" Command="{Binding OpenWorkshopCommand}"
+                                Visibility="{Binding Card.IsSteam, Converter={StaticResource BoolToVis}}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE74C;" FontFamily="{StaticResource IconFont}" Width="22" VerticalAlignment="Center" />
+                                <TextBlock Text="Steam Workshop" Margin="6,0,0,0" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource LinkRow}" Command="{Binding OpenPointsShopCommand}"
+                                Visibility="{Binding Card.IsSteam, Converter={StaticResource BoolToVis}}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE8EC;" FontFamily="{StaticResource IconFont}" Width="22" VerticalAlignment="Center" />
+                                <TextBlock Text="Tienda de puntos" Margin="6,0,0,0" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource LinkRow}" Command="{Binding Card.PropertiesCommand}"
+                                Visibility="{Binding Card.IsSteam, Converter={StaticResource BoolToVis}}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE713;" FontFamily="{StaticResource IconFont}" Width="22" VerticalAlignment="Center" />
+                                <TextBlock Text="Propiedades (DLC y mods)…" Margin="6,0,0,0" />
                             </StackPanel>
                         </Button>
                         <Button Style="{StaticResource LinkRow}" Command="{Binding OpenSupportCommand}"

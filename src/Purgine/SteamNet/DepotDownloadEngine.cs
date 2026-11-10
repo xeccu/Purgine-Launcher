@@ -54,7 +54,10 @@ public sealed class DepotDownloadEngine
         var buildId = appInfo["depots"]["branches"]["public"]["buildid"].AsUnsignedInteger();
         var installPath = Path.Combine(job.LibraryPath, "steamapps", "common", installDirName);
 
-        var selections = DepotSelector.Select(appInfo["depots"], DepotSelector.SteamLanguage(), _ownership.IsOwned);
+        // DLC desactivados en Propiedades: sus depots no se descargan ni se actualizan.
+        var disabledDlc = AppManifestWriter.ReadDisabledDlc(Path.Combine(job.LibraryPath, "steamapps", $"appmanifest_{job.AppId}.acf"));
+        var selections = DepotSelector.Select(appInfo["depots"], DepotSelector.SteamLanguage(),
+            dlc => _ownership.IsOwned(dlc) && !disabledDlc.Contains(dlc));
         if (selections.Count == 0) throw new InvalidOperationException("No hay depots para Windows que esta cuenta pueda descargar.");
 
         // Manifiestos instalados (para actualizar solo lo que cambia).

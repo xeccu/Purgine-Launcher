@@ -64,6 +64,8 @@ public sealed class GameCardViewModel : ObservableObject
         _host = host;
 
         ShowDetailsCommand = new RelayCommand(_ => _host.ShowDetails(this));
+        ForceCloseCommand = new RelayCommand(_ => _host.ForceClose(this), _ => IsRunning);
+        PropertiesCommand = new RelayCommand(_ => _host.ShowProperties(this), _ => IsSteam && !IsNotInstalled);
         PrimaryActionCommand = new RelayCommand(
             _ => { if (ShowUpdateButton) _host.Update(this); else if (IsNotInstalled && !HasActiveJob) _host.Install(this); else _host.Launch(this); },
             _ => !IsRunning && (IsNotInstalled || HasActiveJob || ShowUpdateButton || _host.CanLaunch));
@@ -317,6 +319,8 @@ public sealed class GameCardViewModel : ObservableObject
 
     public ICommand PlayCommand { get; }
     public ICommand ShowDetailsCommand { get; }
+    public ICommand ForceCloseCommand { get; }
+    public ICommand PropertiesCommand { get; }
     public ICommand PrimaryActionCommand { get; }
     public ICommand InstallCommand { get; }
     public ICommand CancelInstallCommand { get; }

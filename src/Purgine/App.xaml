@@ -520,6 +520,11 @@
             <MenuItem Header="Abrir carpeta del juego" Command="{Binding OpenFolderCommand}" />
             <MenuItem Header="Ver en la tienda" Command="{Binding ViewInStoreCommand}"
                       Visibility="{Binding IsSteam, Converter={StaticResource BoolToVis}}" />
+            <MenuItem Header="Propiedades…" Command="{Binding PropertiesCommand}"
+                      Visibility="{Binding IsSteam, Converter={StaticResource BoolToVis}}"
+                      ToolTip="DLC y mods de Workshop (juegos instalados)" />
+            <MenuItem Header="Forzar cierre" Command="{Binding ForceCloseCommand}"
+                      Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}" />
             <MenuItem Header="Desinstalar…" Command="{Binding UninstallCommand}"
                       Visibility="{Binding CanUninstall, Converter={StaticResource BoolToVis}}" />
             <MenuItem Header="Editar…" Command="{Binding EditCommand}"

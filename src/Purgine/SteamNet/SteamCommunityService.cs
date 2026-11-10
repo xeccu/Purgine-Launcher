@@ -256,6 +256,31 @@ public sealed class SteamCommunityService : IDisposable
     }
 
     // =====================================================================================
+    // Workshop: títulos de mods
+    // =====================================================================================
+
+    /// <summary>Título de varios elementos de Workshop (PublishedFile.GetDetails). Vacío si no hay conexión.</summary>
+    public async Task<IReadOnlyDictionary<ulong, string>> GetWorkshopTitlesAsync(IReadOnlyCollection<ulong> ids, CancellationToken ct)
+    {
+        if (ids.Count == 0) return new Dictionary<ulong, string>();
+        var titles = await _session.UseServiceAsync<PublishedFile, Dictionary<ulong, string>>(async (pf, _) =>
+        {
+            var result = new Dictionary<ulong, string>();
+            foreach (var chunk in ids.Chunk(100))
+            {
+                var request = new CPublishedFile_GetDetails_Request();
+                request.publishedfileids.AddRange(chunk);
+                var r = await pf.GetDetails(request).ToTask();
+                if (r.Result != SteamKit2.EResult.OK) continue;
+                foreach (var d in r.Body.publishedfiledetails)
+                    if (!string.IsNullOrWhiteSpace(d.title)) result[d.publishedfileid] = d.title.Trim();
+            }
+            return result;
+        }, "los nombres de los mods", ct).ConfigureAwait(false);
+        return titles ?? new Dictionary<ulong, string>();
+    }
+
+    // =====================================================================================
 
     private async Task<T?> Cached<T>(string key, Func<Task<T?>> load) where T : class
     {
