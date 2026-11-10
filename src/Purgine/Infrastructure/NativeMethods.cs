@@ -81,6 +81,18 @@ internal static class NativeMethods
 
     public const int SW_HIDE = 0;
 
+    /// <summary>DWMWA_SYSTEMBACKDROP_TYPE (Windows 11 22H2+): 1 = ninguno, 2 = Mica, 3 = acrílico.</summary>
+    public const int DWMWA_SYSTEMBACKDROP_TYPE = 38;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MARGINS
+    {
+        public int Left, Right, Top, Bottom;
+    }
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS margins);
+
     /// <summary>DWMWA_USE_IMMERSIVE_DARK_MODE (Windows 10 20H1+ / Windows 11).</summary>
     public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
 

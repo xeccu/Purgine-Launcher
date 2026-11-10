@@ -122,6 +122,10 @@ Organizada como la biblioteca de un cliente de escritorio:
   principal **JUGAR / INSTALAR / ACTUALIZAR**, **última sesión** y **tiempo de juego**, progreso de
   **logros** (servicio Player de Steam vía SteamKit2: desbloqueados/total y los más destacados) y enlaces a la
   página de la tienda, comunidad, discusiones, guías y soporte.
+- **Espacio necesario**: los juegos no instalados muestran «Tamaño: X GB» en su portada y, en la ficha,
+  «ESPACIO NECESARIO» junto a INSTALAR con el espacio libre del disco donde se instalaría (en rojo si no
+  cabe). Es la suma de los depots que se descargarían en este equipo según PICS (Windows, 64 bits, idioma,
+  DLC propios): la misma selección que usa el motor de descargas (`SteamNet/DepotSelector.cs`).
 - **Arte** (`Library/SteamArtService.cs`): primero la caché que ya mantiene el cliente de Steam
   (`appcache\librarycache`), sin red; si falta, la CDN pública de Steam, guardando una copia en `art\`.
   Todo se decodifica al tamaño en que se muestra y la imagen panorámica se suelta al cambiar de juego o al
@@ -140,6 +144,19 @@ Organizada como la biblioteca de un cliente de escritorio:
   memoria marcada como prescindible: de ~450 MB a ~35 MB en las pruebas) y, tras **60 s** fuera de la pestaña
   o al ocultar la ventana en la bandeja, se **cierra del todo** (sus procesos `msedgewebview2.exe`
   terminan). Al volver se reabre en la última página.
+
+### 7. Calidad gráfica (`Infrastructure/GraphicsTheme.cs`, `Infrastructure/Fx.cs`)
+
+Tres perfiles en Ajustes → «Calidad gráfica», aplicados al instante (recursos dinámicos, sin reiniciar):
+
+| Perfil | Qué incluye |
+|---|---|
+| **Bajo** | Plano: sin sombras, degradados, desenfoque ni animaciones. |
+| **Medio** (por defecto) | Esquinas redondeadas, bordes sutiles (`#2A2E3D`) y degradado en la imagen panorámica. |
+| **Alto** | Lo anterior + sombras en portadas y en la barra de acción flotante, botón JUGAR/INSTALAR con degradado (`#1A9FFF` → `#1072BA`) y brillo al pasar el cursor, elevación y zoom de portadas al pasar el cursor, transiciones de entrada entre vistas, y barra lateral/cabecera translúcidas sobre el material **Mica** de Windows 11 (desenfoque del fondo; en Windows 10 quedan opacas). |
+
+Las animaciones solo se crean en Alto y se retiran al terminar; con Purgine en la bandeja no se dibuja nada
+en ningún perfil.
 
 ### Otras funciones
 

@@ -216,6 +216,27 @@ public sealed class GameCardViewModel : ObservableObject
 
     public bool CanUninstall => IsSteam && !IsNotInstalled && !IsRunning && !HasActiveJob;
 
+    // ----- Espacio necesario (juegos no instalados) -----
+
+    private ulong _installSize;
+
+    /// <summary>Bytes que ocupará instalado según PICS (0 = desconocido).</summary>
+    public ulong InstallSize => _installSize;
+
+    public void SetInstallSize(ulong bytes)
+    {
+        if (_installSize == bytes) return;
+        _installSize = bytes;
+        OnPropertyChanged(nameof(InstallSize));
+        OnPropertyChanged(nameof(RequiredSizeText));
+        OnPropertyChanged(nameof(ShowRequiredSize));
+    }
+
+    /// <summary>«2,4 GB».</summary>
+    public string RequiredSizeText => _installSize == 0 ? string.Empty : Formatting.Bytes((long)_installSize);
+
+    public bool ShowRequiredSize => IsNotInstalled && _installSize > 0;
+
     // ----- Actualizaciones -----
 
     private bool _remoteUpdate;

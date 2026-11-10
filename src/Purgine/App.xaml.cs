@@ -59,6 +59,8 @@ public partial class App : Application
         if (settings.UseSoftwareRendering)
             RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
 
+        GraphicsTheme.Apply(settings.GraphicsPreset);
+
         // Composición manual: pocos servicios no justifican un contenedor de DI.
         var locator = new SteamLocator();
         var scanner = new SteamLibraryScanner(locator);

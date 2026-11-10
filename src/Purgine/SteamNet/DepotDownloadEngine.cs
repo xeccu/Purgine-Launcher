@@ -1,6 +1,5 @@
 using System.Buffers;
 using Purgine.Infrastructure;
-using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
 using SteamKit2;
 using SteamKit2.CDN;
@@ -8,7 +7,6 @@ using SteamKit2.CDN;
 namespace Purgine.SteamNet;
 
 /// <summary>Un depot elegido para descargar.</summary>
-public sealed record DepotSelection(uint DepotId, ulong ManifestId);
 
 /// <summary>Resultado de una descarga terminada (lo necesario para escribir el appmanifest de Steam).</summary>
 public sealed record DepotDownloadResult(
@@ -56,7 +54,7 @@ public sealed class DepotDownloadEngine
         var buildId = appInfo["depots"]["branches"]["public"]["buildid"].AsUnsignedInteger();
         var installPath = Path.Combine(job.LibraryPath, "steamapps", "common", installDirName);
 
-        var selections = SelectDepots(appInfo["depots"], SteamLanguage());
+        var selections = DepotSelector.Select(appInfo["depots"], DepotSelector.SteamLanguage(), _ownership.IsOwned);
         if (selections.Count == 0) throw new InvalidOperationException("No hay depots para Windows que esta cuenta pueda descargar.");
 
         // Manifiestos instalados (para actualizar solo lo que cambia).
@@ -136,55 +134,6 @@ public sealed class DepotDownloadEngine
 
         return new DepotDownloadResult(job.LibraryPath, installDirName, buildId,
             depots.Select(d => (d.DepotId, d.ManifestId, d.Manifest.TotalUncompressedSize, d.Manifest)).ToList());
-    }
-
-    // =====================================================================================
-    // Selección de depots
-    // =====================================================================================
-
-    private List<DepotSelection> SelectDepots(KeyValue depotsNode, string language)
-    {
-        var candidates = new List<(uint Id, ulong Manifest, string? Arch, string? Lang)>();
-        foreach (var depot in depotsNode.Children)
-        {
-            if (!uint.TryParse(depot.Name, out var depotId)) continue; // "branches", "baselanguages"…
-            if (depot["depotfromapp"] != KeyValue.Invalid || depot["sharedinstall"].AsBoolean()) continue; // redistribuibles compartidos
-
-            var config = depot["config"];
-            var os = config["oslist"].Value;
-            if (!string.IsNullOrEmpty(os) && !os.Contains("windows", StringComparison.OrdinalIgnoreCase)) continue;
-            if (config["lowviolence"].AsBoolean()) continue;
-
-            var dlc = depot["dlcappid"].AsUnsignedInteger();
-            if (dlc != 0 && !_ownership.IsOwned(dlc)) continue;
-
-            var publicManifest = depot["manifests"]["public"];
-            var gid = publicManifest["gid"].Value ?? publicManifest.Value;
-            if (!ulong.TryParse(gid, out var manifestId)) continue; // sin manifiesto público (p. ej. cifrado/beta)
-
-            candidates.Add((depotId, manifestId, config["osarch"].Value, config["language"].Value));
-        }
-
-        // Idioma: los neutros + el de Steam; si el juego no lo tiene, inglés.
-        var hasLanguage = candidates.Any(c => string.Equals(c.Lang, language, StringComparison.OrdinalIgnoreCase));
-        var chosenLanguage = hasLanguage ? language : "english";
-        candidates.RemoveAll(c => !string.IsNullOrEmpty(c.Lang) && !string.Equals(c.Lang, chosenLanguage, StringComparison.OrdinalIgnoreCase));
-
-        // Arquitectura: si hay depots de 64 bits, se descartan los de 32.
-        if (candidates.Any(c => c.Arch == "64")) candidates.RemoveAll(c => c.Arch == "32");
-
-        return candidates.Select(c => new DepotSelection(c.Id, c.Manifest)).ToList();
-    }
-
-    /// <summary>Idioma configurado en Steam (Registro); inglés si no se conoce.</summary>
-    private static string SteamLanguage()
-    {
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam");
-            return (key?.GetValue("Language") as string) is { Length: > 0 } lang ? lang : "english";
-        }
-        catch (Exception) { return "english"; }
     }
 
     // =====================================================================================

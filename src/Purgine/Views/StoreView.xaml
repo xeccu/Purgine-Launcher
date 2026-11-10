@@ -8,7 +8,7 @@
         </Grid.RowDefinitions>
 
         <!-- ===== Barra de navegación ===== -->
-        <Border Grid.Row="0" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}"
+        <Border Grid.Row="0" Background="{DynamicResource ChromeBrush}" BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="0,0,0,1" Padding="12,6">
             <Grid>
                 <DockPanel LastChildFill="True">

@@ -15,6 +15,11 @@ public sealed class OwnedApp
     public uint PublicBuildId { get; set; }
     /// <summary>Hash del icono pequeño (PICS common/icon) para descargarlo de la CDN si no está en disco.</summary>
     public string? Icon { get; set; }
+    /// <summary>
+    /// Espacio que ocupará instalado (bytes): suma de los depots que se descargarían en este equipo según PICS
+    /// (Windows, 64 bits, idioma, DLC propios). 0 si Steam no publica tamaños para esta app.
+    /// </summary>
+    public ulong InstallSize { get; set; }
 }
 
 /// <summary>Contenido de <c>owned-games.json</c> (caché para arrancar sin red).</summary>
@@ -81,6 +86,8 @@ public sealed class SteamOwnershipService
                 .ToList();
 
             var info = await _session.GetAppInfoAsync(appIds, ct).ConfigureAwait(false);
+            var ownedIds = appIds.ToHashSet();
+            var language = DepotSelector.SteamLanguage();
             var apps = new List<OwnedApp>();
             foreach (var (appId, kv) in info)
             {
@@ -95,6 +102,7 @@ public sealed class SteamOwnershipService
                     InstallDir = kv["config"]["installdir"].Value,
                     PublicBuildId = kv["depots"]["branches"]["public"]["buildid"].AsUnsignedInteger(),
                     Icon = common["icon"].Value,
+                    InstallSize = SumSizes(DepotSelector.Select(kv["depots"], language, ownedIds.Contains)),
                 });
             }
 
@@ -113,6 +121,13 @@ public sealed class SteamOwnershipService
         {
             _session.Release();
         }
+    }
+
+    private static ulong SumSizes(List<SelectedDepot> depots)
+    {
+        ulong total = 0;
+        foreach (var d in depots) total += d.Size;
+        return total;
     }
 
     /// <summary>Al cerrar sesión: se borra la caché (pertenece a esa cuenta).</summary>

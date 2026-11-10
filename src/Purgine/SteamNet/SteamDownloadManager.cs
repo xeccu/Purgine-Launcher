@@ -349,6 +349,17 @@ public sealed class SteamDownloadManager : IDisposable
         JsonFileStore.Save(_queuePath, items);
     }
 
+    /// <summary>Biblioteca donde iría una instalación nueva y su espacio libre (null si no hay bibliotecas).</summary>
+    public (string Library, long FreeBytes)? InstallTarget()
+    {
+        try
+        {
+            var library = ChooseLibrary();
+            return (library, FreeSpace(library));
+        }
+        catch (InvalidOperationException) { return null; }
+    }
+
     /// <summary>La biblioteca de Steam con más espacio libre.</summary>
     private string ChooseLibrary() =>
         _scanner.GetLibraryFolders()

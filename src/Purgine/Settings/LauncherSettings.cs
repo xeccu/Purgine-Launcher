@@ -26,6 +26,17 @@ public enum LibraryViewMode
     List,
 }
 
+/// <summary>Perfil gráfico de la interfaz (ver <c>Infrastructure/GraphicsTheme</c>).</summary>
+public enum GraphicsPreset
+{
+    /// <summary>Plano: sin sombras, degradados, desenfoque ni animaciones.</summary>
+    Low,
+    /// <summary>Equilibrado: esquinas redondeadas, bordes sutiles y degradados.</summary>
+    Medium,
+    /// <summary>Máxima calidad: sombras, animaciones, translucidez con desenfoque (Mica) y brillo.</summary>
+    High,
+}
+
 /// <summary>Orden de la biblioteca (lista lateral y cuadrícula).</summary>
 public enum LibrarySortMode
 {
@@ -111,6 +122,9 @@ public sealed class LauncherSettings
 
     /// <summary>Notificaciones de Windows al sincronizar con la nube y al cerrar Steam.</summary>
     public bool ShowNotifications { get; set; } = true;
+
+    /// <summary>Perfil gráfico (Bajo / Medio / Alto). Se aplica al instante.</summary>
+    public GraphicsPreset GraphicsPreset { get; set; } = GraphicsPreset.Medium;
 
     /// <summary>Render por software: evita cargar el pipeline D3D en el proceso. Requiere reiniciar.</summary>
     public bool UseSoftwareRendering { get; set; }

@@ -301,9 +301,10 @@
         <!-- Tarjeta de sección (ajustes, ficha de tienda) -->
         <Style x:Key="Panel" TargetType="Border">
             <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="10" />
+            <!-- Forma y borde según el perfil gráfico (Infrastructure/GraphicsTheme) -->
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}" />
+            <Setter Property="BorderThickness" Value="{DynamicResource PanelBorderThickness}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PanelCornerRadius}" />
             <Setter Property="Padding" Value="20,16" />
             <Setter Property="Margin" Value="0,0,0,14" />
         </Style>
@@ -383,7 +384,7 @@
         <!-- Botón principal de la ficha (JUGAR / INSTALAR / ACTUALIZAR) -->
         <Style x:Key="SteamPlayButton" TargetType="Button">
             <Setter Property="Foreground" Value="White" />
-            <Setter Property="Background" Value="{StaticResource SteamBlueBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PlayButtonBrush}" />
             <Setter Property="FontSize" Value="15" />
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="Padding" Value="26,0" />
@@ -393,13 +394,14 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4"
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource PlayButtonCornerRadius}"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource SteamBlueHoverBrush}" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PlayButtonHoverBrush}" />
+                                <Setter TargetName="Bd" Property="Effect" Value="{DynamicResource PlayButtonGlow}" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{StaticResource SteamBluePressedBrush}" />
@@ -417,7 +419,7 @@
         <!-- Botón redondo de jugar/instalar sobre portadas y filas -->
         <Style x:Key="RoundPlayButton" TargetType="Button">
             <Setter Property="Foreground" Value="White" />
-            <Setter Property="Background" Value="{StaticResource SteamBlueBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PlayButtonBrush}" />
             <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
             <Setter Property="Width" Value="52" />
             <Setter Property="Height" Value="52" />
@@ -431,7 +433,8 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource SteamBlueHoverBrush}" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PlayButtonHoverBrush}" />
+                                <Setter TargetName="Bd" Property="Effect" Value="{DynamicResource PlayButtonGlow}" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.5" />

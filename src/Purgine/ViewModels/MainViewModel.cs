@@ -206,7 +206,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             _selectedGame = value;
             _detail?.Close();
             _detail = value is null ? null
-                : new GameDetailViewModel(value, _art, _session, OpenInStoreTab, ShowHomeCommand);
+                : new GameDetailViewModel(value, _art, _session, OpenInStoreTab, ShowHomeCommand, _downloads.InstallTarget);
             OnPropertyChanged();
             OnPropertyChanged(nameof(Detail));
             OnPropertyChanged(nameof(IsHomeVisible));
@@ -525,9 +525,14 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         _owned = owned;
     }
 
-    /// <summary>Marca «Actualizar» en los instalados cuya build difiere de la pública en Steam.</summary>
+    /// <summary>
+    /// Marca «Actualizar» en los instalados cuya build difiere de la pública en Steam, y asigna a cada juego el
+    /// espacio que ocupa instalado (PICS) para mostrarlo en los no instalados.
+    /// </summary>
     private void ApplyRemoteUpdates()
     {
+        foreach (var card in Games.Where(g => g.IsSteam))
+            card.SetInstallSize(uint.TryParse(card.Entry.AppId, out var sid) ? _ownership.Find(sid)?.InstallSize ?? 0 : 0);
         foreach (var card in Games.Where(g => g.IsSteam && !g.IsNotInstalled))
         {
             var remote = uint.TryParse(card.Entry.AppId, out var id) ? _ownership.Find(id)?.PublicBuildId ?? 0 : 0;

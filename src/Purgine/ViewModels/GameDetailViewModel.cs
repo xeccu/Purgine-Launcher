@@ -56,9 +56,15 @@ public sealed class GameDetailViewModel : ObservableObject
     private bool _isLoadingAchievements;
 
     public GameDetailViewModel(GameCardViewModel card, SteamArtService art, SteamSession session,
-        Action<string> openWeb, ICommand backCommand)
+        Action<string> openWeb, ICommand backCommand, Func<(string Library, long FreeBytes)?> installTarget)
     {
         Card = card;
+        if (installTarget() is { } target)
+        {
+            var drive = Path.GetPathRoot(target.Library)?.TrimEnd('\\') ?? target.Library;
+            FreeSpaceText = $"{Formatting.Bytes(target.FreeBytes)} libres en {drive}";
+            IsSpaceInsufficient = card.InstallSize > 0 && (ulong)Math.Max(0, target.FreeBytes) < card.InstallSize;
+        }
         _art = art;
         _session = session;
         _openWeb = openWeb;
@@ -78,6 +84,12 @@ public sealed class GameDetailViewModel : ObservableObject
     }
 
     public GameCardViewModel Card { get; }
+
+    /// <summary>«120 GB libres en D:» (disco donde se instalaría: la biblioteca de Steam con más espacio).</summary>
+    public string FreeSpaceText { get; } = string.Empty;
+
+    /// <summary>No cabe en ninguna biblioteca de Steam: el texto se muestra en rojo.</summary>
+    public bool IsSpaceInsufficient { get; }
 
     public ICommand BackCommand { get; }
     public ICommand OpenStoreCommand { get; }

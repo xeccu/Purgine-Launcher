@@ -29,6 +29,33 @@
                 </StackPanel>
             </Border>
 
+            <!-- ===== Calidad gráfica ===== -->
+            <Border Style="{StaticResource Panel}">
+                <StackPanel>
+                    <TextBlock Text="Calidad gráfica" Style="{StaticResource SectionTitle}" />
+                    <RadioButton GroupName="Graphics" IsChecked="{Binding GraphicsLow, Mode=TwoWay}">
+                        <StackPanel>
+                            <TextBlock Text="Bajo — rendimiento mínimo" />
+                            <TextBlock Style="{StaticResource MutedText}" Text="Estilo plano: sin sombras, degradados, desenfoque ni animaciones. El menor uso de CPU, GPU y memoria." />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton GroupName="Graphics" IsChecked="{Binding GraphicsMedium, Mode=TwoWay}">
+                        <StackPanel>
+                            <TextBlock Text="Medio — equilibrado (recomendado)" />
+                            <TextBlock Style="{StaticResource MutedText}" Text="Esquinas redondeadas, bordes sutiles y degradado en la imagen del juego para leer mejor el texto." />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton GroupName="Graphics" IsChecked="{Binding GraphicsHigh, Mode=TwoWay}">
+                        <StackPanel>
+                            <TextBlock Text="Alto — máxima calidad" />
+                            <TextBlock Style="{StaticResource MutedText}" Text="Sombras, animaciones al pasar el cursor y al cambiar de vista, botón con brillo, y barra lateral y cabecera translúcidas con desenfoque (Windows 11)." />
+                        </StackPanel>
+                    </RadioButton>
+                    <TextBlock Style="{StaticResource MutedText}" Margin="0,8,0,0"
+                               Text="Se aplica al instante. Con Purgine en la bandeja ninguno de los perfiles consume recursos de dibujo." />
+                </StackPanel>
+            </Border>
+
             <!-- ===== Al terminar de jugar ===== -->
             <Border Style="{StaticResource Panel}">
                 <StackPanel>

@@ -73,6 +73,24 @@ public sealed class SettingsViewModel : ObservableObject
 
     // ===================== Al terminar de jugar =====================
 
+    // ===================== Calidad gráfica =====================
+
+    public bool GraphicsLow { get => _s.GraphicsPreset == GraphicsPreset.Low; set { if (value) SetGraphics(GraphicsPreset.Low); } }
+    public bool GraphicsMedium { get => _s.GraphicsPreset == GraphicsPreset.Medium; set { if (value) SetGraphics(GraphicsPreset.Medium); } }
+    public bool GraphicsHigh { get => _s.GraphicsPreset == GraphicsPreset.High; set { if (value) SetGraphics(GraphicsPreset.High); } }
+
+    /// <summary>Aplica el perfil al instante (recursos dinámicos) y lo guarda.</summary>
+    private void SetGraphics(GraphicsPreset preset)
+    {
+        if (_s.GraphicsPreset == preset) return;
+        _s.GraphicsPreset = preset;
+        Infrastructure.GraphicsTheme.Apply(preset);
+        OnPropertyChanged(nameof(GraphicsLow));
+        OnPropertyChanged(nameof(GraphicsMedium));
+        OnPropertyChanged(nameof(GraphicsHigh));
+        Saved();
+    }
+
     public bool CleanupAlways { get => _s.SteamCleanupPolicy == CleanupPolicy.Always; set { if (value) SetPolicy(CleanupPolicy.Always); } }
     public bool CleanupOnlyOurs { get => _s.SteamCleanupPolicy == CleanupPolicy.OnlyIfStartedByLauncher; set { if (value) SetPolicy(CleanupPolicy.OnlyIfStartedByLauncher); } }
     public bool CleanupNever { get => _s.SteamCleanupPolicy == CleanupPolicy.Never; set { if (value) SetPolicy(CleanupPolicy.Never); } }
@@ -193,6 +211,11 @@ public sealed class SettingsViewModel : ObservableObject
         var d = new LauncherSettings();
         _s.SteamClientArguments = d.SteamClientArguments;
         _s.SteamCleanupPolicy = d.SteamCleanupPolicy;
+        if (_s.GraphicsPreset != d.GraphicsPreset)
+        {
+            _s.GraphicsPreset = d.GraphicsPreset;
+            Infrastructure.GraphicsTheme.Apply(d.GraphicsPreset);
+        }
         _s.CloudSyncGraceSeconds = d.CloudSyncGraceSeconds;
         _s.SteamShutdownTimeoutSeconds = d.SteamShutdownTimeoutSeconds;
         _s.GameStartTimeoutSeconds = d.GameStartTimeoutSeconds;

@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Purgine.Core;
 using Purgine.Infrastructure;
@@ -36,7 +37,12 @@ public partial class MainWindow : Window, IDialogService
         DataContext = viewModel;
         viewModel.Dialogs = this;
 
-        SourceInitialized += (_, _) => CreateTrayIcon();
+        SourceInitialized += (_, _) =>
+        {
+            CreateTrayIcon();
+            ApplyBackdrop(GraphicsTheme.Current);
+        };
+        GraphicsTheme.Changed += ApplyBackdrop;
         Loaded += async (_, _) => await _vm.RefreshAsync();
         StateChanged += OnStateChanged;
 
@@ -56,6 +62,10 @@ public partial class MainWindow : Window, IDialogService
                 _tray?.SetTooltip($"Purgine — {_vm.StatusText}");
         };
     }
+
+    /// <summary>Perfil Alto: material Mica detrás de la barra lateral y la cabecera (translúcidas).</summary>
+    private void ApplyBackdrop(Settings.GraphicsPreset preset) =>
+        WindowTheming.SetMica(this, preset == Settings.GraphicsPreset.High, (Brush)FindResource("BgBrush"));
 
     // =====================================================================================
     // Bandeja del sistema
