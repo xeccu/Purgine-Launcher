@@ -24,7 +24,7 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" PanningMode="VerticalOnly">
         <StackPanel>
             <!-- ===== Héroe: imagen panorámica + degradado inferior + logo ===== -->
-            <Grid x:Name="HeroArea" Height="300" ClipToBounds="True" Background="{StaticResource CardBrush}">
+            <Grid x:Name="HeroArea" Height="300" ClipToBounds="True" Background="#101214">
                 <!-- Imagen del juego anterior: se funde con la nueva al cambiar de juego (Ultra-moderno) -->
                 <Image x:Name="HeroPrevious" Stretch="UniformToFill" VerticalAlignment="Center" HorizontalAlignment="Center"
                        RenderOptions.BitmapScalingMode="HighQuality" IsHitTestVisible="False" />
@@ -50,7 +50,8 @@
             </Grid>
 
             <!-- ===== Barra de acción ===== -->
-            <!-- Ultra-moderno: cuadro flotante sobre la imagen con brillo del color dominante del juego -->
+            <!-- Siempre debajo del banner (nunca encima de la ilustración ni del título del juego). En Ultra-moderno es
+                 un panel flotante con brillo del color dominante del juego. -->
             <Border Background="{DynamicResource ActionBarBackground}" Padding="32,14" Margin="{DynamicResource ActionBarMargin}"
                     CornerRadius="{DynamicResource ActionBarCornerRadius}" Effect="{Binding GlowEffect}"
                     BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="{DynamicResource ActionBarBorderThickness}">

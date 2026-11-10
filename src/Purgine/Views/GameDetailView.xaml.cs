@@ -23,6 +23,13 @@ public partial class GameDetailView : UserControl
     /// <summary>Última imagen mostrada (para fundirla con la siguiente). Solo se guarda en Ultra-moderno.</summary>
     private ImageSource? _lastHero;
 
+    /// <summary>
+    /// Generación de la transición en curso. Al cambiar de juego rápido, una animación anterior puede terminar
+    /// (evento Completed) después de empezar la nueva: sin este número, ese Completed tardío borraba la imagen
+    /// anterior y cortaba el fundido nuevo, y el banner se quedaba vacío unos instantes.
+    /// </summary>
+    private int _fadeGeneration;
+
     public GameDetailView()
     {
         InitializeComponent();
@@ -47,7 +54,9 @@ public partial class GameDetailView : UserControl
 
         if (GraphicsTheme.AnimationsEnabled && _lastHero is not null)
         {
-            // La anterior queda visible debajo hasta que llegue la nueva (la carga es asíncrona).
+            // La imagen anterior se queda visible, opaca, hasta que la nueva esté decodificada (la carga es
+            // asíncrona y el BitmapImage llega ya congelado y listo para dibujar): nunca se ve el fondo vacío.
+            _fadeGeneration++;
             HeroPrevious.BeginAnimation(OpacityProperty, null);
             HeroPrevious.Source = _lastHero;
             HeroPrevious.Opacity = 1;
@@ -84,28 +93,40 @@ public partial class GameDetailView : UserControl
         }
     }
 
+    /// <summary>
+    /// La nueva aparece encima de la anterior, que sigue opaca debajo; solo cuando la nueva ya cubre todo se
+    /// retira la anterior. Así no hay ningún instante con el banner vacío.
+    /// </summary>
     private void Crossfade()
     {
-        var fadeOut = new DoubleAnimation(1, 0, CrossfadeDuration) { EasingFunction = Ease };
-        fadeOut.Completed += (_, _) =>
+        var generation = ++_fadeGeneration;
+        var fadeIn = new DoubleAnimation(0, 1, CrossfadeDuration) { EasingFunction = Ease };
+        fadeIn.Completed += (_, _) =>
         {
-            HeroPrevious.BeginAnimation(OpacityProperty, null);
+            if (generation != _fadeGeneration) return; // transición ya sustituida por otra
+            HeroImage.Opacity = 1;
+            HeroImage.BeginAnimation(OpacityProperty, null);
             HeroPrevious.Source = null; // soltar la imagen anterior
-            HeroPrevious.Opacity = 1;
         };
-        HeroPrevious.BeginAnimation(OpacityProperty, fadeOut);
-        FadeIn(HeroImage);
+        HeroImage.BeginAnimation(OpacityProperty, fadeIn);
     }
 
-    private static void FadeIn(UIElement element)
+    private void FadeIn(UIElement element)
     {
+        var generation = ++_fadeGeneration;
         var fadeIn = new DoubleAnimation(0, 1, CrossfadeDuration) { EasingFunction = Ease };
-        fadeIn.Completed += (_, _) => element.BeginAnimation(OpacityProperty, null);
+        fadeIn.Completed += (_, _) =>
+        {
+            if (generation != _fadeGeneration) return;
+            element.Opacity = 1;
+            element.BeginAnimation(OpacityProperty, null);
+        };
         element.BeginAnimation(OpacityProperty, fadeIn);
     }
 
     private void ResetLayers()
     {
+        _fadeGeneration++;
         HeroPrevious.BeginAnimation(OpacityProperty, null);
         HeroPrevious.Source = null;
         HeroImage.BeginAnimation(OpacityProperty, null);

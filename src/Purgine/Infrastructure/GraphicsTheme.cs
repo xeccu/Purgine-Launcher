@@ -66,8 +66,9 @@ public static class GraphicsTheme
             : Solid(Colors.Transparent);
         r["LogoEffect"] = modern ? Shadow(Colors.Black, blur: 18, depth: 0, opacity: 0.85) : null;
 
-        // ----- Barra de acción («JUGAR» + estadísticas): flotante en Ultra-moderno -----
-        r["ActionBarMargin"] = modern ? new Thickness(24, -44, 24, 0) : new Thickness(0);
+        // ----- Barra de acción («JUGAR» + estadísticas): panel flotante bajo el banner en Ultra-moderno -----
+        // Debajo del banner, sin invadirlo (antes subía 44 px sobre la imagen y tapaba logotipos del arte).
+        r["ActionBarMargin"] = modern ? new Thickness(32, 16, 32, 0) : new Thickness(0);
         r["ActionBarCornerRadius"] = new CornerRadius(modern ? 12 : 0);
         r["ActionBarBorderThickness"] = new Thickness(modern ? 1 : 0);
         r["ActionBarBackground"] = Solid(modern ? WithAlpha(Panel, 0xE6) : Surface);
