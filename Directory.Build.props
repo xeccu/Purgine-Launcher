@@ -10,6 +10,9 @@
     <Version>0.1.0</Version>
     <Product>Purgine</Product>
     <Authors>xeccu (XCC Studios)</Authors>
+    <Company>XCC Studios</Company>
+    <PackageProjectUrl>https://xccstudios.es</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/xeccu/Purgine-Launcher</RepositoryUrl>
     <Copyright>Copyright (c) 2026 xeccu (XCC Studios). All rights reserved.</Copyright>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
   </PropertyGroup>

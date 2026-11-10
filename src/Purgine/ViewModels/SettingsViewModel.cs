@@ -37,6 +37,7 @@ public sealed class SettingsViewModel : ObservableObject
         AddTagCommand = new RelayCommand(_ => AddTag(), _ => !string.IsNullOrWhiteSpace(NewTagName));
         RemoveTagCommand = new RelayCommand(p => { if (p is string t) RemoveTag(t); });
         OpenDataFolderCommand = new RelayCommand(_ => OpenFolder(AppPaths.DataDir));
+        OpenWebsiteCommand = new RelayCommand(_ => OpenUrl(WebsiteUrl));
         ResetCommand = new RelayCommand(_ => ResetDefaults());
 
         RefreshTags();
@@ -152,6 +153,12 @@ public sealed class SettingsViewModel : ObservableObject
     public ICommand AddTagCommand { get; }
     public ICommand RemoveTagCommand { get; }
     public ICommand OpenDataFolderCommand { get; }
+
+    // ===================== Acerca de =====================
+
+    public const string WebsiteUrl = "https://xccstudios.es";
+    public ICommand OpenWebsiteCommand { get; }
+    public string VersionText => $"Versión {typeof(SettingsViewModel).Assembly.GetName().Version?.ToString(3)}";
     public ICommand ResetCommand { get; }
 
     // ------------------------------------------------------------------------------------
@@ -225,6 +232,12 @@ public sealed class SettingsViewModel : ObservableObject
         _s.KillSteamWebHelperWhilePlaying = d.KillSteamWebHelperWhilePlaying;
         OnPropertyChanged(string.Empty);
         Saved();
+    }
+
+    private static void OpenUrl(string url)
+    {
+        try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true })?.Dispose(); }
+        catch (Exception ex) { Log.Warn($"No se pudo abrir {url}: {ex.Message}"); }
     }
 
     private static void OpenFolder(string path)

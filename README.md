@@ -257,6 +257,10 @@ Todo en `%LocalAppData%\Purgine\` (botón «Abrir carpeta de datos» en Ajustes)
   panorámica), pero Purgine no usa logotipos ni marcas de Valve en su propia interfaz; el arte de cada juego
   es el que publica Steam para ese juego. Steam y el logotipo de Steam son marcas de Valve Corporation.
 
+## Créditos
+
+Desarrollado por **xeccu** · [XCC Studios](https://xccstudios.es)
+
 ## Licencia
 
 Este proyecto es de código visible únicamente para fines de auditoría e inspección. Todos los derechos reservados © 2026 xeccu (XCC Studios). Ver el archivo [LICENSE](LICENSE) para más detalles.
