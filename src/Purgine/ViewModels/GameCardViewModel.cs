@@ -81,11 +81,37 @@ public sealed class GameCardViewModel : ObservableObject
         EditCommand = new RelayCommand(_ => _host.EditLocal(this), _ => IsLocal);
         RemoveCommand = new RelayCommand(_ => _host.RemoveLocal(this), _ => IsLocal && !IsRunning);
 
+        CheckInstallPresent();
         RefreshStats();
         RefreshTags();
     }
 
     public GameEntry Entry { get; private set; }
+
+    /// <summary>Juego, software o herramienta (según Steam; los ejecutables locales cuentan como juego).</summary>
+    public Settings.LibraryContentType ContentType { get; set; } = Settings.LibraryContentType.Game;
+
+    private bool _installPresent;
+
+    /// <summary>
+    /// «Listo para jugar»: instalado, con su carpeta (o su .exe, si es local) presente en el disco y sin descarga
+    /// en curso. Se comprueba al crear o actualizar el juego, no en cada filtrado.
+    /// </summary>
+    public bool IsReadyToPlay => !IsNotInstalled && _installPresent && !HasActiveJob;
+
+    private void CheckInstallPresent()
+    {
+        try
+        {
+            _installPresent = IsLocal
+                ? Entry.ExecutablePath is { } exe && File.Exists(exe)
+                : Entry.InstallDir is { } dir && Directory.Exists(dir);
+        }
+        catch (Exception) { _installPresent = false; }
+    }
+
+    /// <summary>Última sesión (ticks UTC; 0 = nunca) para ordenar por actividad reciente.</summary>
+    public long LastPlayedTicks { get; private set; }
 
     public string Name => Entry.Name;
     public bool IsLocal => Entry.Platform == GamePlatform.Local;
@@ -309,6 +335,7 @@ public sealed class GameCardViewModel : ObservableObject
     {
         var coverChanged = entry.CoverImagePath != Entry.CoverImagePath || entry.ExecutablePath != Entry.ExecutablePath;
         Entry = entry;
+        CheckInstallPresent();
         if (coverChanged)
         {
             _coverRequested = false;
@@ -328,6 +355,8 @@ public sealed class GameCardViewModel : ObservableObject
             ? "Sin jugar"
             : last is null ? Formatting.Duration(b.Total) : $"{Formatting.Duration(b.Total)} · {Formatting.RelativeDate(last)}";
         TotalPlaytimeHours = b.Total.TotalHours;
+        LastPlayedTicks = last?.UtcTicks ?? 0;
+        OnPropertyChanged(nameof(LastPlayedTicks));
         TotalPlaytimeText = b.Total == TimeSpan.Zero ? "Sin jugar" : Formatting.Duration(b.Total);
         LastPlayedText = last is null ? "Nunca" : Formatting.RelativeDate(last);
         LastPlayedText = LastPlayedText.Length > 0 ? char.ToUpper(LastPlayedText[0]) + LastPlayedText[1..] : LastPlayedText;

@@ -6,6 +6,44 @@
              xmlns:infra="clr-namespace:Purgine.Infrastructure">
     <UserControl.Resources>
 
+        <!-- Botón desplegable de la barra lateral (tipos / orden) -->
+        <Style x:Key="DropdownToggle" TargetType="ToggleButton">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" Background="Transparent" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                CornerRadius="6" Padding="9,6">
+                            <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Panel flotante de los desplegables -->
+        <Style x:Key="DropdownPanel" TargetType="Border">
+            <Setter Property="Background" Value="#FF1E222C" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="14,10" />
+            <Setter Property="Margin" Value="0,4,0,0" />
+            <Setter Property="MinWidth" Value="220" />
+        </Style>
+
         <!-- ===== Fila de la lista lateral: icono 24x24 + nombre + estado ===== -->
         <DataTemplate x:Key="SidebarItemTemplate" DataType="{x:Type vm:GameCardViewModel}">
             <Grid Height="28" Background="Transparent" ToolTip="{Binding Tooltip}" ContextMenu="{StaticResource CardMenu}">
@@ -305,36 +343,85 @@
                         </TextBlock>
                     </Grid>
 
-                    <!-- Filtros y orden -->
-                    <DockPanel Margin="0,8,0,0" LastChildFill="False">
-                        <Border DockPanel.Dock="Left" CornerRadius="6" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="2">
-                            <StackPanel Orientation="Horizontal">
-                                <RadioButton Style="{StaticResource IconToggle}" GroupName="InstallFilter" FontFamily="Segoe UI Variable Text, Segoe UI"
-                                             FontSize="12" IsChecked="{Binding ShowAllGames, Mode=TwoWay}" ToolTip="Todos los juegos de tu cuenta">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="Todos" />
-                                        <TextBlock Text="{Binding AllCount}" Margin="5,0,0,0" Opacity="0.6" />
-                                    </StackPanel>
-                                </RadioButton>
-                                <RadioButton Style="{StaticResource IconToggle}" GroupName="InstallFilter" FontFamily="Segoe UI Variable Text, Segoe UI"
-                                             FontSize="12" IsChecked="{Binding ShowInstalledOnly, Mode=TwoWay}" ToolTip="Solo los que están en este equipo">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="Instalados" />
-                                        <TextBlock Text="{Binding InstalledCount}" Margin="5,0,0,0" Opacity="0.6" />
-                                    </StackPanel>
-                                </RadioButton>
-                            </StackPanel>
-                        </Border>
-                        <Border DockPanel.Dock="Right" CornerRadius="6" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="2">
-                            <StackPanel Orientation="Horizontal">
-                                <RadioButton Style="{StaticResource IconToggle}" GroupName="SortMode" FontFamily="Segoe UI Variable Text, Segoe UI"
-                                             FontSize="11" FontWeight="SemiBold" Content="A-Z"
-                                             IsChecked="{Binding SortByName, Mode=TwoWay}" ToolTip="Orden alfabético" />
-                                <RadioButton Style="{StaticResource IconToggle}" GroupName="SortMode" FontSize="13" Content="&#xE823;"
-                                             IsChecked="{Binding SortByPlaytime, Mode=TwoWay}" ToolTip="Por tiempo de juego" />
-                            </StackPanel>
-                        </Border>
-                    </DockPanel>
+                    <!-- Listos para jugar (solo instalados con su carpeta o .exe presentes) -->
+                    <Border Margin="0,8,0,0" CornerRadius="6" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="2">
+                        <UniformGrid Columns="2">
+                            <RadioButton Style="{StaticResource IconToggle}" GroupName="InstallFilter" FontFamily="Segoe UI Variable Text, Segoe UI"
+                                         FontSize="12" IsChecked="{Binding ShowAllGames, Mode=TwoWay}" ToolTip="Toda la biblioteca: instalados y no instalados">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Todos" />
+                                    <TextBlock Text="{Binding AllCount}" Margin="5,0,0,0" Opacity="0.6" />
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton Style="{StaticResource IconToggle}" GroupName="InstallFilter" FontFamily="Segoe UI Variable Text, Segoe UI"
+                                         FontSize="12" IsChecked="{Binding ShowInstalledOnly, Mode=TwoWay}"
+                                         ToolTip="Solo lo que está instalado en este equipo y se puede jugar ya">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE768;" FontFamily="{StaticResource IconFont}" FontSize="10" VerticalAlignment="Center" Margin="0,0,5,0" />
+                                    <TextBlock Text="Listos" />
+                                    <TextBlock Text="{Binding InstalledCount}" Margin="5,0,0,0" Opacity="0.6" />
+                                </StackPanel>
+                            </RadioButton>
+                        </UniformGrid>
+                    </Border>
+
+                    <!-- Tipos y orden -->
+                    <Grid Margin="0,6,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="6" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <ToggleButton x:Name="TypesToggle" Grid.Row="0" Style="{StaticResource DropdownToggle}" ToolTip="Tipos de contenido que se muestran">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Left" Text="&#xE71C;" FontFamily="{StaticResource IconFont}" FontSize="11"
+                                           VerticalAlignment="Center" Margin="0,0,7,0" Foreground="{StaticResource MutedBrush}" />
+                                <TextBlock DockPanel.Dock="Right" Text="&#xE70D;" FontFamily="{StaticResource IconFont}" FontSize="9"
+                                           VerticalAlignment="Center" Margin="6,0,0,0" Foreground="{StaticResource MutedBrush}" />
+                                <TextBlock TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                                    <Run Text="Mostrar:" Foreground="{StaticResource MutedBrush}" />
+                                    <Run Text="{Binding TypeFilterSummary, Mode=OneWay}" />
+                                </TextBlock>
+                            </DockPanel>
+                        </ToggleButton>
+                        <Popup PlacementTarget="{Binding ElementName=TypesToggle}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
+                               IsOpen="{Binding IsChecked, ElementName=TypesToggle, Mode=TwoWay}">
+                            <Border Style="{StaticResource DropdownPanel}">
+                                <StackPanel>
+                                    <TextBlock Text="MOSTRAR" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,8" />
+                                    <CheckBox Content="{Binding GamesFilterLabel}" IsChecked="{Binding ShowGames, Mode=TwoWay}" Margin="0,0,0,6" />
+                                    <CheckBox Content="{Binding SoftwareFilterLabel}" IsChecked="{Binding ShowSoftware, Mode=TwoWay}" Margin="0,0,0,6" />
+                                    <CheckBox Content="{Binding ToolsFilterLabel}" IsChecked="{Binding ShowTools, Mode=TwoWay}"
+                                              ToolTip="Servidores dedicados, SDK y utilidades que Steam incluye en tu cuenta" />
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+
+                        <ToggleButton x:Name="SortToggle" Grid.Row="2" Style="{StaticResource DropdownToggle}" ToolTip="Orden de la biblioteca">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Left" Text="&#xE8CB;" FontFamily="{StaticResource IconFont}" FontSize="11"
+                                           VerticalAlignment="Center" Margin="0,0,7,0" Foreground="{StaticResource MutedBrush}" />
+                                <TextBlock DockPanel.Dock="Right" Text="&#xE70D;" FontFamily="{StaticResource IconFont}" FontSize="9"
+                                           VerticalAlignment="Center" Margin="6,0,0,0" Foreground="{StaticResource MutedBrush}" />
+                                <TextBlock TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                                    <Run Text="Ordenar:" Foreground="{StaticResource MutedBrush}" />
+                                    <Run Text="{Binding SortLabel, Mode=OneWay}" />
+                                </TextBlock>
+                            </DockPanel>
+                        </ToggleButton>
+                        <Popup PlacementTarget="{Binding ElementName=SortToggle}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
+                               IsOpen="{Binding IsChecked, ElementName=SortToggle, Mode=TwoWay}">
+                            <Border Style="{StaticResource DropdownPanel}">
+                                <StackPanel>
+                                    <TextBlock Text="ORDENAR POR" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,8" />
+                                    <RadioButton GroupName="LibrarySort" Content="Actividad reciente" IsChecked="{Binding SortByRecent, Mode=TwoWay}" Margin="0,0,0,6" />
+                                    <RadioButton GroupName="LibrarySort" Content="Alfabético (A-Z)" IsChecked="{Binding SortByName, Mode=TwoWay}" Margin="0,0,0,6" />
+                                    <RadioButton GroupName="LibrarySort" Content="Tiempo de juego" IsChecked="{Binding SortByPlaytime, Mode=TwoWay}" />
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+                    </Grid>
                 </StackPanel>
 
                 <ListBox x:Name="GameList" Style="{StaticResource SidebarList}" Margin="0,4,0,8"

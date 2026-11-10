@@ -42,6 +42,16 @@ public enum LibrarySortMode
 {
     Name,
     Playtime,
+    /// <summary>Actividad reciente: última sesión, de más reciente a más antigua.</summary>
+    Recent,
+}
+
+/// <summary>Tipo de contenido de la biblioteca (filtros «Juegos / Software / Herramientas»).</summary>
+public enum LibraryContentType
+{
+    Game,
+    Software,
+    Tool,
 }
 
 /// <summary>
@@ -137,7 +147,13 @@ public sealed class LauncherSettings
     /// <summary>Ancho de las portadas en la cuadrícula (px). El alto mantiene la proporción 2:3.</summary>
     public int CoverWidth { get; set; } = 160;
 
-    /// <summary>Orden de la lista lateral y de la cuadrícula: alfabético o por tiempo jugado.</summary>
+    /// <summary>Filtros por tipo: juegos (y demos), software y herramientas (servidores dedicados, SDK…).</summary>
+    public bool LibraryShowGames { get; set; } = true;
+    public bool LibraryShowSoftware { get; set; } = true;
+    /// <summary>Desactivado por defecto, como en Steam: la mayoría son servidores dedicados y SDK gratuitos.</summary>
+    public bool LibraryShowTools { get; set; }
+
+    /// <summary>Orden de la lista lateral y de la cuadrícula: actividad reciente, alfabético o tiempo jugado.</summary>
     public LibrarySortMode SortMode { get; set; } = LibrarySortMode.Name;
 
     /// <summary>

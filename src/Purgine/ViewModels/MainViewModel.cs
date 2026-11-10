@@ -248,6 +248,20 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         set { if (value) SetSortMode(LibrarySortMode.Name); }
     }
 
+    public bool SortByRecent
+    {
+        get => _settings.SortMode == LibrarySortMode.Recent;
+        set { if (value) SetSortMode(LibrarySortMode.Recent); }
+    }
+
+    /// <summary>Texto del botón de orden.</summary>
+    public string SortLabel => _settings.SortMode switch
+    {
+        LibrarySortMode.Recent => "Actividad reciente",
+        LibrarySortMode.Playtime => "Tiempo de juego",
+        _ => "Alfabético (A-Z)",
+    };
+
     public bool SortByPlaytime
     {
         get => _settings.SortMode == LibrarySortMode.Playtime;
@@ -260,6 +274,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         _settings.SortMode = mode;
         OnPropertyChanged(nameof(SortByName));
         OnPropertyChanged(nameof(SortByPlaytime));
+        OnPropertyChanged(nameof(SortByRecent));
+        OnPropertyChanged(nameof(SortLabel));
         ApplySort();
         _saveSettings.Request();
     }
@@ -271,6 +287,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             GamesView.SortDescriptions.Clear();
             if (_settings.SortMode == LibrarySortMode.Playtime)
                 GamesView.SortDescriptions.Add(new SortDescription(nameof(GameCardViewModel.TotalPlaytimeHours), ListSortDirection.Descending));
+            else if (_settings.SortMode == LibrarySortMode.Recent)
+                GamesView.SortDescriptions.Add(new SortDescription(nameof(GameCardViewModel.LastPlayedTicks), ListSortDirection.Descending));
             GamesView.SortDescriptions.Add(new SortDescription(nameof(GameCardViewModel.Name), ListSortDirection.Ascending));
         }
     }
@@ -318,8 +336,59 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         set { if (value) SetInstalledOnly(true); }
     }
 
-    public int InstalledCount => Games.Count(g => !g.IsNotInstalled);
-    public int AllCount => Games.Count;
+    /// <summary>Listos para jugar entre los tipos visibles.</summary>
+    public int InstalledCount => Games.Count(g => IsTypeShown(g.ContentType) && g.IsReadyToPlay);
+    /// <summary>Todo lo de los tipos visibles.</summary>
+    public int AllCount => Games.Count(g => IsTypeShown(g.ContentType));
+
+    // ----- Filtros por tipo (Juegos / Software / Herramientas) -----
+
+    private bool IsTypeShown(LibraryContentType type) => type switch
+    {
+        LibraryContentType.Software => _settings.LibraryShowSoftware,
+        LibraryContentType.Tool => _settings.LibraryShowTools,
+        _ => _settings.LibraryShowGames,
+    };
+
+    public bool ShowGames { get => _settings.LibraryShowGames; set => SetTypeFilter(() => _settings.LibraryShowGames = value); }
+    public bool ShowSoftware { get => _settings.LibraryShowSoftware; set => SetTypeFilter(() => _settings.LibraryShowSoftware = value); }
+    public bool ShowTools { get => _settings.LibraryShowTools; set => SetTypeFilter(() => _settings.LibraryShowTools = value); }
+
+    public string GamesFilterLabel => $"Juegos ({Games.Count(g => g.ContentType == LibraryContentType.Game)})";
+    public string SoftwareFilterLabel => $"Software ({Games.Count(g => g.ContentType == LibraryContentType.Software)})";
+    public string ToolsFilterLabel => $"Herramientas ({Games.Count(g => g.ContentType == LibraryContentType.Tool)})";
+
+    /// <summary>Resumen en el botón de filtros: «Juegos y software», «Todos los tipos»…</summary>
+    public string TypeFilterSummary
+    {
+        get
+        {
+            var on = new List<string>();
+            if (_settings.LibraryShowGames) on.Add("Juegos");
+            if (_settings.LibraryShowSoftware) on.Add("Software");
+            if (_settings.LibraryShowTools) on.Add("Herramientas");
+            return on.Count switch
+            {
+                0 => "Ningún tipo",
+                3 => "Todos los tipos",
+                1 => on[0],
+                _ => string.Join(" y ", on).ToLowerInvariant() is var s ? char.ToUpper(s[0]) + s[1..] : string.Empty,
+            };
+        }
+    }
+
+    private void SetTypeFilter(Action apply)
+    {
+        apply();
+        OnPropertyChanged(nameof(ShowGames));
+        OnPropertyChanged(nameof(ShowSoftware));
+        OnPropertyChanged(nameof(ShowTools));
+        OnPropertyChanged(nameof(TypeFilterSummary));
+        GamesView.Refresh();
+        RebuildTagFilters();
+        RaiseLibraryTexts();
+        _saveSettings.Request();
+    }
 
     private void SetInstalledOnly(bool installedOnly)
     {
@@ -360,8 +429,9 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     {
         get
         {
-            var installed = Games.Count(g => g.IsSteam && !g.IsNotInstalled);
-            var notInstalled = Games.Count(g => g.IsNotInstalled);
+            // Solo los tipos visibles (las herramientas ocultas no inflan «más en tu cuenta»).
+            var installed = Games.Count(g => g.IsSteam && !g.IsNotInstalled && IsTypeShown(g.ContentType));
+            var notInstalled = Games.Count(g => g.IsNotInstalled && IsTypeShown(g.ContentType));
             var local = Games.Count(g => g.IsLocal);
             var total = _tracker.GetGrandTotal();
             var count = $"{installed} instalados";
@@ -518,7 +588,24 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     private Task LoadIconAsync(GameCardViewModel card) =>
         card.LoadIconAsync(_art, card.IsSteam && uint.TryParse(card.Entry.AppId, out var id) ? _ownership.Find(id)?.Icon : null);
 
-    private GameCardViewModel CreateCard(GameEntry entry) => new(entry, _tracker, _library, this);
+    private GameCardViewModel CreateCard(GameEntry entry) => new(entry, _tracker, _library, this) { ContentType = TypeFor(entry) };
+
+    /// <summary>Tipo según Steam (red de Steam o appinfo.vdf local); por defecto, juego.</summary>
+    private LibraryContentType TypeFor(GameEntry entry)
+    {
+        if (entry.Platform != GamePlatform.Steam) return LibraryContentType.Game;
+        var type = uint.TryParse(entry.AppId, out var id) && _ownership.Find(id) is { } app ? app.Type
+                 : _appInfo.TryGetValue(entry.AppId, out var info) ? info.Type : "game";
+        return type switch
+        {
+            "application" => LibraryContentType.Software,
+            "tool" => LibraryContentType.Tool,
+            _ => LibraryContentType.Game,
+        };
+    }
+
+    /// <summary>Tipos de la cuenta que aparecen en la biblioteca (las demos cuentan como juegos, como en Steam).</summary>
+    private static bool IsLibraryType(string type) => type is "game" or "demo" or "application" or "tool";
 
     /// <summary>Añade como «no instalados» los juegos de la cuenta (según la red) que no están en disco.</summary>
     private void AddOwnedFromNetwork(IEnumerable<GameEntry> installed)
@@ -529,7 +616,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         {
             var id = app.AppId.ToString();
             owned.Add(id);
-            if (app.Type != "game" || installedIds.Contains(id) || Games.Any(g => g.Entry.Id == GameEntry.MakeSteamId(id))) continue;
+            if (!IsLibraryType(app.Type) || installedIds.Contains(id) || Games.Any(g => g.Entry.Id == GameEntry.MakeSteamId(id))) continue;
             Games.Add(CreateCard(_scanner.CreateNotInstalledEntry(id, app.Name, app.InstallDir)));
         }
         _owned = owned;
@@ -589,7 +676,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             var usage = await Task.Run(_scanner.ReadSteamPlaytime);
             _tracker.SetSteamPlaytime(usage);
             foreach (var g in Games) g.RefreshStats();
-            if (_settings.SortMode == LibrarySortMode.Playtime) GamesView.Refresh();
+            if (_settings.SortMode != LibrarySortMode.Name) GamesView.Refresh();
             RaiseLibraryTexts();
         }
         catch (Exception ex)
@@ -647,7 +734,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     private bool FilterGame(object o)
     {
         if (o is not GameCardViewModel g) return false;
-        if (_settings.LibraryInstalledOnly && g.IsNotInstalled && !g.HasActiveJob) return false;
+        if (!IsTypeShown(g.ContentType)) return false;
+        if (_settings.LibraryInstalledOnly && !g.IsReadyToPlay) return false;
         if (_searchText.Length > 0 && !g.Name.Contains(_searchText.Trim(), StringComparison.CurrentCultureIgnoreCase))
             return false;
         return _selectedTagFilter?.Tag is not { } tag || _library.HasTag(g.Entry.Id, tag);
@@ -702,7 +790,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         }
 
         foreach (var f in TagFilters)
-            f.Count = f.Tag is null ? Games.Count : Games.Count(g => _library.HasTag(g.Entry.Id, f.Tag));
+            f.Count = f.Tag is null ? Games.Count(g => IsTypeShown(g.ContentType))
+                : Games.Count(g => IsTypeShown(g.ContentType) && _library.HasTag(g.Entry.Id, f.Tag));
 
         var keep = TagFilters.FirstOrDefault(f => f.Tag == selected) ?? TagFilters[0];
         if (!ReferenceEquals(keep, _selectedTagFilter))
@@ -719,6 +808,9 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         OnPropertyChanged(nameof(EmptyStateText));
         OnPropertyChanged(nameof(InstalledCount));
         OnPropertyChanged(nameof(AllCount));
+        OnPropertyChanged(nameof(GamesFilterLabel));
+        OnPropertyChanged(nameof(SoftwareFilterLabel));
+        OnPropertyChanged(nameof(ToolsFilterLabel));
     }
 
     private void SetViewMode(LibraryViewMode mode)
