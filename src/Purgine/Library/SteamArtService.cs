@@ -63,6 +63,38 @@ public sealed partial class SteamArtService : IDisposable
     public Task<ImageSource?> LoadLogoAsync(string appId, int decodeWidth, CancellationToken ct = default) =>
         LoadLibraryAssetAsync(appId, "logo.png", decodeWidth, ct);
 
+    /// <summary>Cápsula horizontal de la tienda (header, 460x215 en origen): mini-banner del diálogo de instalar.</summary>
+    public Task<ImageSource?> LoadHeaderAsync(string appId, int decodeWidth, CancellationToken ct = default) =>
+        LoadLibraryAssetAsync(appId, "header.jpg", decodeWidth, ct);
+
+    /// <summary>
+    /// Archivo .ico del juego para accesos directos: el que guarda el cliente de Steam
+    /// (<c>steam\games\{hash}.ico</c>) o, si no está, descargado una vez de la CDN a la caché propia.
+    /// </summary>
+    public async Task<string?> GetClientIconFileAsync(string appId, string? clientIconHash, CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(clientIconHash)) return null;
+        if (_locator.SteamPath is { } steam)
+        {
+            var local = Path.Combine(steam, "steam", "games", clientIconHash + ".ico");
+            if (File.Exists(local)) return local;
+        }
+        var cached = Path.Combine(_cacheDir, SanitizeFileName($"{appId}_{clientIconHash}.ico"));
+        if (File.Exists(cached)) return cached;
+        try
+        {
+            using var response = await _http.Value.GetAsync($"{CommunityImages}/{appId}/{clientIconHash}.ico", ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode) return null;
+            Directory.CreateDirectory(_cacheDir);
+            await File.WriteAllBytesAsync(cached, await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false), ct).ConfigureAwait(false);
+            return cached;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Imagen remota arbitraria (iconos de logros), con caché en disco por nombre de archivo.</summary>
     public Task<ImageSource?> LoadRemoteAsync(string url, string cacheName, int decodeWidth, CancellationToken ct = default) =>
         Task.Run(() => FromCacheOrCdnAsync(cacheName, url, decodeWidth, ct), ct);

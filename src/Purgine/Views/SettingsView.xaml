@@ -35,24 +35,18 @@
                     <TextBlock Text="Calidad gráfica" Style="{StaticResource SectionTitle}" />
                     <RadioButton GroupName="Graphics" IsChecked="{Binding GraphicsLow, Mode=TwoWay}">
                         <StackPanel>
-                            <TextBlock Text="Bajo — rendimiento mínimo" />
-                            <TextBlock Style="{StaticResource MutedText}" Text="Estilo plano: sin sombras, degradados, desenfoque ni animaciones. El menor uso de CPU, GPU y memoria." />
-                        </StackPanel>
-                    </RadioButton>
-                    <RadioButton GroupName="Graphics" IsChecked="{Binding GraphicsMedium, Mode=TwoWay}">
-                        <StackPanel>
-                            <TextBlock Text="Medio — equilibrado (recomendado)" />
-                            <TextBlock Style="{StaticResource MutedText}" Text="Esquinas redondeadas, bordes sutiles y degradado en la imagen del juego para leer mejor el texto." />
+                            <TextBlock Text="Rendimiento" />
+                            <TextBlock Style="{StaticResource MutedText}" Text="Estilo plano y minimalista: cero animaciones, cero sombras y cero transparencias. El menor uso de CPU, GPU y memoria." />
                         </StackPanel>
                     </RadioButton>
                     <RadioButton GroupName="Graphics" IsChecked="{Binding GraphicsHigh, Mode=TwoWay}">
                         <StackPanel>
-                            <TextBlock Text="Alto — máxima calidad" />
-                            <TextBlock Style="{StaticResource MutedText}" Text="Sombras, animaciones al pasar el cursor y al cambiar de vista, botón con brillo, y barra lateral y cabecera translúcidas con desenfoque (Windows 11)." />
+                            <TextBlock Text="Ultra-moderno" />
+                            <TextBlock Style="{StaticResource MutedText}" Text="Paneles flotantes translúcidos con desenfoque acrílico, bordes que se iluminan, brillo con el color del juego seleccionado, portadas que se amplían al pasar el cursor y transiciones suaves." />
                         </StackPanel>
                     </RadioButton>
                     <TextBlock Style="{StaticResource MutedText}" Margin="0,8,0,0"
-                               Text="Se aplica al instante. Con Purgine en la bandeja ninguno de los perfiles consume recursos de dibujo." />
+                               Text="Se aplica al instante. Con Purgine en la bandeja ninguno de los dos consume recursos de dibujo." />
                 </StackPanel>
             </Border>
 

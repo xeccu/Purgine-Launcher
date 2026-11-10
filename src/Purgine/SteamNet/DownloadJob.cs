@@ -47,6 +47,12 @@ public sealed class DownloadJob
         InstallDirName = installDirName;
     }
 
+    /// <summary>Al terminar una instalación: acceso directo en el escritorio (elegido en el diálogo de instalar).</summary>
+    public bool CreateDesktopShortcut { get; set; }
+
+    /// <summary>Al terminar una instalación: acceso directo en el menú Inicio.</summary>
+    public bool CreateStartMenuShortcut { get; set; }
+
     public uint AppId { get; }
     public string Name { get; }
     public DownloadJobKind Kind { get; }

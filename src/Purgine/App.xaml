@@ -300,13 +300,20 @@
 
         <!-- Tarjeta de sección (ajustes, ficha de tienda) -->
         <Style x:Key="Panel" TargetType="Border">
-            <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}" />
             <!-- Forma y borde según el perfil gráfico (Infrastructure/GraphicsTheme) -->
             <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}" />
             <Setter Property="BorderThickness" Value="{DynamicResource PanelBorderThickness}" />
             <Setter Property="CornerRadius" Value="{DynamicResource PanelCornerRadius}" />
             <Setter Property="Padding" Value="20,16" />
             <Setter Property="Margin" Value="0,0,0,14" />
+            <!-- Borde reactivo: se ilumina al pasar el cursor (solo Ultra-moderno; en Rendimiento es transparente) -->
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="{DynamicResource PanelHoverBorderBrush}" />
+                    <Setter Property="Effect" Value="{DynamicResource PanelHoverEffect}" />
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <!-- ===== Scrollbar fina ===== -->

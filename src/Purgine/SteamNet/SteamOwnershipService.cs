@@ -20,6 +20,8 @@ public sealed class OwnedApp
     /// (Windows, 64 bits, idioma, DLC propios). 0 si Steam no publica tamaños para esta app.
     /// </summary>
     public ulong InstallSize { get; set; }
+    /// <summary>Hash del icono .ico del juego (PICS common/clienticon), para los accesos directos.</summary>
+    public string? ClientIcon { get; set; }
 }
 
 /// <summary>Contenido de <c>owned-games.json</c> (caché para arrancar sin red).</summary>
@@ -102,6 +104,7 @@ public sealed class SteamOwnershipService
                     InstallDir = kv["config"]["installdir"].Value,
                     PublicBuildId = kv["depots"]["branches"]["public"]["buildid"].AsUnsignedInteger(),
                     Icon = common["icon"].Value,
+                    ClientIcon = common["clienticon"].Value,
                     InstallSize = SumSizes(DepotSelector.Select(kv["depots"], language, ownedIds.Contains)),
                 });
             }

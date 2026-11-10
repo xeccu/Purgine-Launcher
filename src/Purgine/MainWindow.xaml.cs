@@ -63,9 +63,9 @@ public partial class MainWindow : Window, IDialogService
         };
     }
 
-    /// <summary>Perfil Alto: material Mica detrás de la barra lateral y la cabecera (translúcidas).</summary>
+    /// <summary>Ultra-moderno: material acrílico detrás de los paneles translúcidos.</summary>
     private void ApplyBackdrop(Settings.GraphicsPreset preset) =>
-        WindowTheming.SetMica(this, preset == Settings.GraphicsPreset.High, (Brush)FindResource("BgBrush"));
+        WindowTheming.SetAcrylic(this, preset != Settings.GraphicsPreset.Low, (Brush)FindResource("BgBrush"));
 
     // =====================================================================================
     // Bandeja del sistema

@@ -76,8 +76,7 @@ public sealed class SettingsViewModel : ObservableObject
     // ===================== Calidad gráfica =====================
 
     public bool GraphicsLow { get => _s.GraphicsPreset == GraphicsPreset.Low; set { if (value) SetGraphics(GraphicsPreset.Low); } }
-    public bool GraphicsMedium { get => _s.GraphicsPreset == GraphicsPreset.Medium; set { if (value) SetGraphics(GraphicsPreset.Medium); } }
-    public bool GraphicsHigh { get => _s.GraphicsPreset == GraphicsPreset.High; set { if (value) SetGraphics(GraphicsPreset.High); } }
+    public bool GraphicsHigh { get => _s.GraphicsPreset != GraphicsPreset.Low; set { if (value) SetGraphics(GraphicsPreset.High); } }
 
     /// <summary>Aplica el perfil al instante (recursos dinámicos) y lo guarda.</summary>
     private void SetGraphics(GraphicsPreset preset)
@@ -86,7 +85,6 @@ public sealed class SettingsViewModel : ObservableObject
         _s.GraphicsPreset = preset;
         Infrastructure.GraphicsTheme.Apply(preset);
         OnPropertyChanged(nameof(GraphicsLow));
-        OnPropertyChanged(nameof(GraphicsMedium));
         OnPropertyChanged(nameof(GraphicsHigh));
         Saved();
     }

@@ -476,6 +476,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
 
             _watcher.Watch(snapshot.LibraryFolders);
             StatusText = Games.Count > 0 ? "Listo. Haz clic en un juego para jugar, o en uno no instalado para instalarlo." : "Sin juegos.";
+            if (_pendingLaunch is { } pending) _ = Application.Current.Dispatcher.BeginInvoke(() => RequestLaunch(pending));
         }
         catch (Exception ex)
         {
@@ -813,6 +814,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
                 Notify(job.Kind == DownloadJobKind.Update ? "Actualización completada" : "Instalación completada",
                     $"{job.Name} está listo para jugar.");
                 if (_scanner.FindGame(job.AppId.ToString()) is { } entry) UpsertGame(entry);
+                if (job.Kind == DownloadJobKind.Install) _ = CreateShortcutsAsync(job);
                 break;
             case DownloadJobState.Failed:
                 StatusText = $"{job.Name}: {job.Message}";
@@ -867,13 +869,117 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         if (entry.Platform != GamePlatform.Steam) return;
         if (!await EnsureSteamAccountAsync()) return;
 
-        var job = _downloads.Enqueue(entry, kind);
+        DownloadJob job;
+        if (kind == DownloadJobKind.Install && _downloads.Find(uint.Parse(entry.AppId)) is null)
+        {
+            // Antes de una instalación nueva: accesos directos y unidad de destino (como en el cliente de Steam).
+            var choice = await AskInstallOptionsAsync(entry);
+            if (choice is null)
+            {
+                StatusText = $"Instalación de {entry.Name} cancelada.";
+                return;
+            }
+            job = _downloads.Enqueue(entry, kind, choice.LibraryPath, choice.CreateDesktopShortcut, choice.CreateStartMenuShortcut);
+        }
+        else
+        {
+            job = _downloads.Enqueue(entry, kind);
+        }
         StatusText = kind == DownloadJobKind.Install
             ? $"{entry.Name} en la cola de descargas (directo desde la CDN de Steam)."
             : $"Actualizando {entry.Name} (solo se descargará lo que ha cambiado).";
         SyncDownloads();
         CurrentView = AppView.Downloads;
         _ = job;
+    }
+
+    // ----- Diálogo de instalar (superposición dentro de la ventana) -----
+
+    private InstallDialogViewModel? _installDialog;
+
+    /// <summary>Diálogo de instalar abierto (null = cerrado).</summary>
+    public InstallDialogViewModel? InstallDialog
+    {
+        get => _installDialog;
+        private set
+        {
+            if (!SetProperty(ref _installDialog, value)) return;
+            Store.IsCovered = value is not null; // el navegador (HWND) se dibujaría encima del diálogo
+        }
+    }
+
+    private async Task<InstallChoice?> AskInstallOptionsAsync(GameEntry entry)
+    {
+        if (_installDialog is not null) return null; // ya hay uno abierto
+        uint.TryParse(entry.AppId, out var appId);
+        var size = _ownership.Find(appId)?.InstallSize ?? 0;
+
+        var libraries = _downloads.Libraries;
+        var defaultRoot = _downloads.InstallTarget() is { } target ? Path.GetPathRoot(target.Library) : null;
+        var drives = new List<DriveOptionViewModel>();
+        foreach (var drive in DriveInfo.GetDrives())
+        {
+            try
+            {
+                if (drive.DriveType != DriveType.Fixed || !drive.IsReady) continue;
+                var root = drive.RootDirectory.FullName;
+                var library = LibraryFolders.ForDrive(libraries, root);
+                var isNew = !libraries.Any(l => string.Equals(l, library, StringComparison.OrdinalIgnoreCase));
+                var label = string.IsNullOrWhiteSpace(drive.VolumeLabel) ? "Unidad local" : drive.VolumeLabel;
+                drives.Add(new DriveOptionViewModel(root, $"{label} ({root.TrimEnd('\\')})", drive.AvailableFreeSpace, library,
+                    string.Equals(root, defaultRoot, StringComparison.OrdinalIgnoreCase), isNew, size));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // unidad que deja de responder: se omite
+            }
+        }
+
+        var dialog = new InstallDialogViewModel(entry.Name, size, drives);
+        InstallDialog = dialog;
+        _ = LoadBannerAsync(dialog, entry.AppId);
+        try
+        {
+            return await dialog.Result;
+        }
+        finally
+        {
+            InstallDialog = null;
+        }
+    }
+
+    private async Task LoadBannerAsync(InstallDialogViewModel dialog, string appId)
+    {
+        dialog.Banner = await _art.LoadHeaderAsync(appId, 240)
+                        ?? Games.FirstOrDefault(g => g.IsSteam && g.Entry.AppId == appId)?.Cover;
+    }
+
+    /// <summary>Instalación terminada: accesos directos elegidos en el diálogo (a Purgine, no a steam://).</summary>
+    private async Task CreateShortcutsAsync(DownloadJob job)
+    {
+        if (!job.CreateDesktopShortcut && !job.CreateStartMenuShortcut) return;
+        var icon = await _art.GetClientIconFileAsync(job.AppId.ToString(), _ownership.Find(job.AppId)?.ClientIcon);
+        var appId = job.AppId.ToString();
+        await Task.Run(() =>
+        {
+            if (job.CreateDesktopShortcut) ShortcutWriter.CreateGameShortcut(ShortcutWriter.DesktopFolder, job.Name, appId, icon);
+            if (job.CreateStartMenuShortcut) ShortcutWriter.CreateGameShortcut(ShortcutWriter.StartMenuFolder, job.Name, appId, icon);
+        });
+    }
+
+    // ----- Lanzamiento desde un acceso directo (Purgine.exe --run {appid}) -----
+
+    private string? _pendingLaunch;
+
+    /// <summary>Jugar a un juego pedido desde fuera (acceso directo). Si la biblioteca aún carga, se aplaza.</summary>
+    public void RequestLaunch(string appId)
+    {
+        if (IsScanning || Games.Count == 0) { _pendingLaunch = appId; return; }
+        _pendingLaunch = null;
+        var card = Games.FirstOrDefault(g => g.IsSteam && g.Entry.AppId == appId);
+        if (card is null) { StatusText = $"El juego {appId} no está en tu biblioteca."; return; }
+        if (card.IsNotInstalled) { ShowDetails(card); return; }
+        Launch(card);
     }
 
     public void CancelInstall(GameCardViewModel card)

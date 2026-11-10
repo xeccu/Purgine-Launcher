@@ -26,9 +26,16 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        var runAppId = ParseRunArgument(e.Args);
         _singleInstance = new Mutex(initiallyOwned: true, MutexName, out var isFirst);
         if (!isFirst)
         {
+            // Acceso directo de un juego con Purgine ya abierto: se le pasa la petición.
+            if (runAppId is not null)
+            {
+                try { File.WriteAllText(AppPaths.LaunchRequestFile, runAppId); }
+                catch (Exception) { /* sin petición, al menos se muestra la ventana */ }
+            }
             // Ya hay una instancia (quizá oculta en la bandeja): le pedimos que se muestre y salimos.
             try
             {
@@ -86,7 +93,33 @@ public partial class App : Application
         // Segunda instancia → mostrar esta ventana.
         _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
         _showWait = ThreadPool.RegisterWaitForSingleObject(_showEvent,
-            (_, _) => Dispatcher.BeginInvoke(window.RestoreFromTray), null, Timeout.Infinite, executeOnlyOnce: false);
+            (_, _) => Dispatcher.BeginInvoke(() =>
+            {
+                if (TakeLaunchRequest() is { } appId) viewModel.RequestLaunch(appId);
+                else window.RestoreFromTray();
+            }), null, Timeout.Infinite, executeOnlyOnce: false);
+        if (runAppId is not null) viewModel.RequestLaunch(runAppId);
+    }
+
+    /// <summary><c>--run 440</c> → "440" (accesos directos creados al instalar).</summary>
+    private static string? ParseRunArgument(string[] args)
+    {
+        for (var i = 0; i < args.Length - 1; i++)
+            if (args[i].Equals("--run", StringComparison.OrdinalIgnoreCase) && uint.TryParse(args[i + 1], out var id))
+                return id.ToString();
+        return null;
+    }
+
+    private static string? TakeLaunchRequest()
+    {
+        try
+        {
+            if (!File.Exists(AppPaths.LaunchRequestFile)) return null;
+            var text = File.ReadAllText(AppPaths.LaunchRequestFile).Trim();
+            File.Delete(AppPaths.LaunchRequestFile);
+            return uint.TryParse(text, out var id) ? id.ToString() : null;
+        }
+        catch (Exception) { return null; }
     }
 
     protected override void OnExit(ExitEventArgs e)

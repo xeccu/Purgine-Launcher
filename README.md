@@ -147,16 +147,30 @@ Organizada como la biblioteca de un cliente de escritorio:
 
 ### 7. Calidad gráfica (`Infrastructure/GraphicsTheme.cs`, `Infrastructure/Fx.cs`)
 
-Tres perfiles en Ajustes → «Calidad gráfica», aplicados al instante (recursos dinámicos, sin reiniciar):
+Dos perfiles en Ajustes → «Calidad gráfica», aplicados al instante (recursos dinámicos, sin reiniciar):
 
 | Perfil | Qué incluye |
 |---|---|
-| **Bajo** | Plano: sin sombras, degradados, desenfoque ni animaciones. |
-| **Medio** (por defecto) | Esquinas redondeadas, bordes sutiles (`#2A2E3D`) y degradado en la imagen panorámica. |
-| **Alto** | Lo anterior + sombras en portadas y en la barra de acción flotante, botón JUGAR/INSTALAR con degradado (`#1A9FFF` → `#1072BA`) y brillo al pasar el cursor, elevación y zoom de portadas al pasar el cursor, transiciones de entrada entre vistas, y barra lateral/cabecera translúcidas sobre el material **Mica** de Windows 11 (desenfoque del fondo; en Windows 10 quedan opacas). |
+| **Rendimiento** | Plano y minimalista: cero animaciones, cero sombras y cero transparencias. |
+| **Ultra-moderno** (por defecto) | Material acrílico de Windows 11 detrás de la ventana con paneles flotantes translúcidos (`#141721`), bordes que se iluminan al pasar el cursor, esquinas redondeadas, sombras en portadas, barra de acción flotante con **brillo del color dominante del juego** seleccionado, botón JUGAR/INSTALAR con degradado (`#1A9FFF` → `#1072BA`) y brillo, portadas que se amplían con curva `CubicEase`, fundido cruzado de la imagen panorámica al cambiar de juego y transiciones de entrada entre vistas. En Windows 10 los paneles quedan sobre fondo opaco. |
 
-Las animaciones solo se crean en Alto y se retiran al terminar; con Purgine en la bandeja no se dibuja nada
-en ningún perfil.
+Las animaciones solo se crean en Ultra-moderno y se retiran al terminar; con Purgine en la bandeja no se
+dibuja nada en ningún perfil. Quien tuviera guardado el antiguo perfil «Medio» pasa a Ultra-moderno.
+
+### 8. Diálogo de instalar
+
+Al pulsar **INSTALAR** (biblioteca, ficha o botones de la tienda web) se abre un diálogo dentro de la propia
+ventana, como el del cliente de Steam: mini-banner, nombre y tamaño del juego, casillas de **acceso directo
+en el escritorio** y **en el menú Inicio** (marcadas por defecto) y la lista de unidades con su **espacio
+libre**, con la de la biblioteca con más espacio preseleccionada (★). Las unidades sin espacio suficiente se
+marcan y no se pueden elegir.
+
+- Si la unidad elegida no tiene biblioteca de Steam, se crea `X:\SteamLibrary` y se registra en
+  `steamapps\libraryfolders.vdf` (con copia de seguridad `libraryfolders.vdf.purgine.bak`) al registrar el
+  juego, para que el cliente oficial lo vea.
+- Los accesos directos apuntan a `Purgine.exe --run {appid}` (no a `steam://`), así la partida pasa por
+  Purgine: Steam se abre solo para jugar y se cierra al terminar. Usan el icono del juego. Si Purgine ya está
+  abierto, la petición se le pasa a esa instancia.
 
 ### Otras funciones
 
@@ -189,7 +203,7 @@ Todo en `%LocalAppData%\Purgine\` (botón «Abrir carpeta de datos» en Ajustes)
 |---|---|
 | `steam-session.bin` | Refresh token de Steam cifrado con DPAPI (nunca la contraseña) |
 | `owned-games.json` | Juegos de la cuenta según Steam (caché) |
-| `download-queue.json` | Cola de descargas pendientes |
+| `download-queue.json` | Cola de descargas pendientes (con la unidad y los accesos directos elegidos) |
 | `settings.json` · `library.json` · `playtime.json` | Ajustes, etiquetas/ejecutables locales, tiempo jugado |
 | `art\` | Iconos, imágenes panorámicas, logos e iconos de logros que no estaban en la caché de Steam |
 | `webview\` | Perfil del navegador de la Tienda (cookies y sesión web de Steam, caché) |

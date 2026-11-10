@@ -14,6 +14,8 @@ public sealed class QueuedDownload
     public string? InstallDirName { get; set; }
     /// <summary>Descarga terminada pendiente de registrar en Steam (ruta del resultado serializable no hace falta: se rehace la verificación).</summary>
     public bool AwaitingSteamRegistration { get; set; }
+    public bool CreateDesktopShortcut { get; set; }
+    public bool CreateStartMenuShortcut { get; set; }
 }
 
 /// <summary>
@@ -58,7 +60,11 @@ public sealed class SteamDownloadManager : IDisposable
         // La cola de la sesión anterior vuelve en pausa: el usuario decide cuándo seguir.
         foreach (var q in JsonFileStore.Load<List<QueuedDownload>>(queuePath))
         {
-            var job = Track(new DownloadJob(q.AppId, q.Name, q.Kind, q.LibraryPath, q.InstallDirName));
+            var job = Track(new DownloadJob(q.AppId, q.Name, q.Kind, q.LibraryPath, q.InstallDirName)
+            {
+                CreateDesktopShortcut = q.CreateDesktopShortcut,
+                CreateStartMenuShortcut = q.CreateStartMenuShortcut,
+            });
             job.SetState(DownloadJobState.Paused, "En pausa (de la sesión anterior)");
         }
 
@@ -78,8 +84,13 @@ public sealed class SteamDownloadManager : IDisposable
     // Acciones
     // =====================================================================================
 
-    /// <summary>Añade una instalación o actualización a la cola (o devuelve la que ya existe).</summary>
-    public DownloadJob Enqueue(GameEntry game, DownloadJobKind kind)
+    /// <summary>
+    /// Añade una instalación o actualización a la cola (o devuelve la que ya existe). <paramref name="libraryPath"/>:
+    /// biblioteca elegida en el diálogo de instalar (si es nueva se crea y se registra en Steam al terminar);
+    /// null = la de más espacio libre.
+    /// </summary>
+    public DownloadJob Enqueue(GameEntry game, DownloadJobKind kind, string? libraryPath = null,
+        bool desktopShortcut = false, bool startMenuShortcut = false)
     {
         var appId = uint.Parse(game.AppId);
         lock (_gate)
@@ -91,9 +102,14 @@ public sealed class SteamDownloadManager : IDisposable
             }
         }
 
-        var library = kind == DownloadJobKind.Update && game.LibraryPath is { } lib ? lib : ChooseLibrary();
+        var library = kind == DownloadJobKind.Update && game.LibraryPath is { } lib ? lib : libraryPath ?? ChooseLibrary();
+        if (kind == DownloadJobKind.Install) Directory.CreateDirectory(Path.Combine(library, "steamapps", "common"));
         var installDir = game.InstallDirName ?? (game.InstallDir is { } dir ? Path.GetFileName(dir) : _ownership.Find(appId)?.InstallDir);
-        var job = Track(new DownloadJob(appId, game.Name, kind, library, installDir));
+        var job = Track(new DownloadJob(appId, game.Name, kind, library, installDir)
+        {
+            CreateDesktopShortcut = desktopShortcut,
+            CreateStartMenuShortcut = startMenuShortcut,
+        });
         Persist();
         _wake.Release();
         return job;
@@ -254,6 +270,7 @@ public sealed class SteamDownloadManager : IDisposable
         {
             try
             {
+                LibraryFolders.EnsureRegistered(_steam.SteamPath!, result.LibraryPath);
                 AppManifestWriter.Write(_steam.SteamPath!, job.AppId, job.Name, result, OwnerSteamId());
                 if (steamRunning)
                     lock (_gate) _rewriteWhenSteamCloses[job.AppId] = (job.Name, result);
@@ -296,7 +313,11 @@ public sealed class SteamDownloadManager : IDisposable
         }
         foreach (var (appId, (name, result)) in items)
         {
-            try { AppManifestWriter.Write(_steam.SteamPath!, appId, name, result, OwnerSteamId()); }
+            try
+            {
+                LibraryFolders.EnsureRegistered(_steam.SteamPath!, result.LibraryPath); // Steam pudo reescribirlo al cerrarse
+                AppManifestWriter.Write(_steam.SteamPath!, appId, name, result, OwnerSteamId());
+            }
             catch (Exception ex) { Log.Warn($"No se pudo volver a registrar {name}: {ex.Message}"); }
         }
         TryRegisterPending();
@@ -344,6 +365,8 @@ public sealed class SteamDownloadManager : IDisposable
                 LibraryPath = j.LibraryPath,
                 InstallDirName = j.InstallDirName,
                 AwaitingSteamRegistration = _awaitingSteam.ContainsKey(j),
+                CreateDesktopShortcut = j.CreateDesktopShortcut,
+                CreateStartMenuShortcut = j.CreateStartMenuShortcut,
             }).ToList();
         }
         JsonFileStore.Save(_queuePath, items);
@@ -359,6 +382,9 @@ public sealed class SteamDownloadManager : IDisposable
         }
         catch (InvalidOperationException) { return null; }
     }
+
+    /// <summary>Bibliotecas de Steam existentes (para elegir unidad en el diálogo de instalar).</summary>
+    public IReadOnlyList<string> Libraries => _scanner.GetLibraryFolders();
 
     /// <summary>La biblioteca de Steam con más espacio libre.</summary>
     private string ChooseLibrary() =>

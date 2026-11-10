@@ -29,11 +29,11 @@ public enum LibraryViewMode
 /// <summary>Perfil gráfico de la interfaz (ver <c>Infrastructure/GraphicsTheme</c>).</summary>
 public enum GraphicsPreset
 {
-    /// <summary>Plano: sin sombras, degradados, desenfoque ni animaciones.</summary>
+    /// <summary>Rendimiento: plano, sin animaciones, sombras ni transparencias.</summary>
     Low,
-    /// <summary>Equilibrado: esquinas redondeadas, bordes sutiles y degradados.</summary>
+    /// <summary>Solo para leer ajustes antiguos: se migra a <see cref="High"/> (ya no se ofrece).</summary>
     Medium,
-    /// <summary>Máxima calidad: sombras, animaciones, translucidez con desenfoque (Mica) y brillo.</summary>
+    /// <summary>Ultra-moderno: paneles translúcidos (acrílico), sombras, brillos y animaciones.</summary>
     High,
 }
 
@@ -54,7 +54,7 @@ public sealed class LauncherSettings
     public const int MaxCoverWidth = 240;
 
     /// <summary>Versión del esquema de ajustes (para migrar valores por defecto antiguos).</summary>
-    public const int CurrentVersion = 3;
+    public const int CurrentVersion = 4;
 
     public const string DefaultSteamArguments = "-silent -nofriendsui -nochatui -minimized -vgui -fulldesktopres 0";
     public const string LegacySteamArguments = "-silent -nofriendsui -nochatui";
@@ -124,7 +124,7 @@ public sealed class LauncherSettings
     public bool ShowNotifications { get; set; } = true;
 
     /// <summary>Perfil gráfico (Bajo / Medio / Alto). Se aplica al instante.</summary>
-    public GraphicsPreset GraphicsPreset { get; set; } = GraphicsPreset.Medium;
+    public GraphicsPreset GraphicsPreset { get; set; } = GraphicsPreset.High;
 
     /// <summary>Render por software: evita cargar el pipeline D3D en el proceso. Requiere reiniciar.</summary>
     public bool UseSoftwareRendering { get; set; }
@@ -157,6 +157,9 @@ public sealed class LauncherSettings
         {
             SteamClientArguments = DefaultSteamArguments;
         }
+
+        // v4: el perfil «Medio» desaparece; quien lo tenía pasa a Ultra-moderno (sustituye a Medio y Alto).
+        if (GraphicsPreset == GraphicsPreset.Medium) GraphicsPreset = GraphicsPreset.High;
 
         SettingsVersion = CurrentVersion;
         return true;

@@ -92,12 +92,18 @@
             <Grid Visibility="{Binding IsStoreView, Converter={StaticResource BoolToVis}}" infra:Fx.FadeIn="True">
                 <views:StoreView DataContext="{Binding Store}" />
             </Grid>
-            <Grid Visibility="{Binding IsDownloadsView, Converter={StaticResource BoolToVis}}" Background="{StaticResource BgBrush}" infra:Fx.FadeIn="True">
+            <Grid Visibility="{Binding IsDownloadsView, Converter={StaticResource BoolToVis}}" Background="{DynamicResource ContentBrush}" infra:Fx.FadeIn="True">
                 <views:DownloadsView DataContext="{Binding Downloads}" />
             </Grid>
-            <Grid Visibility="{Binding IsSettingsView, Converter={StaticResource BoolToVis}}" Background="{StaticResource BgBrush}" infra:Fx.FadeIn="True">
+            <Grid Visibility="{Binding IsSettingsView, Converter={StaticResource BoolToVis}}" Background="{DynamicResource ContentBrush}" infra:Fx.FadeIn="True">
                 <views:SettingsView DataContext="{Binding Settings}" />
             </Grid>
+        </Grid>
+
+        <!-- ===== Diálogo de instalar (superposición, sin ventanas externas) ===== -->
+        <Grid Grid.Row="0" Grid.RowSpan="4" Panel.ZIndex="100"
+              Visibility="{Binding InstallDialog, Converter={StaticResource NullToVis}}">
+            <views:InstallDialogView DataContext="{Binding InstallDialog}" />
         </Grid>
 
         <!-- ===== Barra de estado ===== -->

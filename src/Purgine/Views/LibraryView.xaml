@@ -350,7 +350,7 @@
         <!-- =================================================================================== -->
         <!-- Inicio: cuadrícula / lista                                                          -->
         <!-- =================================================================================== -->
-        <Grid Grid.Column="2" Background="{StaticResource BgBrush}" infra:Fx.FadeIn="True"
+        <Grid Grid.Column="2" Background="{DynamicResource ContentBrush}" infra:Fx.FadeIn="True"
               Visibility="{Binding IsHomeVisible, Converter={StaticResource BoolToVis}}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -473,7 +473,7 @@
         <!-- =================================================================================== -->
         <!-- Ficha del juego                                                                     -->
         <!-- =================================================================================== -->
-        <Grid Grid.Column="2" Visibility="{Binding Detail, Converter={StaticResource NullToVis}}">
+        <Grid Grid.Column="2" Visibility="{Binding Detail, Converter={StaticResource NullToVis}}" infra:Fx.FadeIn="True">
             <views:GameDetailView DataContext="{Binding Detail}" />
         </Grid>
     </Grid>

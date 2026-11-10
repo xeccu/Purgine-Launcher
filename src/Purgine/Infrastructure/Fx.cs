@@ -5,20 +5,20 @@ using System.Windows.Media.Animation;
 namespace Purgine.Infrastructure;
 
 /// <summary>
-/// Animaciones opcionales (solo con el perfil gráfico Alto, ver <see cref="GraphicsTheme"/>):
+/// Animaciones opcionales (solo con el perfil gráfico Ultra-moderno, ver <see cref="GraphicsTheme"/>):
 /// <list type="bullet">
 ///   <item><c>Fx.HoverLift="True"</c>: al pasar el cursor, el elemento se eleva y amplía ligeramente.</item>
 ///   <item><c>Fx.FadeIn="True"</c>: al mostrarse (o cambiar de contenido), entra con un fundido y un leve
 ///         desplazamiento vertical.</item>
 /// </list>
-/// Con los perfiles Bajo y Medio no se crea ninguna animación ni transformación: coste cero.
+/// Con el perfil Rendimiento no se crea ninguna animación ni transformación: coste cero.
 /// Al terminar, cada animación se retira para no dejar relojes vivos.
 /// </summary>
 public static class Fx
 {
-    private static readonly Duration HoverDuration = TimeSpan.FromMilliseconds(170);
+    private static readonly Duration HoverDuration = TimeSpan.FromMilliseconds(200);
     private static readonly Duration EnterDuration = TimeSpan.FromMilliseconds(220);
-    private static readonly IEasingFunction Ease = Freeze(new QuadraticEase { EasingMode = EasingMode.EaseOut });
+    private static readonly IEasingFunction Ease = Freeze(new CubicEase { EasingMode = EasingMode.EaseOut });
 
     // =====================================================================================
     // HoverLift
@@ -46,8 +46,8 @@ public static class Fx
     {
         if (!GraphicsTheme.AnimationsEnabled || sender is not FrameworkElement el) return;
         var (scale, move) = LiftTransforms(el);
-        Animate(scale, ScaleTransform.ScaleXProperty, 1.04, HoverDuration);
-        Animate(scale, ScaleTransform.ScaleYProperty, 1.04, HoverDuration);
+        Animate(scale, ScaleTransform.ScaleXProperty, 1.06, HoverDuration);
+        Animate(scale, ScaleTransform.ScaleYProperty, 1.06, HoverDuration);
         Animate(move, TranslateTransform.YProperty, -5, HoverDuration);
     }
 

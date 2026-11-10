@@ -22,6 +22,18 @@ public sealed class StoreViewModel : ObservableObject
         set => SetProperty(ref _isActive, value);
     }
 
+    private bool _isCovered;
+
+    /// <summary>
+    /// Hay un diálogo encima (instalar): el navegador es una ventana nativa y se dibujaría sobre él, así que la
+    /// vista lo oculta mientras tanto.
+    /// </summary>
+    public bool IsCovered
+    {
+        get => _isCovered;
+        set => SetProperty(ref _isCovered, value);
+    }
+
     /// <summary>La vista debe navegar a esta URL (si el navegador aún no existe, la recoge al crearlo).</summary>
     public event Action<string>? NavigationRequested;
 

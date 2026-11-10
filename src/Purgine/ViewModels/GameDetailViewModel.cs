@@ -1,6 +1,9 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
+using System.Windows.Media.Imaging;
+using Purgine.Infrastructure;
 using Purgine.Library;
 using Purgine.SteamNet;
 
@@ -54,11 +57,15 @@ public sealed class GameDetailViewModel : ObservableObject
     private double _achievementsPercent;
     private bool _hasAchievementProgress;
     private bool _isLoadingAchievements;
+    private Color? _accent;
+    private Effect? _glow;
 
     public GameDetailViewModel(GameCardViewModel card, SteamArtService art, SteamSession session,
         Action<string> openWeb, ICommand backCommand, Func<(string Library, long FreeBytes)?> installTarget)
     {
         Card = card;
+        _glow = GraphicsTheme.GlowFor(null);
+        GraphicsTheme.Changed += OnGraphicsChanged;
         if (installTarget() is { } target)
         {
             var drive = Path.GetPathRoot(target.Library)?.TrimEnd('\\') ?? target.Library;
@@ -113,6 +120,18 @@ public sealed class GameDetailViewModel : ObservableObject
         private set { if (SetProperty(ref _logo, value)) OnPropertyChanged(nameof(ShowTitleText)); }
     }
 
+    /// <summary>
+    /// Brillo de la barra de acción con el color dominante de la imagen del juego (Ultra-moderno); sombra neutra
+    /// mientras se calcula; null en Rendimiento.
+    /// </summary>
+    public Effect? GlowEffect
+    {
+        get => _glow;
+        private set => SetProperty(ref _glow, value);
+    }
+
+    private void OnGraphicsChanged(Settings.GraphicsPreset _) => GlowEffect = GraphicsTheme.GlowFor(_accent);
+
     /// <summary>Sin logo (juegos locales o sin arte): el nombre se escribe sobre el héroe.</summary>
     public bool ShowTitleText => _logo is null;
 
@@ -165,6 +184,7 @@ public sealed class GameDetailViewModel : ObservableObject
         if (!Card.IsSteam)
         {
             Hero = Card.Cover; // los locales solo tienen portada (si la hay)
+            if (Hero is BitmapSource cover) GlowEffect = GraphicsTheme.GlowFor(_accent = ColorExtractor.Dominant(cover));
             return;
         }
         var heroTask = _art.LoadHeroAsync(Card.Entry.AppId, HeroDecodeWidth, ct);
@@ -172,6 +192,11 @@ public sealed class GameDetailViewModel : ObservableObject
         var hero = await heroTask;
         if (ct.IsCancellationRequested) return;
         Hero = hero ?? Card.Cover;
+        if (_accent is null && Hero is BitmapSource bitmap)
+        {
+            _accent = await Task.Run(() => ColorExtractor.Dominant(bitmap), ct);
+            if (!ct.IsCancellationRequested) GlowEffect = GraphicsTheme.GlowFor(_accent);
+        }
         var logo = await logoTask;
         if (!ct.IsCancellationRequested) Logo = logo;
     }
@@ -240,8 +265,13 @@ public sealed class GameDetailViewModel : ObservableObject
     }
 
     /// <summary>Ficha cerrada: cancelar cargas pendientes y soltar todo.</summary>
+    /// <summary>La ficha se está cerrando (se abre otra o se vuelve al inicio).</summary>
+    public bool IsClosing { get; private set; }
+
     public void Close()
     {
+        IsClosing = true;
+        GraphicsTheme.Changed -= OnGraphicsChanged;
         _cts.Cancel();
         Hero = null;
         Logo = null;

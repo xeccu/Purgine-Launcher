@@ -66,6 +66,11 @@ public partial class StoreView : UserControl
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(StoreViewModel.IsCovered) && _web is not null && _vm is not null)
+        {
+            _web.Visibility = _vm.IsCovered ? Visibility.Hidden : Visibility.Visible;
+            return;
+        }
         if (e.PropertyName != nameof(StoreViewModel.IsActive) || _vm is null) return;
         if (_vm.IsActive) _ = ActivateAsync();
         else Deactivate();
@@ -145,7 +150,11 @@ public partial class StoreView : UserControl
             var environment = await CoreWebView2Environment.CreateAsync(null, AppPaths.WebViewDir, options);
             if (generation != _generation) return;
 
-            var web = new WebView2 { DefaultBackgroundColor = System.Drawing.Color.FromArgb(0x0E, 0x10, 0x14) };
+            var web = new WebView2
+            {
+                DefaultBackgroundColor = System.Drawing.Color.FromArgb(0x0E, 0x10, 0x14),
+                Visibility = _vm.IsCovered ? Visibility.Hidden : Visibility.Visible,
+            };
             _web = web;
             Host.Children.Add(web);
             await web.EnsureCoreWebView2Async(environment);

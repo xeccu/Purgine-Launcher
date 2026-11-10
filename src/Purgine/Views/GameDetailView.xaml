@@ -3,8 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:Purgine.ViewModels"
              xmlns:infra="clr-namespace:Purgine.Infrastructure"
-             infra:Fx.FadeIn="True"
-             Background="{StaticResource BgBrush}"
+             Background="{DynamicResource ContentBrush}"
              SizeChanged="OnSizeChanged">
     <UserControl.Resources>
         <!-- Enlace rápido de la columna derecha -->
@@ -26,7 +25,10 @@
         <StackPanel>
             <!-- ===== Héroe: imagen panorámica + degradado inferior + logo ===== -->
             <Grid x:Name="HeroArea" Height="300" ClipToBounds="True" Background="{StaticResource CardBrush}">
-                <Image Source="{Binding Hero}" Stretch="UniformToFill" VerticalAlignment="Center" HorizontalAlignment="Center"
+                <!-- Imagen del juego anterior: se funde con la nueva al cambiar de juego (Ultra-moderno) -->
+                <Image x:Name="HeroPrevious" Stretch="UniformToFill" VerticalAlignment="Center" HorizontalAlignment="Center"
+                       RenderOptions.BitmapScalingMode="HighQuality" IsHitTestVisible="False" />
+                <Image x:Name="HeroImage" Source="{Binding Hero}" Stretch="UniformToFill" VerticalAlignment="Center" HorizontalAlignment="Center"
                        RenderOptions.BitmapScalingMode="HighQuality" />
                 <!-- Degradado inferior para leer el logo y el texto (según el perfil gráfico) -->
                 <Rectangle Fill="{DynamicResource HeroGradientBrush}" />
@@ -48,9 +50,9 @@
             </Grid>
 
             <!-- ===== Barra de acción ===== -->
-            <!-- En el perfil Alto es un cuadro flotante con sombra que se superpone a la imagen -->
+            <!-- Ultra-moderno: cuadro flotante sobre la imagen con brillo del color dominante del juego -->
             <Border Background="{DynamicResource ActionBarBackground}" Padding="32,14" Margin="{DynamicResource ActionBarMargin}"
-                    CornerRadius="{DynamicResource ActionBarCornerRadius}" Effect="{DynamicResource ActionBarEffect}"
+                    CornerRadius="{DynamicResource ActionBarCornerRadius}" Effect="{Binding GlowEffect}"
                     BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="{DynamicResource ActionBarBorderThickness}">
                 <DockPanel>
                     <Button DockPanel.Dock="Left" Style="{StaticResource SteamPlayButton}" Command="{Binding Card.PrimaryActionCommand}">
