@@ -20,6 +20,8 @@ public static class AppPaths
     /// <summary>Cola de descargas pendientes (se recupera en pausa al reiniciar).</summary>
     public static string DownloadQueueFile => Path.Combine(DataDir, "download-queue.json");
     public static string LogFile => Path.Combine(DataDir, "purgine.log");
+    /// <summary>Notas y reseñas personales por juego (solo locales).</summary>
+    public static string GameNotesFile => Path.Combine(DataDir, "game-notes.json");
     /// <summary>Petición de jugar de una segunda instancia (acceso directo con --run) a la que ya está abierta.</summary>
     public static string LaunchRequestFile => Path.Combine(DataDir, "launch-request.txt");
     /// <summary>Caché de arte de Steam que no estaba en el disco (iconos, héroes, logos, logros).</summary>

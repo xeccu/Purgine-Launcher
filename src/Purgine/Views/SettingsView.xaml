@@ -133,11 +133,9 @@
                 <StackPanel>
                     <TextBlock Text="Ventana y bandeja del sistema" Style="{StaticResource SectionTitle}" />
                     <CheckBox IsChecked="{Binding CloseToTray, Mode=TwoWay}"
-                              Content="La X oculta Purgine en la bandeja (no lo cierra)" />
-                    <CheckBox IsChecked="{Binding MinimizeToTray, Mode=TwoWay}"
-                              Content="Minimizar oculta Purgine en la bandeja" />
+                              Content="La X oculta Purgine en la bandeja, como Steam (para salir: icono de la bandeja → Salir)" />
                     <CheckBox IsChecked="{Binding MinimizeOnLaunch, Mode=TwoWay}"
-                              Content="Ocultar la ventana al lanzar un juego" />
+                              Content="Minimizar la ventana al lanzar un juego" />
                     <CheckBox IsChecked="{Binding ShowNotifications, Mode=TwoWay}"
                               Content="Notificaciones de Windows (nube, descargas, fin de sesión)" />
                     <CheckBox IsChecked="{Binding UseSoftwareRendering, Mode=TwoWay}"

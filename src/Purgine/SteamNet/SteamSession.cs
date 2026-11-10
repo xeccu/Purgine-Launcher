@@ -46,6 +46,10 @@ public sealed class SteamSession : IAsyncDisposable
     private SteamUser? _user;
     private SteamApps? _apps;
     private SteamContent? _content;
+    private SteamFriends? _friends;
+    /// <summary>Nombre y avatar de otras cuentas (amigos), recibidos por PersonaState.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<ulong, PersonaInfo> _personas = new();
+    private TaskCompletionSource _personaArrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private CancellationTokenSource? _pumpCts;
     private TaskCompletionSource<bool>? _connected;
     private TaskCompletionSource<SteamUser.LoggedOnCallback>? _loggedOn;
@@ -327,6 +331,63 @@ public sealed class SteamSession : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Ejecuta una llamada a un servicio de Steam (mensajes unificados) con la sesión guardada: inicia sesión si
+    /// hace falta, mantiene la conexión durante la llamada y devuelve null ante cualquier fallo (sin conexión,
+    /// servicio no disponible…), registrándolo. <paramref name="call"/> recibe el servicio y el SteamID64.
+    /// </summary>
+    public async Task<TResult?> UseServiceAsync<TService, TResult>(Func<TService, ulong, Task<TResult?>> call, string what, CancellationToken ct)
+        where TService : SteamUnifiedMessages.UnifiedService, new()
+        where TResult : class
+    {
+        try
+        {
+            if (!await LoginWithSavedSessionAsync(ct).ConfigureAwait(false) || SteamId is null) return null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Warn($"Steam (red): {what} no disponible ahora ({ex.Message}).");
+            return null;
+        }
+        Hold();
+        try
+        {
+            var service = _client!.GetHandler<SteamUnifiedMessages>()!.CreateService<TService>();
+            return await call(service, SteamId.ConvertToUInt64()).WaitAsync(ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Warn($"Steam (red): no se pudo obtener {what}: {ex.Message}");
+            return null;
+        }
+        finally
+        {
+            Release();
+        }
+    }
+
+    /// <summary>
+    /// Nombre y avatar de varias cuentas (amigos). Pide a Steam lo que falte y espera hasta <paramref name="wait"/>;
+    /// devuelve lo que haya llegado (no cambia el estado en línea del usuario).
+    /// </summary>
+    public async Task<IReadOnlyDictionary<ulong, PersonaInfo>> GetPersonasAsync(IReadOnlyCollection<ulong> ids, TimeSpan wait, CancellationToken ct)
+    {
+        var missing = ids.Where(id => !_personas.ContainsKey(id)).ToList();
+        if (missing.Count > 0 && _friends is not null && IsLoggedIn)
+        {
+            Touch();
+            _friends.RequestFriendInfo(missing.Select(id => new SteamID(id)), EClientPersonaStateFlag.PlayerName | EClientPersonaStateFlag.Presence);
+            var deadline = DateTime.UtcNow + wait;
+            while (ids.Any(id => !_personas.ContainsKey(id)) && DateTime.UtcNow < deadline)
+            {
+                var signal = Volatile.Read(ref _personaArrived).Task;
+                try { await signal.WaitAsync(deadline - DateTime.UtcNow, ct).ConfigureAwait(false); }
+                catch (TimeoutException) { break; }
+            }
+        }
+        return ids.Where(_personas.ContainsKey).ToDictionary(id => id, id => _personas[id]);
+    }
+
     // =====================================================================================
     // Vida de la conexión
     // =====================================================================================
@@ -363,6 +424,7 @@ public sealed class SteamSession : IAsyncDisposable
             _user = _client.GetHandler<SteamUser>();
             _apps = _client.GetHandler<SteamApps>();
             _content = _client.GetHandler<SteamContent>();
+            _friends = _client.GetHandler<SteamFriends>();
 
             _connected = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             _callbacks.Subscribe<SteamClient.ConnectedCallback>(_ => _connected?.TrySetResult(true));
@@ -372,6 +434,13 @@ public sealed class SteamSession : IAsyncDisposable
             {
                 Log.Warn($"Steam cerró la sesión: {cb.Result}");
                 SetState(SteamSessionState.Disconnected, $"Steam cerró la sesión ({cb.Result}).");
+            });
+            _callbacks.Subscribe<SteamFriends.PersonaStateCallback>(cb =>
+            {
+                if (cb.FriendID is null || string.IsNullOrEmpty(cb.Name)) return;
+                var hash = cb.AvatarHash is { Length: > 0 } a && a.Any(b => b != 0) ? Convert.ToHexStringLower(a) : null;
+                _personas[cb.FriendID.ConvertToUInt64()] = new PersonaInfo(cb.Name, hash);
+                Interlocked.Exchange(ref _personaArrived, new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).TrySetResult();
             });
             _callbacks.Subscribe<SteamApps.LicenseListCallback>(cb =>
             {
@@ -434,6 +503,7 @@ public sealed class SteamSession : IAsyncDisposable
             _user = null;
             _apps = null;
             _content = null;
+            _friends = null;
             IsAnonymous = false;
             _licenses = NewLicenseTcs();
         }
@@ -460,6 +530,13 @@ public sealed class SteamSession : IAsyncDisposable
 }
 
 /// <summary>Steam rechazó el inicio de sesión.</summary>
+/// <summary>Perfil público de otra cuenta: nombre y hash del avatar (null = avatar por defecto).</summary>
+public sealed record PersonaInfo(string Name, string? AvatarHash)
+{
+    private const string DefaultAvatar = "fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb";
+    public string AvatarUrl => $"https://avatars.fastly.steamstatic.com/{AvatarHash ?? DefaultAvatar}_medium.jpg";
+}
+
 /// <summary>Logros de un juego: desbloqueados / total y los más destacados del usuario.</summary>
 public sealed record AchievementSummary(uint Unlocked, uint Total, IReadOnlyList<AchievementInfo> Top);
 

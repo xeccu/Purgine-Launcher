@@ -54,7 +54,7 @@ public sealed class LauncherSettings
     public const int MaxCoverWidth = 240;
 
     /// <summary>Versión del esquema de ajustes (para migrar valores por defecto antiguos).</summary>
-    public const int CurrentVersion = 4;
+    public const int CurrentVersion = 5;
 
     public const string DefaultSteamArguments = "-silent -nofriendsui -nochatui -minimized -vgui -fulldesktopres 0";
     public const string LegacySteamArguments = "-silent -nofriendsui -nochatui";
@@ -117,8 +117,6 @@ public sealed class LauncherSettings
     /// <summary>La X oculta la ventana en la bandeja en lugar de cerrar la aplicación.</summary>
     public bool CloseToTray { get; set; } = true;
 
-    /// <summary>Minimizar oculta la ventana en la bandeja (sin botón en la barra de tareas).</summary>
-    public bool MinimizeToTray { get; set; } = true;
 
     /// <summary>Notificaciones de Windows al sincronizar con la nube y al cerrar Steam.</summary>
     public bool ShowNotifications { get; set; } = true;
@@ -160,6 +158,9 @@ public sealed class LauncherSettings
 
         // v4: el perfil «Medio» desaparece; quien lo tenía pasa a Ultra-moderno (sustituye a Medio y Alto).
         if (GraphicsPreset == GraphicsPreset.Medium) GraphicsPreset = GraphicsPreset.High;
+
+        // v5: comportamiento estilo Steam — la X oculta en la bandeja; minimizar va a la barra de tareas.
+        if (SettingsVersion < 5) CloseToTray = true;
 
         SettingsVersion = CurrentVersion;
         return true;

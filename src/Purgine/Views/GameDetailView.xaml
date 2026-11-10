@@ -105,12 +105,12 @@
                 </DockPanel>
             </Border>
 
-            <!-- ===== Logros + enlaces ===== -->
+            <!-- ===== Logros, cromos, capturas y comunidad | enlaces, amigos, notas y reseña ===== -->
             <Grid Margin="32,20,32,24">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="20" />
-                    <ColumnDefinition Width="260" />
+                    <ColumnDefinition Width="310" />
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0">
@@ -146,6 +146,132 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Cromos -->
+                    <Border Style="{StaticResource Panel}" Margin="0,14,0,0" Visibility="{Binding ShowSteamExtras, Converter={StaticResource BoolToVis}}">
+                        <StackPanel>
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Padding="10,4" Content="Ver en Steam"
+                                        FontSize="12" Command="{Binding OpenCardsCommand}" />
+                                <TextBlock Text="CROMOS" Style="{StaticResource StatLabel}" FontSize="12" VerticalAlignment="Center" />
+                            </DockPanel>
+                            <TextBlock Text="{Binding CardsText}" Margin="0,10,0,0" FontSize="14" TextWrapping="Wrap" />
+                            <ProgressBar Style="{StaticResource SlimProgress}" Height="6" Margin="0,10,0,0" Maximum="100"
+                                         Value="{Binding CardsPercent, Mode=OneWay}" Foreground="{StaticResource SteamBlueBrush}" />
+                            <ProgressBar Style="{StaticResource SlimProgress}" Margin="0,6,0,0" IsIndeterminate="True"
+                                         Visibility="{Binding IsLoadingCards, Converter={StaticResource BoolToVis}}" />
+                            <ItemsControl ItemsSource="{Binding Cards}" Margin="0,14,0,0" Focusable="False">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:CardItemViewModel}">
+                                        <Grid Width="64" Height="74" Margin="0,0,8,8" ToolTip="{Binding Tooltip}">
+                                            <Border CornerRadius="4" Background="{StaticResource CardBrush}">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Opacity" Value="1" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsOwned}" Value="False">
+                                                                <Setter Property="Opacity" Value="0.3" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <Image Source="{Binding Icon}" Stretch="Uniform" Margin="2" RenderOptions.BitmapScalingMode="HighQuality" />
+                                            </Border>
+                                            <Border HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="3" CornerRadius="3" Padding="4,0"
+                                                    Background="{StaticResource SteamBlueBrush}"
+                                                    Visibility="{Binding IsOwned, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="{Binding Owned, StringFormat='x{0}'}" FontSize="10" FontWeight="Bold" Foreground="White" />
+                                            </Border>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Capturas y grabaciones -->
+                    <Border Style="{StaticResource Panel}" Margin="0,14,0,0" Visibility="{Binding ShowSteamExtras, Converter={StaticResource BoolToVis}}">
+                        <StackPanel>
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                    <Button Style="{StaticResource GhostButton}" Padding="10,4" FontSize="12" Command="{Binding OpenScreenshotsCommand}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE722;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                            <TextBlock Text="Capturas" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Style="{StaticResource GhostButton}" Padding="10,4" FontSize="12" Margin="8,0,0,0" Command="{Binding OpenRecordingsCommand}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE714;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                            <TextBlock Text="Grabaciones" />
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                                <TextBlock Text="CAPTURAS Y GRABACIONES" Style="{StaticResource StatLabel}" FontSize="12" VerticalAlignment="Center" />
+                            </DockPanel>
+                            <TextBlock Text="{Binding MediaText}" Margin="0,10,0,0" Style="{StaticResource MutedText}" TextWrapping="Wrap" />
+                            <ItemsControl ItemsSource="{Binding Screenshots}" Margin="0,12,0,0" Focusable="False">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:ScreenshotItemViewModel}">
+                                        <Button Style="{StaticResource GameCardButton}" Margin="0,0,8,8" ToolTip="Abrir la captura"
+                                                Command="{Binding DataContext.OpenScreenshotCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding Path}">
+                                            <Border Width="160" Height="90" CornerRadius="{DynamicResource CardCornerRadius}" ClipToBounds="True">
+                                                <Border.Background>
+                                                    <ImageBrush ImageSource="{Binding Thumb}" Stretch="UniformToFill" />
+                                                </Border.Background>
+                                            </Border>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Contenido de la comunidad -->
+                    <Border Style="{StaticResource Panel}" Margin="0,14,0,0" Visibility="{Binding ShowSteamExtras, Converter={StaticResource BoolToVis}}">
+                        <StackPanel>
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Padding="10,4" Content="Discusiones"
+                                        FontSize="12" Command="{Binding OpenDiscussionsCommand}" />
+                                <TextBlock Text="COMUNIDAD" Style="{StaticResource StatLabel}" FontSize="12" VerticalAlignment="Center" />
+                            </DockPanel>
+                            <TextBlock Text="{Binding CommunityText}" Margin="0,10,0,0" Style="{StaticResource MutedText}"
+                                       Visibility="{Binding CommunityText, Converter={StaticResource NullToVis}}" />
+                            <ProgressBar Style="{StaticResource SlimProgress}" Margin="0,8,0,0" IsIndeterminate="True"
+                                         Visibility="{Binding IsLoadingCommunity, Converter={StaticResource BoolToVis}}" />
+                            <ItemsControl ItemsSource="{Binding CommunityItems}" Margin="0,8,0,0" Focusable="False">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource RowButton}" Margin="0,1" ToolTip="{Binding Url}"
+                                                Command="{Binding DataContext.OpenCommunityItemCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding Url}">
+                                            <DockPanel>
+                                                <Border DockPanel.Dock="Left" CornerRadius="4" Padding="7,2" Margin="0,0,12,0" VerticalAlignment="Center"
+                                                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" MinWidth="64">
+                                                    <TextBlock Text="{Binding Kind}" FontSize="11" HorizontalAlignment="Center" Foreground="{StaticResource MutedBrush}" />
+                                                </Border>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Subtitle}" Style="{StaticResource MutedText}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
                     <!-- Locales: información del ejecutable -->
                     <Border Style="{StaticResource Panel}" Margin="0" Visibility="{Binding Card.IsLocal, Converter={StaticResource BoolToVis}}">
                         <StackPanel>
@@ -156,8 +282,9 @@
                     </Border>
                 </StackPanel>
 
+                <StackPanel Grid.Column="2">
                 <!-- Enlaces rápidos -->
-                <Border Grid.Column="2" Style="{StaticResource Panel}" Margin="0" VerticalAlignment="Top">
+                <Border Style="{StaticResource Panel}" Margin="0">
                     <StackPanel>
                         <TextBlock Text="ENLACES" Style="{StaticResource StatLabel}" FontSize="12" Margin="8,0,0,8" />
                         <Button Style="{StaticResource LinkRow}" Command="{Binding OpenStoreCommand}"
@@ -204,7 +331,97 @@
                         </Button>
                     </StackPanel>
                 </Border>
+                    <!-- Amigos -->
+                    <Border Style="{StaticResource Panel}" Margin="0,14,0,0" Visibility="{Binding ShowSteamExtras, Converter={StaticResource BoolToVis}}">
+                        <StackPanel>
+                            <TextBlock Text="AMIGOS QUE JUEGAN" Style="{StaticResource StatLabel}" FontSize="12" />
+                            <TextBlock Text="{Binding FriendsText}" Margin="0,8,0,0" Style="{StaticResource MutedText}" TextWrapping="Wrap" />
+                            <ProgressBar Style="{StaticResource SlimProgress}" Margin="0,8,0,0" IsIndeterminate="True"
+                                         Visibility="{Binding IsLoadingFriends, Converter={StaticResource BoolToVis}}" />
+                            <ItemsControl ItemsSource="{Binding Friends}" Margin="0,8,0,0" Focusable="False">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:FriendItemViewModel}">
+                                        <DockPanel Margin="0,4">
+                                            <Border DockPanel.Dock="Left" Width="34" Height="34" CornerRadius="4" Background="{StaticResource CardBrush}"
+                                                    BorderThickness="2" Margin="0,0,10,0">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="BorderBrush" Value="#3A4150" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsRecent}" Value="True">
+                                                                <Setter Property="BorderBrush" Value="#59BF40" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <Image Source="{Binding Avatar}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality" />
+                                            </Border>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding Status}" FontSize="11" TextTrimming="CharacterEllipsis">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsRecent}" Value="True">
+                                                                    <Setter Property="Foreground" Value="#8BC34A" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Notas -->
+                    <Border Style="{StaticResource Panel}" Margin="0,14,0,0">
+                        <StackPanel>
+                            <TextBlock Text="NOTAS" Style="{StaticResource StatLabel}" FontSize="12" />
+                            <TextBox x:Name="NotesBox" Style="{StaticResource SearchBox}" Margin="0,10,0,0" MinHeight="110" MaxHeight="260"
+                                     AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"
+                                     Text="{Binding NotesText, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBlock Text="Se guardan solas en este equipo." Style="{StaticResource MutedText}" FontSize="11" Margin="0,6,0,0" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Reseña -->
+                    <Border Style="{StaticResource Panel}" Margin="0,14,0,0" Visibility="{Binding ShowSteamExtras, Converter={StaticResource BoolToVis}}">
+                        <StackPanel>
+                            <TextBlock Text="TU RESEÑA" Style="{StaticResource StatLabel}" FontSize="12" />
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <RadioButton GroupName="{Binding Card.Entry.Id}" IsChecked="{Binding IsRecommended, Mode=TwoWay}" Margin="0,0,16,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE8E1;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                        <TextBlock Text="Lo recomiendo" />
+                                    </StackPanel>
+                                </RadioButton>
+                                <RadioButton GroupName="{Binding Card.Entry.Id}" IsChecked="{Binding IsNotRecommended, Mode=TwoWay}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE8E0;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                        <TextBlock Text="No" />
+                                    </StackPanel>
+                                </RadioButton>
+                            </StackPanel>
+                            <TextBox Style="{StaticResource SearchBox}" Margin="0,10,0,0" MinHeight="90" MaxHeight="220"
+                                     AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"
+                                     Text="{Binding ReviewText, UpdateSourceTrigger=PropertyChanged}" />
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <Button Style="{StaticResource GhostButton}" Content="Guardar" Padding="12,5" Command="{Binding SaveReviewCommand}" />
+                                <Button Style="{StaticResource PrimaryButton}" Content="Publicar en Steam…" Padding="12,5" Margin="8,0,0,0"
+                                        Command="{Binding PublishReviewCommand}"
+                                        ToolTip="Guarda la reseña, copia el texto y abre la sección de reseñas de Steam para publicarla allí" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding ReviewStatus}" Style="{StaticResource MutedText}" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
             </Grid>
         </StackPanel>
     </ScrollViewer>
 </UserControl>
+

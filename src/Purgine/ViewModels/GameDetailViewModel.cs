@@ -38,7 +38,7 @@ public sealed class AchievementItemViewModel : ObservableObject
 /// principal, última sesión, tiempo de juego), progreso de logros y enlaces rápidos. Las imágenes grandes se
 /// cargan al abrir la ficha y se sueltan al cambiar de juego o al ocultar la ventana.
 /// </summary>
-public sealed class GameDetailViewModel : ObservableObject
+public sealed partial class GameDetailViewModel : ObservableObject
 {
     private const int HeroDecodeWidth = 1600;
     private const int LogoDecodeWidth = 640;
@@ -61,7 +61,8 @@ public sealed class GameDetailViewModel : ObservableObject
     private Effect? _glow;
 
     public GameDetailViewModel(GameCardViewModel card, SteamArtService art, SteamSession session,
-        Action<string> openWeb, ICommand backCommand, Func<(string Library, long FreeBytes)?> installTarget)
+        Action<string> openWeb, ICommand backCommand, Func<(string Library, long FreeBytes)?> installTarget,
+        SteamCommunityService community, GameNotesStore notes, string? steamPath)
     {
         Card = card;
         _glow = GraphicsTheme.GlowFor(null);
@@ -88,6 +89,7 @@ public sealed class GameDetailViewModel : ObservableObject
                 ? $"https://steamcommunity.com/profiles/{sid.ConvertToUInt64()}/stats/{id}/achievements/?l=spanish"
                 : $"https://steamcommunity.com/stats/{id}/achievements/?l=spanish"),
             _ => card.IsSteam);
+        InitExtras(community, notes, steamPath);
     }
 
     public GameCardViewModel Card { get; }
@@ -174,6 +176,7 @@ public sealed class GameDetailViewModel : ObservableObject
         var tasks = new List<Task>();
         if (!_imagesLoaded) tasks.Add(LoadImagesAsync(ct));
         if (!_achievementsLoaded && Card.IsSteam) tasks.Add(LoadAchievementsAsync(ct));
+        tasks.AddRange(LoadExtrasTasks(ct));
         try { await Task.WhenAll(tasks); }
         catch (OperationCanceledException) { /* se cambió de juego */ }
         catch (Exception ex)
@@ -277,6 +280,7 @@ public sealed class GameDetailViewModel : ObservableObject
     {
         IsClosing = true;
         GraphicsTheme.Changed -= OnGraphicsChanged;
+        CloseExtras();
         _cts.Cancel();
         Hero = null;
         Logo = null;

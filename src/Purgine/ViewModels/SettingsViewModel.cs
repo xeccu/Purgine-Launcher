@@ -120,7 +120,6 @@ public sealed class SettingsViewModel : ObservableObject
 
     public bool MinimizeOnLaunch { get => _s.MinimizeOnLaunch; set => Set(v => _s.MinimizeOnLaunch = v, value); }
     public bool CloseToTray { get => _s.CloseToTray; set => Set(v => _s.CloseToTray = v, value); }
-    public bool MinimizeToTray { get => _s.MinimizeToTray; set => Set(v => _s.MinimizeToTray = v, value); }
     public bool ShowNotifications { get => _s.ShowNotifications; set => Set(v => _s.ShowNotifications = v, value); }
     public bool UseSoftwareRendering { get => _s.UseSoftwareRendering; set => Set(v => _s.UseSoftwareRendering = v, value); }
 
@@ -219,7 +218,6 @@ public sealed class SettingsViewModel : ObservableObject
         _s.GameStartTimeoutSeconds = d.GameStartTimeoutSeconds;
         _s.MinimizeOnLaunch = d.MinimizeOnLaunch;
         _s.CloseToTray = d.CloseToTray;
-        _s.MinimizeToTray = d.MinimizeToTray;
         _s.ShowNotifications = d.ShowNotifications;
         _s.UseSoftwareRendering = d.UseSoftwareRendering;
         _s.SteamHelperPriority = d.SteamHelperPriority;

@@ -46,11 +46,8 @@ public partial class MainWindow : Window, IDialogService
         Loaded += async (_, _) => await _vm.RefreshAsync();
         StateChanged += OnStateChanged;
 
-        _vm.GameLaunched += (_, _) =>
-        {
-            if (_settings.MinimizeToTray) HideToTray(showHint: false);
-            else WindowState = WindowState.Minimized;
-        };
+        // Al lanzar un juego se minimiza a la barra de tareas (como el botón de minimizar).
+        _vm.GameLaunched += (_, _) => WindowState = WindowState.Minimized;
         _vm.SessionFinished += (_, _) => { if (!IsVisible) ScheduleTrimWhileHidden(); };
         _vm.NotificationRequested += (title, text) =>
         {
@@ -121,11 +118,26 @@ public partial class MainWindow : Window, IDialogService
         timer.Start();
     }
 
+    /// <summary>
+    /// Minimizar es el comportamiento normal de Windows (la ventana queda en la barra de tareas); solo se
+    /// recorta la memoria. La bandeja se reserva para la X (ver <see cref="OnClosing"/>).
+    /// </summary>
     private void OnStateChanged(object? sender, EventArgs e)
     {
-        if (WindowState != WindowState.Minimized) return;
-        if (_settings.MinimizeToTray) HideToTray(showHint: true);
-        else ProcessUtils.TrimCurrentProcess();
+        if (WindowState == WindowState.Minimized) ScheduleTrimWhileMinimized();
+    }
+
+    /// <summary>Recorta la memoria al minimizar y otra vez unos segundos después (el render aún toca memoria).</summary>
+    private void ScheduleTrimWhileMinimized()
+    {
+        ProcessUtils.TrimCurrentProcess();
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            if (WindowState == WindowState.Minimized) ProcessUtils.TrimCurrentProcess();
+        };
+        timer.Start();
     }
 
     private void ExitApplication()

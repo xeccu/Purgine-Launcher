@@ -62,6 +62,9 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     private readonly SteamOwnershipService _ownership;
     private readonly SteamDownloadManager _downloads;
     private readonly SteamArtService _art;
+    private readonly SteamCommunityService _community;
+    private readonly GameNotesStore _notes;
+    private readonly SteamLocator _steam;
 
     /// <summary>AppIDs de la cuenta (red de Steam si hay sesión; si no, caché local del cliente).</summary>
     private IReadOnlySet<string> _owned = new HashSet<string>();
@@ -89,6 +92,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         UserLibrary library,
         LauncherSettings settings,
         SteamArtService art,
+        SteamCommunityService community,
+        GameNotesStore notes,
         LibraryWatcher watcher,
         SteamLocator steam,
         SteamSession session,
@@ -106,6 +111,9 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         _ownership = ownership;
         _downloads = downloads;
         _art = art;
+        _community = community;
+        _notes = notes;
+        _steam = steam;
         _saveSettings = new DebouncedAction(saveSettings, TimeSpan.FromMilliseconds(600));
 
         Store = new StoreViewModel(this);
@@ -206,7 +214,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             _selectedGame = value;
             _detail?.Close();
             _detail = value is null ? null
-                : new GameDetailViewModel(value, _art, _session, OpenInStoreTab, ShowHomeCommand, _downloads.InstallTarget);
+                : new GameDetailViewModel(value, _art, _session, OpenInStoreTab, ShowHomeCommand, _downloads.InstallTarget,
+                    _community, _notes, _steam.SteamPath);
             OnPropertyChanged();
             OnPropertyChanged(nameof(Detail));
             OnPropertyChanged(nameof(IsHomeVisible));
@@ -1230,6 +1239,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     /// <summary>Guardar lo pendiente al salir (las descargas quedan en pausa y se recuperan al volver).</summary>
     public void Shutdown()
     {
+        _notes.Flush();
         Store.Release();
         _detail?.Close();
         _downloads.Dispose();

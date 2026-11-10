@@ -20,6 +20,8 @@ public partial class App : Application
     private EventWaitHandle? _showEvent;
     private RegisteredWaitHandle? _showWait;
     private SteamArtService? _art;
+    private SteamCommunityService? _community;
+    private GameNotesStore? _notes;
     private SteamSession? _steamSession;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -78,10 +80,12 @@ public partial class App : Application
         // Red de Steam (SteamKit2): sesión, propiedad y descargas sin el cliente de escritorio.
         _steamSession = new SteamSession(new SteamCredentialStore(AppPaths.SteamSessionFile));
         var ownership = new SteamOwnershipService(_steamSession, AppPaths.OwnedGamesFile);
+        _community = new SteamCommunityService(_steamSession);
+        _notes = new GameNotesStore(AppPaths.GameNotesFile);
         var downloads = new SteamDownloadManager(_steamSession, ownership, locator, scanner, AppPaths.DownloadQueueFile);
 
         var viewModel = new MainViewModel(
-            scanner, orchestrator, tracker, library, settings, _art, new LibraryWatcher(), locator,
+            scanner, orchestrator, tracker, library, settings, _art, _community, _notes, new LibraryWatcher(), locator,
             _steamSession, ownership, downloads,
             saveSettings: () => JsonFileStore.Save(AppPaths.SettingsFile, settings));
         downloads.TryRegisterPending();
@@ -128,6 +132,8 @@ public partial class App : Application
         _showWait?.Unregister(null);
         _showEvent?.Dispose();
         _art?.Dispose();
+        _community?.Dispose();
+        _notes?.Dispose();
         try { _steamSession?.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(3)); }
         catch (Exception ex) { Log.Warn($"Cierre de la sesión de Steam: {ex.Message}"); }
         if (_singleInstance is not null)

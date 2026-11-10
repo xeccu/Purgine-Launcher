@@ -122,6 +122,17 @@ Organizada como la biblioteca de un cliente de escritorio:
   principal **JUGAR / INSTALAR / ACTUALIZAR**, **última sesión** y **tiempo de juego**, progreso de
   **logros** (servicio Player de Steam vía SteamKit2: desbloqueados/total y los más destacados) y enlaces a la
   página de la tienda, comunidad, discusiones, guías y soporte.
+- **Secciones de la ficha** (`SteamNet/SteamCommunityService.cs`, solo lectura):
+  - **Amigos que juegan**: quién lo juega ahora, quién jugó en las últimas 2 semanas y quién lo ha jugado,
+    con avatar y nombre (servicio Player de Steam + perfiles). No cambia tu estado en línea.
+  - **Cromos**: la colección del juego (Mercado de la Comunidad, público) marcando los que tienes en tu
+    inventario, y tu nivel de insignia.
+  - **Capturas y grabaciones**: miniaturas de tus capturas de Steam (F12) y acceso a sus carpetas.
+  - **Comunidad**: guías más populares y últimas noticias y anuncios del juego.
+  - **Notas** y **reseña** personales, guardadas solo en este equipo (`game-notes.json`). «Publicar en
+    Steam…» copia el texto y abre la sección de reseñas de la página oficial: la publicas tú allí; Purgine
+    nunca publica nada en tu nombre.
+  - Los datos de Steam se guardan 10 minutos en memoria para no repetir consultas al volver a una ficha.
 - **Espacio necesario**: los juegos no instalados muestran «Tamaño: X GB» en su portada y, en la ficha,
   «ESPACIO NECESARIO» junto a INSTALAR con el espacio libre del disco donde se instalaría (en rojo si no
   cabe). Es la suma de los depots que se descargarían en este equipo según PICS (Windows, 64 bits, idioma,
@@ -179,7 +190,9 @@ marcan y no se pueden elegir.
 - **Organización**: etiquetas, filtros «Todos / Instalados», orden A-Z o por tiempo, cuadrícula o lista,
   tamaño de portadas.
 - **Ejecutables propios** (Godot, emuladores…): con portada y tiempo jugado.
-- **Bandeja del sistema** con `Shell_NotifyIcon` (sin WinForms): en la bandeja ocupa ~5–10 MB de RAM.
+- **Bandeja del sistema** con `Shell_NotifyIcon` (sin WinForms), como Steam: la **X** oculta Purgine en la
+  bandeja (menú «Abrir Purgine» / «Salir») y **minimizar** lo deja en la barra de tareas como cualquier
+  ventana. En la bandeja ocupa ~10 MB de RAM.
 
 ## Estructura
 
@@ -205,6 +218,7 @@ Todo en `%LocalAppData%\Purgine\` (botón «Abrir carpeta de datos» en Ajustes)
 | `owned-games.json` | Juegos de la cuenta según Steam (caché) |
 | `download-queue.json` | Cola de descargas pendientes (con la unidad y los accesos directos elegidos) |
 | `settings.json` · `library.json` · `playtime.json` | Ajustes, etiquetas/ejecutables locales, tiempo jugado |
+| `game-notes.json` | Notas y reseñas personales por juego (solo locales) |
 | `art\` | Iconos, imágenes panorámicas, logos e iconos de logros que no estaban en la caché de Steam |
 | `webview\` | Perfil del navegador de la Tienda (cookies y sesión web de Steam, caché) |
 | `purgine.log` | Registro de diagnóstico |

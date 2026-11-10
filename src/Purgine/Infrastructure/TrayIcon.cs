@@ -120,8 +120,7 @@ public sealed class TrayIcon : IDisposable
         if (menu == IntPtr.Zero) return;
         try
         {
-            NativeMethods.AppendMenu(menu, NativeMethods.MF_STRING, (UIntPtr)CmdRestore, "Restaurar");
-            NativeMethods.AppendMenu(menu, NativeMethods.MF_STRING, (UIntPtr)CmdRefresh, "Actualizar biblioteca");
+            NativeMethods.AppendMenu(menu, NativeMethods.MF_STRING, (UIntPtr)CmdRestore, "Abrir Purgine");
             NativeMethods.AppendMenu(menu, NativeMethods.MF_SEPARATOR, UIntPtr.Zero, null);
             NativeMethods.AppendMenu(menu, NativeMethods.MF_STRING, (UIntPtr)CmdExit, "Salir");
             NativeMethods.SetMenuDefaultItem(menu, CmdRestore, 0);
