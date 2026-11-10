@@ -176,6 +176,11 @@ public sealed class GameDetailViewModel : ObservableObject
         if (!_achievementsLoaded && Card.IsSteam) tasks.Add(LoadAchievementsAsync(ct));
         try { await Task.WhenAll(tasks); }
         catch (OperationCanceledException) { /* se cambió de juego */ }
+        catch (Exception ex)
+        {
+            // Se llama sin await (fire-and-forget): cualquier fallo se registra aquí y no queda sin observar.
+            Infrastructure.Log.Warn($"Ficha de {Card.Name}: {ex.Message}");
+        }
     }
 
     private async Task LoadImagesAsync(CancellationToken ct)

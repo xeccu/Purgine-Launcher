@@ -270,7 +270,16 @@ public sealed class SteamSession : IAsyncDisposable
     /// </summary>
     public async Task<AchievementSummary?> GetAchievementsAsync(uint appId, int maxTop, CancellationToken ct)
     {
-        if (!await LoginWithSavedSessionAsync(ct).ConfigureAwait(false) || SteamId is null) return null;
+        try
+        {
+            if (!await LoginWithSavedSessionAsync(ct).ConfigureAwait(false) || SteamId is null) return null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Sin conexión o Steam ocupado (p. ej. NoConnection): sin logros, sin excepción sin observar.
+            Log.Warn($"Steam (red): logros no disponibles ahora ({ex.Message}).");
+            return null;
+        }
         Hold();
         try
         {
