@@ -83,8 +83,14 @@ public sealed partial class GameDetailViewModel : ObservableObject
         OpenCommunityCommand = new RelayCommand(_ => _openWeb($"https://steamcommunity.com/app/{id}/?l=spanish"), _ => card.IsSteam);
         OpenDiscussionsCommand = new RelayCommand(_ => _openWeb($"https://steamcommunity.com/app/{id}/discussions/?l=spanish"), _ => card.IsSteam);
         OpenGuidesCommand = new RelayCommand(_ => _openWeb($"https://steamcommunity.com/app/{id}/guides/?l=spanish"), _ => card.IsSteam);
-        OpenWorkshopCommand = new RelayCommand(_ => _openWeb($"https://steamcommunity.com/app/{id}/workshop/"), _ => card.IsSteam);
-        OpenPointsShopCommand = new RelayCommand(_ => _openWeb($"https://store.steampowered.com/points/shop/app/{id}"), _ => card.IsSteam);
+        // Siempre con el AppID numérico del juego; sin AppID válido (ejecutables locales) se va a la portada general.
+        var appIdNumber = uint.TryParse(card.Entry.AppId, out var n) && n > 0 ? n : 0u;
+        OpenWorkshopCommand = new RelayCommand(_ => _openWeb(appIdNumber > 0
+            ? $"https://steamcommunity.com/app/{appIdNumber}/workshop/"
+            : "https://steamcommunity.com/workshop/"));
+        OpenPointsShopCommand = new RelayCommand(_ => _openWeb(appIdNumber > 0
+            ? $"https://store.steampowered.com/points/shop/app/{appIdNumber}"
+            : "https://store.steampowered.com/points/shop"));
         OpenSupportCommand = new RelayCommand(_ => _openWeb($"https://help.steampowered.com/es/wizard/HelpWithGame/?appid={id}"), _ => card.IsSteam);
         OpenAchievementsCommand = new RelayCommand(
             _ => _openWeb(_session.SteamId is { } sid

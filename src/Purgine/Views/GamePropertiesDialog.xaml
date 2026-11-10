@@ -69,8 +69,12 @@
                             <DataTemplate DataType="{x:Type vm:ModItemViewModel}">
                                 <CheckBox IsChecked="{Binding IsEnabled, Mode=TwoWay}" Margin="10,5">
                                     <DockPanel>
-                                        <TextBlock DockPanel.Dock="Right" Text="{Binding SizeText}" Style="{StaticResource MutedText}" FontSize="11"
-                                                   Margin="12,0,0,0" VerticalAlignment="Center" />
+                                        <TextBlock DockPanel.Dock="Right" Style="{StaticResource MutedText}" FontSize="11"
+                                                   Margin="12,0,0,0" VerticalAlignment="Center">
+                                            <Run Text="{Binding SizeText, Mode=OneWay}" />
+                                            <Run Text="·" />
+                                            <Run Text="{Binding ControlText, Mode=OneWay}" />
+                                        </TextBlock>
                                         <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Id}" />
                                     </DockPanel>
                                 </CheckBox>
@@ -85,7 +89,8 @@
         <DockPanel Grid.Row="4" Margin="0,14,0,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <Button Style="{StaticResource GhostButton}" Content="Cerrar" IsCancel="True" Margin="0,0,8,0" MinWidth="90" />
-                <Button Style="{StaticResource PrimaryButton}" Content="Aplicar" MinWidth="90" Command="{Binding ApplyCommand}" />
+                <Button Style="{StaticResource PrimaryButton}" Content="Aplicar DLC" MinWidth="90" Command="{Binding ApplyCommand}"
+                        ToolTip="Guarda los cambios de DLC (los mods se aplican al marcarlos)" />
             </StackPanel>
             <TextBlock Text="{Binding ResultText}" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" />
         </DockPanel>

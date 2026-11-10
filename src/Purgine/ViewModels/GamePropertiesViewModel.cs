@@ -40,24 +40,32 @@ public sealed class DlcItemViewModel : ObservableObject
         : IsInstalled ? "Instalado" : "No instalado";
 }
 
-/// <summary>Un mod de Workshop descargado.</summary>
+/// <summary>
+/// Un mod de Workshop. Marcar o desmarcar la casilla lo activa o desactiva en disco al momento (como el juego
+/// lo lee); si falla, la casilla vuelve a su estado y se informa.
+/// </summary>
 public sealed class ModItemViewModel : ObservableObject
 {
+    private readonly Func<WorkshopMod, bool, string?> _apply;
+    private WorkshopMod _mod;
     private bool _isEnabled;
     private string _title;
 
-    public ModItemViewModel(WorkshopMod mod)
+    public ModItemViewModel(WorkshopMod mod, Func<WorkshopMod, bool, string?> apply)
     {
-        Id = mod.Id;
-        _title = $"Mod {mod.Id}";
+        _mod = mod;
+        _apply = apply;
+        _title = mod.Title ?? $"Mod {mod.Id}";
         SizeText = Formatting.Bytes(mod.SizeBytes);
         _isEnabled = mod.Enabled;
-        InitialEnabled = mod.Enabled;
     }
 
-    public ulong Id { get; }
+    public ulong Id => _mod.Id;
     public string SizeText { get; }
-    public bool InitialEnabled { get; }
+    public bool HasTitleFromDisk => _mod.Title is not null;
+
+    /// <summary>«Carpeta de mods del juego (disable.it)» / «Carpeta de Workshop».</summary>
+    public string ControlText => _mod.Control == ModControl.GameModsFolder ? "mods del juego" : "Workshop";
 
     public string Title
     {
@@ -68,8 +76,21 @@ public sealed class ModItemViewModel : ObservableObject
     public bool IsEnabled
     {
         get => _isEnabled;
-        set => SetProperty(ref _isEnabled, value);
+        set
+        {
+            if (_isEnabled == value) return;
+            var error = _apply(_mod, value);
+            if (error is null)
+            {
+                _isEnabled = value;
+                _mod = _mod with { Enabled = value };
+            }
+            OnPropertyChanged(); // si falló, la casilla vuelve a su estado real
+        }
     }
+
+    /// <summary>Tras mover la carpeta (mods de Workshop) la ruta cambia.</summary>
+    public void UpdatePath(string path) => _mod = _mod with { Path = path };
 }
 
 /// <summary>
@@ -116,8 +137,8 @@ public sealed class GamePropertiesViewModel : ObservableObject
     public string DlcTabHeader => $"DLC ({Dlcs.Count})";
     public string ModsTabHeader => $"Workshop ({Mods.Count})";
 
-    public bool HasChanges =>
-        Dlcs.Any(d => d.HasContent && d.IsEnabled != d.InitialEnabled) || Mods.Any(m => m.IsEnabled != m.InitialEnabled);
+    /// <summary>Solo los DLC esperan a «Aplicar» (necesitan Steam cerrado); los mods se aplican al momento.</summary>
+    public bool HasChanges => Dlcs.Any(d => d.HasContent && d.IsEnabled != d.InitialEnabled);
 
     public ICommand ApplyCommand { get; }
     public ICommand OpenWorkshopCommand { get; }
@@ -195,67 +216,77 @@ public sealed class GamePropertiesViewModel : ObservableObject
     private async Task LoadModsAsync()
     {
         if (Library is null) { ModsStatus = "Solo disponible para juegos instalados."; return; }
-        var mods = await Task.Run(() => WorkshopModManager.List(Library, _card.Entry.AppId));
-        foreach (var m in mods.OrderByDescending(m => m.Enabled))
-        {
-            var item = new ModItemViewModel(m);
-            item.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ModItemViewModel.IsEnabled)) CommandManager.InvalidateRequerySuggested(); };
-            Mods.Add(item);
-        }
+        var mods = await Task.Run(() => WorkshopModManager.List(Library, _card.Entry.AppId, _card.Entry.InstallDir));
+        foreach (var m in mods.OrderByDescending(m => m.Enabled).ThenBy(m => m.Title ?? "~", StringComparer.CurrentCultureIgnoreCase))
+            Mods.Add(new ModItemViewModel(m, ApplyMod));
         OnPropertyChanged(nameof(ModsTabHeader));
         if (mods.Count == 0) { ModsStatus = "No hay mods de Workshop descargados para este juego."; return; }
+        UpdateModsStatus();
 
-        var active = mods.Count(m => m.Enabled);
-        ModsStatus = $"{mods.Count} mods descargados, {active} activos. Desactivar un mod saca su carpeta de la que lee el juego " +
-                     "(no se borra). Steam puede volver a descargarlo mientras sigas suscrito.";
-        if (_session.HasSavedSession)
+        // Nombres que no estén en el disco: se piden a Steam.
+        var unnamed = Mods.Where(m => !m.HasTitleFromDisk).Select(m => m.Id).ToList();
+        if (unnamed.Count > 0 && _session.HasSavedSession)
         {
-            var titles = await Task.Run(() => _community.GetWorkshopTitlesAsync(mods.Select(m => m.Id).ToList(), CancellationToken.None));
+            var titles = await Task.Run(() => _community.GetWorkshopTitlesAsync(unnamed, CancellationToken.None));
             foreach (var item in Mods)
                 if (titles.TryGetValue(item.Id, out var title)) item.Title = title;
         }
     }
 
+    private void UpdateModsStatus()
+    {
+        var gameFolder = Mods.Any(m => m.ControlText == "mods del juego");
+        ModsStatus = $"{Mods.Count} mods, {Mods.Count(m => m.IsEnabled)} activos. Los cambios se aplican al momento. " +
+                     (gameFolder
+                         ? "Este juego carga los mods desde su carpeta «mods»: se activan y desactivan con su propio archivo disable.it, igual que en el menú de mods del juego."
+                         : "Desactivar un mod saca su carpeta de la que lee el juego (no se borra); Steam puede volver a descargarlo mientras sigas suscrito.");
+    }
+
+    /// <summary>Activa o desactiva un mod en disco (llamado por la casilla). Null = hecho.</summary>
+    private string? ApplyMod(WorkshopMod mod, bool enabled)
+    {
+        if (_card.IsRunning) { ResultText = "Cierra el juego antes de cambiar sus mods."; return ResultText; }
+        var error = WorkshopModManager.SetEnabled(Library!, _card.Entry.AppId, mod, enabled);
+        if (error is null)
+        {
+            Mods.FirstOrDefault(m => m.Id == mod.Id)?.UpdatePath(WorkshopModManager.PathAfter(Library!, _card.Entry.AppId, mod, enabled));
+            ResultText = $"«{mod.Title ?? mod.Id.ToString()}» {(enabled ? "activado" : "desactivado")}.";
+            // Al terminar de procesar la casilla, refrescar el recuento.
+            System.Windows.Application.Current.Dispatcher.BeginInvoke(UpdateModsStatus);
+        }
+        else
+        {
+            ResultText = error;
+        }
+        return error;
+    }
+
     // =====================================================================================
 
+    /// <summary>Aplica los cambios de DLC (los mods ya se aplicaron al marcarlos).</summary>
     private void Apply()
     {
-        var problems = new List<string>();
-        var dlcChanged = Dlcs.Any(d => d.HasContent && d.IsEnabled != d.InitialEnabled);
-        var modsChanged = Mods.Where(m => m.IsEnabled != m.InitialEnabled).ToList();
-
-        if (_card.IsRunning) { ResultText = "Cierra el juego antes de cambiar DLC o mods."; return; }
-
+        if (_card.IsRunning) { ResultText = "Cierra el juego antes de cambiar los DLC."; return; }
+        if (SteamLocator.IsClientRunning())
+        {
+            ResultText = "Cierra Steam para cambiar los DLC (lo reescribe al salir) y vuelve a pulsar «Aplicar».";
+            return;
+        }
         _isBusy = true;
         try
         {
-            if (dlcChanged)
-            {
-                if (SteamLocator.IsClientRunning())
-                    problems.Add("Los DLC no se han cambiado: cierra Steam (lo reescribe al salir) y vuelve a aplicar.");
-                else
-                {
-                    try
-                    {
-                        AppManifestWriter.WriteDisabledDlc(AcfPath, Dlcs.Where(d => d.HasContent && !d.IsEnabled).Select(d => d.Id));
-                    }
-                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                    {
-                        problems.Add($"No se pudo guardar la configuración de DLC: {ex.Message}");
-                    }
-                }
-            }
-            foreach (var m in modsChanged)
-                if (WorkshopModManager.SetEnabled(Library!, _card.Entry.AppId, m.Id, m.IsEnabled) is { } error)
-                    problems.Add(error);
+            AppManifestWriter.WriteDisabledDlc(AcfPath, Dlcs.Where(d => d.HasContent && !d.IsEnabled).Select(d => d.Id));
+            ResultText = "DLC guardados. Se aplican en la próxima actualización o verificación del juego.";
+            Reload();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ResultText = $"No se pudo guardar la configuración de DLC: {ex.Message}";
         }
         finally
         {
             _isBusy = false;
         }
-
-        ResultText = problems.Count == 0 ? "Cambios aplicados." : string.Join("\n", problems);
-        if (problems.Count == 0) Reload();
     }
 
     /// <summary>Recarga el estado real tras aplicar (lo marcado pasa a ser el estado inicial).</summary>
@@ -264,14 +295,6 @@ public sealed class GamePropertiesViewModel : ObservableObject
         var dlcs = Dlcs.Select(d => new DlcItemViewModel(d.Id, d.Name, d.HasContent, d.IsInstalled, d.IsEnabled)).ToList();
         Dlcs.Clear();
         foreach (var d in dlcs) { d.PropertyChanged += (_, _) => CommandManager.InvalidateRequerySuggested(); Dlcs.Add(d); }
-        var titles = Mods.ToDictionary(m => m.Id, m => m.Title);
-        Mods.Clear();
-        foreach (var m in WorkshopModManager.List(Library!, _card.Entry.AppId).OrderByDescending(m => m.Enabled))
-        {
-            var item = new ModItemViewModel(m) { Title = titles.GetValueOrDefault(m.Id, $"Mod {m.Id}") };
-            item.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ModItemViewModel.IsEnabled)) CommandManager.InvalidateRequerySuggested(); };
-            Mods.Add(item);
-        }
         CommandManager.InvalidateRequerySuggested();
     }
 

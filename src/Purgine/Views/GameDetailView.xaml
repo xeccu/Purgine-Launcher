@@ -326,14 +326,14 @@
                             </StackPanel>
                         </Button>
                         <Button Style="{StaticResource LinkRow}" Command="{Binding OpenWorkshopCommand}"
-                                Visibility="{Binding Card.IsSteam, Converter={StaticResource BoolToVis}}">
+                                Visibility="{Binding Card.ShowWorkshopLink, Converter={StaticResource BoolToVis}}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="&#xE74C;" FontFamily="{StaticResource IconFont}" Width="22" VerticalAlignment="Center" />
                                 <TextBlock Text="Steam Workshop" Margin="6,0,0,0" />
                             </StackPanel>
                         </Button>
                         <Button Style="{StaticResource LinkRow}" Command="{Binding OpenPointsShopCommand}"
-                                Visibility="{Binding Card.IsSteam, Converter={StaticResource BoolToVis}}">
+                                Visibility="{Binding Card.ShowPointsShopLink, Converter={StaticResource BoolToVis}}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="&#xE8EC;" FontFamily="{StaticResource IconFont}" Width="22" VerticalAlignment="Center" />
                                 <TextBlock Text="Tienda de puntos" Margin="6,0,0,0" />

@@ -22,6 +22,13 @@ public sealed class OwnedApp
     public ulong InstallSize { get; set; }
     /// <summary>Hash del icono .ico del juego (PICS common/clienticon), para los accesos directos.</summary>
     public string? ClientIcon { get; set; }
+    /// <summary>Tiene Steam Workshop (PICS common/workshop_visible). Null = desconocido (caché antigua).</summary>
+    public bool? HasWorkshop { get; set; }
+    /// <summary>
+    /// Tiene objetos en la Tienda de puntos: fondos, emoticonos… que salen de su colección de cromos
+    /// (PICS common/category/category_29). Null = desconocido.
+    /// </summary>
+    public bool? HasPointsShop { get; set; }
 }
 
 /// <summary>Contenido de <c>owned-games.json</c> (caché para arrancar sin red).</summary>
@@ -105,6 +112,8 @@ public sealed class SteamOwnershipService
                     PublicBuildId = kv["depots"]["branches"]["public"]["buildid"].AsUnsignedInteger(),
                     Icon = common["icon"].Value,
                     ClientIcon = common["clienticon"].Value,
+                    HasWorkshop = common["workshop_visible"].Value == "1",
+                    HasPointsShop = common["category"]["category_29"] != KeyValue.Invalid,
                     InstallSize = SumSizes(DepotSelector.Select(kv["depots"], language, ownedIds.Contains)),
                 });
             }

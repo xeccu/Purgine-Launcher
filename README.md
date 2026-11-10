@@ -140,10 +140,14 @@ Organizada como la biblioteca de un cliente de escritorio:
   - **DLC**: los DLC que tienes; los que tienen archivos propios se pueden desactivar. Se guarda en el
     appmanifest (`UserConfig/DisabledDLC`, como el cliente de Steam, con copia `.purgine.bak`) y Steam y
     Purgine dejan de instalarlos y actualizarlos. Requiere Steam cerrado.
-  - **Workshop**: los mods descargados (`steamapps\workshop\content\{appid}`) con nombre y tamaño. Desactivar
-    uno mueve su carpeta a `steamapps\workshop\purgine-disabled\{appid}` (no se borra); Steam puede volver a
-    descargarlo mientras sigas suscrito.
-- Enlaces a **Steam Workshop** y a la **Tienda de puntos** del juego.
+  - **Workshop**: los mods con nombre y tamaño; marcar o desmarcar se aplica **en disco al momento**, de la
+    forma en que el juego los lee. Si el juego tiene su propia carpeta `mods` (como The Binding of Isaac, que
+    copia ahí cada mod), se usa su archivo `disable.it`, el mismo que su menú de mods. Si no, la carpeta del mod
+    sale de `steamapps\workshop\content\{appid}` a `steamapps\workshop\purgine-disabled\{appid}` (no se
+    borra); Steam puede volver a descargarlo mientras sigas suscrito.
+- Enlaces a **Steam Workshop** y a la **Tienda de puntos** del juego, siempre con su AppID. Solo aparecen si el
+  juego tiene esa página según Steam (PICS: `workshop_visible` y cromos); sin ella Steam redirige a otra página.
+  Los ejecutables locales no los muestran.
 - **Espacio necesario**: los juegos no instalados muestran «Tamaño: X GB» en su portada y, en la ficha,
   «ESPACIO NECESARIO» junto a INSTALAR con el espacio libre del disco donde se instalaría (en rojo si no
   cabe). Es la suma de los depots que se descargarían en este equipo según PICS (Windows, 64 bits, idioma,

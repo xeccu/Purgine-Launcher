@@ -90,6 +90,27 @@ public sealed class GameCardViewModel : ObservableObject
 
     public GameEntry Entry { get; private set; }
 
+    /// <summary>AppID de Steam válido (número &gt; 0). Los ejecutables locales no tienen.</summary>
+    public bool HasValidAppId => IsSteam && uint.TryParse(Entry.AppId, out var id) && id > 0;
+
+    private bool? _hasWorkshop;
+    private bool? _hasPointsShop;
+
+    /// <summary>Qué páginas de Steam tiene el juego (null = desconocido: se muestra el enlace).</summary>
+    public void SetSteamFeatures(bool? hasWorkshop, bool? hasPointsShop)
+    {
+        _hasWorkshop = hasWorkshop;
+        _hasPointsShop = hasPointsShop;
+        OnPropertyChanged(nameof(ShowWorkshopLink));
+        OnPropertyChanged(nameof(ShowPointsShopLink));
+    }
+
+    /// <summary>Enlace a Workshop: solo con AppID válido y si el juego tiene Workshop (si no, Steam redirige a otra página).</summary>
+    public bool ShowWorkshopLink => HasValidAppId && _hasWorkshop != false;
+
+    /// <summary>Enlace a la Tienda de puntos: solo si el juego tiene objetos (si no, Steam enseña la tienda general).</summary>
+    public bool ShowPointsShopLink => HasValidAppId && _hasPointsShop != false;
+
     /// <summary>Juego, software o herramienta (según Steam; los ejecutables locales cuentan como juego).</summary>
     public Settings.LibraryContentType ContentType { get; set; } = Settings.LibraryContentType.Game;
 

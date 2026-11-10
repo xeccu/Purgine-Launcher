@@ -632,7 +632,11 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     private void ApplyRemoteUpdates()
     {
         foreach (var card in Games.Where(g => g.IsSteam))
-            card.SetInstallSize(uint.TryParse(card.Entry.AppId, out var sid) ? _ownership.Find(sid)?.InstallSize ?? 0 : 0);
+        {
+            var owned = uint.TryParse(card.Entry.AppId, out var sid) ? _ownership.Find(sid) : null;
+            card.SetInstallSize(owned?.InstallSize ?? 0);
+            card.SetSteamFeatures(owned?.HasWorkshop, owned?.HasPointsShop);
+        }
         foreach (var card in Games.Where(g => g.IsSteam && !g.IsNotInstalled))
         {
             var remote = uint.TryParse(card.Entry.AppId, out var id) ? _ownership.Find(id)?.PublicBuildId ?? 0 : 0;
