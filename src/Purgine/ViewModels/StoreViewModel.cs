@@ -94,6 +94,11 @@ public sealed class StoreViewModel : ObservableObject
 
     public void Release() => ReleaseRequested?.Invoke();
 
+    /// <summary>Un botón de la web de Epic quería abrir Epic Games Launcher (Purgine no lo abre).</summary>
+    public void ReportEpicLauncherLink() =>
+        _actions.ReportStatus("Purgine no abre Epic Games Launcher. Los juegos de Epic instalados se juegan desde la Biblioteca; " +
+                              "las instalaciones de Epic aún se hacen con su launcher.");
+
     /// <summary>
     /// Enlaces <c>steam://</c> de la web. Devuelve la URL https a la que navegar en su lugar, o null si ya se
     /// atendió (instalar/jugar) o no se reconoce.

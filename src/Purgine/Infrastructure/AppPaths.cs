@@ -20,6 +20,10 @@ public static class AppPaths
     /// <summary>Cola de descargas pendientes (se recupera en pausa al reiniciar).</summary>
     public static string DownloadQueueFile => Path.Combine(DataDir, "download-queue.json");
     public static string LogFile => Path.Combine(DataDir, "purgine.log");
+    /// <summary>Refresh token de Epic Games cifrado con DPAPI (nunca la contraseña).</summary>
+    public static string EpicSessionFile => Path.Combine(DataDir, "epic-session.bin");
+    /// <summary>Tokens de propiedad temporales de Epic (juegos con DRM de Epic).</summary>
+    public static string EpicOwnershipDir => Path.Combine(DataDir, "epic-ovt");
     /// <summary>Notas y reseñas personales por juego (solo locales).</summary>
     public static string GameNotesFile => Path.Combine(DataDir, "game-notes.json");
     /// <summary>Petición de jugar de una segunda instancia (acceso directo con --run) a la que ya está abierta.</summary>

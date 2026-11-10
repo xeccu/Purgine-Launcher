@@ -65,6 +65,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     private readonly SteamCommunityService _community;
     private readonly GameNotesStore _notes;
     private readonly SteamLocator _steam;
+    private readonly EpicNet.EpicAccountService _epic;
 
     /// <summary>AppIDs de la cuenta (red de Steam si hay sesión; si no, caché local del cliente).</summary>
     private IReadOnlySet<string> _owned = new HashSet<string>();
@@ -94,6 +95,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         SteamArtService art,
         SteamCommunityService community,
         GameNotesStore notes,
+        EpicNet.EpicAccountService epic,
         LibraryWatcher watcher,
         SteamLocator steam,
         SteamSession session,
@@ -114,12 +116,13 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         _community = community;
         _notes = notes;
         _steam = steam;
+        _epic = epic;
         _saveSettings = new DebouncedAction(saveSettings, TimeSpan.FromMilliseconds(600));
 
         Store = new StoreViewModel(this);
         Downloads = new DownloadsViewModel(this);
         Settings = new SettingsViewModel(settings, library, steam, _saveSettings.Request, () => Dialogs,
-            login: LoginAsync, logout: LogoutAsync);
+            login: LoginAsync, logout: LogoutAsync, epicLogin: EpicLoginAsync, epicLogout: EpicLogoutAsync);
 
         GamesView = CollectionViewSource.GetDefaultView(Games);
         ApplySort();
@@ -150,6 +153,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         RebuildTagFilters();
         SyncDownloads();
         UpdateAccountText();
+        UpdateEpicAccountText();
     }
 
     // =====================================================================================
@@ -577,6 +581,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         }
 
         if (_session.HasSavedSession) _ = RefreshOwnershipAsync();
+        if (_epic.HasSession) _ = SyncEpicAccountAsync();
 
         // Iconos de la lista lateral (pequeños, casi siempre ya en la caché del cliente) y después las
         // portadas, uno a uno, sin bloquear la UI ni disparar picos de memoria.
@@ -898,6 +903,77 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     }
 
     // =====================================================================================
+    // Cuenta de Epic Games (sin su launcher)
+    // =====================================================================================
+
+    private async Task EpicLoginAsync()
+    {
+        if (Dialogs is null || !Dialogs.EpicLogin()) return;
+        StatusText = $"Cuenta de Epic Games vinculada: {_epic.DisplayName}.";
+        UpdateEpicAccountText();
+        await SyncEpicAccountAsync();
+    }
+
+    private async Task EpicLogoutAsync()
+    {
+        if (!(Dialogs?.Confirm("Desvincular Epic Games",
+                "¿Desvincular tu cuenta de Epic Games de Purgine? Se borra el token guardado; para jugar a los juegos de Epic desde Purgine tendrás que volver a iniciar sesión.") ?? false))
+            return;
+        await _epic.LogOutAsync();
+        UpdateEpicAccountText();
+    }
+
+    private void UpdateEpicAccountText() =>
+        Settings.SetEpicAccountState(_epic.HasSession
+            ? $"Vinculada como {_epic.DisplayName}. Los juegos de Epic se lanzan directamente, sin Epic Games Launcher."
+            : "Sin vincular. Inicia sesión para jugar a los juegos de Epic desde Purgine sin abrir su launcher.", _epic.HasSession);
+
+    /// <summary>Para jugar a un juego de Epic hace falta la cuenta vinculada (una sola vez).</summary>
+    private async Task<bool> EnsureEpicAccountAsync()
+    {
+        if (_epic.HasSession) return true;
+        if (!(Dialogs?.Confirm("Vincula tu cuenta de Epic Games",
+                "Para jugar a los juegos de Epic sin abrir Epic Games Launcher, Purgine necesita tu cuenta de Epic (solo una vez).\n\n" +
+                "Inicias sesión en la página oficial de Epic; tu contraseña no pasa por Purgine: solo se guarda un token, cifrado en este equipo.\n\n¿Vincular ahora?") ?? false))
+            return false;
+        await EpicLoginAsync();
+        return _epic.HasSession;
+    }
+
+    /// <summary>
+    /// Datos de la cuenta de Epic: tiempo jugado (se suma al de Purgine) y arte del catálogo (portada, imagen
+    /// panorámica y logo) para los juegos de Epic instalados.
+    /// </summary>
+    private async Task SyncEpicAccountAsync()
+    {
+        try
+        {
+            var playtime = await Task.Run(() => _epic.GetPlaytimeAsync(CancellationToken.None));
+            if (playtime is not null)
+            {
+                _tracker.SetPlatformPlaytime("epic", playtime.ToDictionary(
+                    kv => GameEntry.MakeEpicId(kv.Key), kv => new SteamAppUsage(kv.Key, kv.Value, null)));
+                foreach (var g in Games.Where(g => g.IsEpic)) g.RefreshStats();
+                RaiseLibraryTexts();
+            }
+            foreach (var card in Games.Where(g => g.IsEpic).ToList())
+            {
+                if (card.Entry.EpicNamespace is not { } ns || card.Entry.EpicCatalogItemId is not { } id) continue;
+                var info = await Task.Run(() => _epic.GetCatalogInfoAsync(ns, id, CancellationToken.None));
+                if (info is null) continue;
+                card.RemoteHeroUrl = info.HeroUrl;
+                card.RemoteLogoUrl = info.LogoUrl;
+                if (info.CoverUrl is { } cover && card.Entry.CoverImagePath is null)
+                    card.SetCover(await _art.LoadRemoteAsync(cover, $"epic_cover_{card.Entry.AppId}.jpg", 180));
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Epic: no se pudieron leer los datos de la cuenta: {ex.Message}");
+        }
+    }
+
+    // =====================================================================================
     // Descargas nativas (IDownloadActions)
     // =====================================================================================
 
@@ -1131,6 +1207,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     private async Task LaunchAsync(GameCardViewModel card)
     {
         if (IsSessionActive || _orchestrator.IsBusy) return;
+        if (card.IsEpic && !await EnsureEpicAccountAsync()) return;
 
         _sessionCts = new CancellationTokenSource();
         _cloudNotified = false;

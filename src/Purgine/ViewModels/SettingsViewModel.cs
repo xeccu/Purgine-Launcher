@@ -24,8 +24,10 @@ public sealed class SettingsViewModel : ObservableObject
     private string _savedText = string.Empty;
 
     public SettingsViewModel(LauncherSettings settings, UserLibrary library, SteamLocator steam, Action save, Func<IDialogService?> dialogs,
-        Func<Task> login, Func<Task> logout)
+        Func<Task> login, Func<Task> logout, Func<Task> epicLogin, Func<Task> epicLogout)
     {
+        EpicLoginCommand = new RelayCommand(async _ => await epicLogin(), _ => !IsEpicLinked);
+        EpicLogoutCommand = new RelayCommand(async _ => await epicLogout(), _ => IsEpicLinked);
         _s = settings;
         _library = library;
         _steam = steam;
@@ -65,6 +67,23 @@ public sealed class SettingsViewModel : ObservableObject
     public ICommand LogoutCommand { get; }
 
     /// <summary>Lo llama la ventana principal cuando cambia la sesión.</summary>
+    // ===================== Cuenta de Epic Games =====================
+
+    private string _epicAccountText = string.Empty;
+    private bool _isEpicLinked;
+
+    public string EpicAccountText { get => _epicAccountText; private set => SetProperty(ref _epicAccountText, value); }
+    public bool IsEpicLinked { get => _isEpicLinked; private set => SetProperty(ref _isEpicLinked, value); }
+    public ICommand EpicLoginCommand { get; }
+    public ICommand EpicLogoutCommand { get; }
+
+    public void SetEpicAccountState(string text, bool linked)
+    {
+        EpicAccountText = text;
+        IsEpicLinked = linked;
+        CommandManager.InvalidateRequerySuggested();
+    }
+
     public void SetAccountState(string text, bool loggedIn)
     {
         AccountText = text;

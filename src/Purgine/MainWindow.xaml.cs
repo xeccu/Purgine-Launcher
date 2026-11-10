@@ -27,7 +27,10 @@ public partial class MainWindow : Window, IDialogService
 
     private readonly SteamNet.SteamSession _steamSession;
 
-    public MainWindow(MainViewModel viewModel, LauncherSettings settings, UserLibrary library, SteamNet.SteamSession steamSession)
+    private readonly EpicNet.EpicAccountService _epic;
+
+    public MainWindow(MainViewModel viewModel, LauncherSettings settings, UserLibrary library, SteamNet.SteamSession steamSession,
+        EpicNet.EpicAccountService epic)
     {
         InitializeComponent();
         WindowTheming.UseDarkTitleBar(this);
@@ -35,6 +38,7 @@ public partial class MainWindow : Window, IDialogService
         _settings = settings;
         _library = library;
         _steamSession = steamSession;
+        _epic = epic;
         DataContext = viewModel;
         viewModel.Dialogs = this;
 
@@ -206,6 +210,12 @@ public partial class MainWindow : Window, IDialogService
     {
         if (!IsVisible) RestoreFromTray();
         return Task.FromResult(SteamLoginDialog.Show(this, _steamSession));
+    }
+
+    public bool EpicLogin()
+    {
+        if (!IsVisible) RestoreFromTray();
+        return EpicLoginDialog.Show(this, _epic);
     }
 
     public void ShowGameProperties(GamePropertiesViewModel properties)

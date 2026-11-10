@@ -202,6 +202,15 @@ public sealed partial class GameDetailViewModel : ObservableObject
     private async Task LoadImagesAsync(CancellationToken ct)
     {
         _imagesLoaded = true;
+        if (Card.IsEpic && Card.RemoteHeroUrl is { } heroUrl)
+        {
+            // Epic: imagen panorámica y logo del catálogo de la cuenta.
+            Hero = await _art.LoadRemoteAsync(heroUrl, $"epic_hero_{Card.Entry.AppId}.jpg", HeroDecodeWidth, ct) ?? Card.Cover;
+            if (Card.RemoteLogoUrl is { } logoUrl && !ct.IsCancellationRequested)
+                Logo = await _art.LoadRemoteAsync(logoUrl, $"epic_logo_{Card.Entry.AppId}.png", LogoDecodeWidth, ct);
+            if (Hero is BitmapSource epicHero) GlowEffect = GraphicsTheme.GlowFor(_accent = ColorExtractor.Dominant(epicHero));
+            return;
+        }
         if (!Card.IsSteam)
         {
             Hero = Card.Cover; // los locales solo tienen portada (si la hay)

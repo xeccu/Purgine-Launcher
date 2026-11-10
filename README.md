@@ -204,15 +204,21 @@ marcan y no se pueden elegir.
   de sus manifiestos locales (`%ProgramData%\Epic\EpicGamesLauncher\Data\Manifests\*.item`, sin red). Las
   portadas y la lista lateral llevan un distintivo **STEAM / EPIC / LOCAL**; filtros, orden, «Listos para
   jugar», notas, forzar cierre y tiempo jugado funcionan igual.
-- **Jugar**: Purgine lanza el juego con la URI de Epic Games Launcher en modo silencioso (el launcher valida la
-  licencia y la sesión online, como Steam con `steam://run`), vigila su proceso y, al salir, tras la espera de
-  la nube, cierra el launcher si lo abrió Purgine (misma política que Steam). Si el juego no arranca —lo
-  habitual es que Epic pida iniciar sesión o actualizarse— Epic se deja abierto para que lo hagas.
+- **Cuenta de Epic** (Ajustes → «Cuenta de Epic Games»): inicias sesión en la página oficial de Epic dentro de
+  una ventana de Purgine; Purgine no ve la contraseña, solo guarda el refresh token cifrado con DPAPI
+  (`epic-session.bin`). Mismo enfoque que Legendary / Heroic.
+- **Jugar sin Epic Games Launcher**: con la cuenta vinculada, Purgine ejecuta directamente el binario del
+  juego con un código de intercambio de un solo uso (y el token de propiedad si el juego lo exige), así que el
+  juego arranca con tu sesión de Epic y **sin ningún proceso del launcher**. Purgine nunca invoca
+  `com.epicgames.launcher://`; si la cuenta no está vinculada, pide vincularla.
+- **Tiempo jugado y arte**: el tiempo registrado en tu cuenta de Epic se suma al que mide Purgine (lanzando el
+  juego directamente, Epic no lo registra), y el catálogo de la cuenta aporta portada, imagen panorámica y logo.
 - **Tienda**: selector **Steam / Epic Games** en la pestaña Tienda (el mismo navegador para las dos). Los
-  botones de la tienda de Epic que abren su launcher (instalar, abrir) se le pasan a Epic Games Launcher.
-- **Límites**: solo los juegos *instalados* (la lista completa de la cuenta de Epic necesita su API con inicio
-  de sesión); Epic no publica arte, logros ni cromos sin sesión, así que su ficha usa el icono del juego y los
-  enlaces a Epic Games Store. Instalar, actualizar y desinstalar juegos de Epic se hace en Epic Games Launcher.
+  botones de la web de Epic que abrirían su launcher se bloquean (Purgine no lo abre).
+- **Pendiente**: descargar, actualizar e instalar juegos de Epic desde Purgine (requiere implementar su
+  formato de manifiestos y fragmentos), los juegos de la cuenta que no están instalados y los logros de Epic
+  (no hay una API pública sin las credenciales EOS de cada juego). Por ahora se instalan con Epic Games
+  Launcher; una vez instalados, se juegan desde Purgine sin él.
 
 ### Otras funciones
 
@@ -251,6 +257,7 @@ Todo en `%LocalAppData%\Purgine\` (botón «Abrir carpeta de datos» en Ajustes)
 | `owned-games.json` | Juegos de la cuenta según Steam (caché) |
 | `download-queue.json` | Cola de descargas pendientes (con la unidad y los accesos directos elegidos) |
 | `settings.json` · `library.json` · `playtime.json` | Ajustes, etiquetas/ejecutables locales, tiempo jugado |
+| `epic-session.bin` | Refresh token de Epic Games cifrado con DPAPI (nunca la contraseña) |
 | `game-notes.json` | Notas y reseñas personales por juego (solo locales) |
 | `art\` | Iconos, imágenes panorámicas, logos e iconos de logros que no estaban en la caché de Steam |
 | `webview\` | Perfil del navegador de la Tienda (cookies y sesión web de Steam, caché) |
@@ -262,7 +269,7 @@ Todo en `%LocalAppData%\Purgine\` (botón «Abrir carpeta de datos» en Ajustes)
 
 ## Limitaciones y avisos
 
-- **Valve no da soporte oficial a clientes de terceros.** SteamKit2 y DepotDownloader se usan desde hace
+- **Ni Valve ni Epic dan soporte oficial a clientes de terceros.** SteamKit2 y DepotDownloader se usan desde hace
   años con cuentas normales, pero el riesgo no es cero.
 - Se descarga la **rama pública**. Las betas, los depots con manifiesto cifrado y el contenido del Workshop
   no se gestionan (Steam los resuelve al jugar).

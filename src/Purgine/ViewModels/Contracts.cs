@@ -47,6 +47,8 @@ public interface IDialogService
     /// <summary>Inicio de sesión en Steam (usuario/contraseña + Steam Guard). True si se completó.</summary>
     Task<bool> SteamLoginAsync();
     LocalGameDefinition? EditLocalGame(LocalGameDefinition? existing);
+    /// <summary>Inicio de sesión en Epic Games (página oficial en una ventana). True si se vinculó la cuenta.</summary>
+    bool EpicLogin();
     /// <summary>Diálogo de propiedades de un juego (DLC y mods).</summary>
     void ShowGameProperties(GamePropertiesViewModel properties);
     bool Confirm(string title, string message);

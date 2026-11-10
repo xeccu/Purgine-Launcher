@@ -49,6 +49,7 @@ public static class EpicLibraryScanner
                     Name = name.Trim(),
                     InstallDir = install,
                     ExecutablePath = exe is null ? null : Path.GetFullPath(Path.Combine(install, exe)),
+                    Arguments = Str(r, "LaunchCommand"), // argumentos propios del juego (se añaden al lanzarlo)
                     SizeOnDisk = r.TryGetProperty("InstallSize", out var s) && s.TryGetInt64(out var size) ? size : 0,
                     EpicNamespace = Str(r, "CatalogNamespace"),
                     EpicCatalogItemId = Str(r, "CatalogItemId"),

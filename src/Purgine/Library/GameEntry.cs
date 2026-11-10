@@ -84,9 +84,6 @@ public sealed record GameEntry
     /// <summary>Categorías del manifiesto de Epic («games», «applications»…).</summary>
     public IReadOnlyList<string> EpicCategories { get; init; } = [];
 
-    /// <summary>URI con la que Epic Games Launcher lanza el juego sin mostrar su ventana.</summary>
-    public string? EpicLaunchUri => EpicNamespace is null || EpicCatalogItemId is null ? null
-        : $"com.epicgames.launcher://apps/{Uri.EscapeDataString($"{EpicNamespace}:{EpicCatalogItemId}:{AppId}")}?action=launch&silent=true";
 
     public static string MakeSteamId(string appId) => $"steam:{appId}";
     public static string MakeEpicId(string appName) => $"epic:{appName}";

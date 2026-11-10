@@ -141,13 +141,24 @@ public sealed class GameCardViewModel : ObservableObject
     public bool IsSteam => Entry.Platform == GamePlatform.Steam;
     public bool IsEpic => Entry.Platform == GamePlatform.Epic;
 
-    /// <summary>Distintivo de plataforma de la tarjeta: «STEAM», «EPIC» o «LOCAL».</summary>
-    public string PlatformBadge => Entry.Platform switch
+    /// <summary>Plataforma de origen (nombre, distintivo y color) según el registro de plataformas.</summary>
+    public PlatformInfo Platform => PlatformRegistry.Get(Entry.Platform);
+    /// <summary>Distintivo de plataforma de la tarjeta: «STEAM», «EPIC», «LOCAL»…</summary>
+    public string PlatformBadge => Platform.Badge;
+    public System.Windows.Media.Brush PlatformBadgeBrush => Platform.BadgeBrush;
+
+    /// <summary>Arte remoto de la plataforma (Epic: catálogo de la cuenta): portada, imagen panorámica y logo.</summary>
+    public string? RemoteCoverUrl { get; set; }
+    public string? RemoteHeroUrl { get; set; }
+    public string? RemoteLogoUrl { get; set; }
+
+    /// <summary>Portada obtenida de la plataforma (cuando no hay imagen local).</summary>
+    public void SetCover(ImageSource? cover)
     {
-        GamePlatform.Epic => "EPIC",
-        GamePlatform.Local => "LOCAL",
-        _ => "STEAM",
-    };
+        if (cover is null) return;
+        Cover = cover;
+        if (IsEpic) SmallIcon ??= cover;
+    }
     public string PlatformLabel =>
         IsLocal ? "Local"
         : IsEpic ? "Epic Games"

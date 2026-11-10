@@ -1,0 +1,21 @@
+<Window x:Class="Purgine.Views.EpicLoginDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Style="{StaticResource DialogWindow}" WindowStartupLocation="CenterOwner"
+        SizeToContent="Manual" ResizeMode="CanResize"
+        Width="560" Height="780" MinWidth="460" MinHeight="560" Title="Iniciar sesión en Epic Games">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Border Grid.Row="0" Background="{StaticResource SurfaceBrush}" Padding="16,10" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+            <TextBlock x:Name="InfoText" TextWrapping="Wrap" Style="{StaticResource MutedText}" FontSize="12"
+                       Text="Inicia sesión con tu cuenta en la página oficial de Epic Games. Purgine no ve ni guarda tu contraseña: solo recibe un token de sesión, que se guarda cifrado en este equipo." />
+        </Border>
+        <Grid Grid.Row="1" x:Name="Host" Background="{StaticResource BgBrush}">
+            <TextBlock x:Name="StatusText" Text="Abriendo la página de Epic Games…" HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="24" />
+        </Grid>
+    </Grid>
+</Window>

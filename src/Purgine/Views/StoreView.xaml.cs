@@ -283,8 +283,13 @@ public partial class StoreView : UserControl
     /// </summary>
     private void OnLaunchingExternalUriScheme(object? sender, CoreWebView2LaunchingExternalUriSchemeEventArgs e)
     {
-        if (e.Uri.StartsWith("com.epicgames.launcher:", StringComparison.OrdinalIgnoreCase)) return;
         e.Cancel = true;
+        if (e.Uri.StartsWith("com.epicgames.launcher:", StringComparison.OrdinalIgnoreCase))
+        {
+            // Purgine no abre Epic Games Launcher. Los juegos de Epic ya instalados se juegan desde la Biblioteca.
+            _vm?.ReportEpicLauncherLink();
+            return;
+        }
         if (IsSteamLink(e.Uri)) HandleSteamLink(e.Uri);
     }
 

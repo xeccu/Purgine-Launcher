@@ -58,7 +58,9 @@ public sealed class GameTimeTracker
     private readonly object _gate = new();
     private readonly PlaytimeData _data;
     private readonly Dictionary<string, List<PlaySession>> _byGame = new();
-    private Dictionary<string, SteamAppUsage> _steam = new(); // clave: gameId (steam:{appid})
+    /// <summary>Histórico de las plataformas (Steam, Epic…), clave: gameId. Es la unión de los de cada una.</summary>
+    private Dictionary<string, SteamAppUsage> _steam = new();
+    private readonly Dictionary<string, Dictionary<string, SteamAppUsage>> _byPlatform = new();
     private Stopwatch? _stopwatch;
 
     public event EventHandler<PlaySession>? SessionRecorded;
@@ -76,8 +78,20 @@ public sealed class GameTimeTracker
     /// <summary>Sustituye el histórico de Steam (se llama al escanear y tras cada sesión de Steam).</summary>
     public void SetSteamPlaytime(IReadOnlyDictionary<string, SteamAppUsage> byAppId)
     {
-        var map = byAppId.Values.ToDictionary(u => GameEntry.MakeSteamId(u.AppId));
-        lock (_gate) _steam = map;
+        SetPlatformPlaytime("steam", byAppId.Values.ToDictionary(u => GameEntry.MakeSteamId(u.AppId)));
+    }
+
+    /// <summary>
+    /// Sustituye el histórico de una plataforma (clave: gameId). Sin fecha de última sesión (Epic), todas las
+    /// sesiones de Purgine se suman: lanzando el juego directamente, la plataforma no las registra.
+    /// </summary>
+    public void SetPlatformPlaytime(string platform, IReadOnlyDictionary<string, SteamAppUsage> byGameId)
+    {
+        lock (_gate)
+        {
+            _byPlatform[platform] = new Dictionary<string, SteamAppUsage>(byGameId);
+            _steam = _byPlatform.Values.SelectMany(d => d).GroupBy(kv => kv.Key).ToDictionary(g => g.Key, g => g.First().Value);
+        }
     }
 
     public void StartSession(string gameId, string gameName)
