@@ -83,6 +83,10 @@ public sealed record GameEntry
     public string? EpicCatalogItemId { get; init; }
     /// <summary>Categorías del manifiesto de Epic («games», «applications»…).</summary>
     public IReadOnlyList<string> EpicCategories { get; init; } = [];
+    /// <summary>Versión instalada (AppVersionString / BuildVersion); se compara con la build pública de Epic.</summary>
+    public string? EpicVersion { get; init; }
+    /// <summary>Instalado por Purgine (sin Epic Games Launcher): se puede desinstalar desde Purgine.</summary>
+    public bool EpicManagedByPurgine { get; init; }
 
 
     public static string MakeSteamId(string appId) => $"steam:{appId}";

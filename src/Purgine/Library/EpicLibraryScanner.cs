@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Purgine.EpicNet;
 using Purgine.Infrastructure;
 
 namespace Purgine.Library;
@@ -54,6 +55,7 @@ public static class EpicLibraryScanner
                     EpicNamespace = Str(r, "CatalogNamespace"),
                     EpicCatalogItemId = Str(r, "CatalogItemId"),
                     EpicCategories = categories,
+                    EpicVersion = Str(r, "AppVersionString"),
                     IsInstalled = Directory.Exists(install),
                 });
             }
@@ -62,8 +64,44 @@ public static class EpicLibraryScanner
                 Log.Warn($"Manifiesto de Epic ilegible ({Path.GetFileName(file)}): {ex.Message}");
             }
         }
+        MergePurgineInstalls(games);
         Log.Info($"Biblioteca Epic: {games.Count} juegos instalados.");
         return games;
+    }
+
+    /// <summary>
+    /// Lo instalado o actualizado por Purgine: juegos nuevos (sin .item de Epic) y la versión al día de los que
+    /// Purgine actualizó en la carpeta de Epic Games Launcher.
+    /// </summary>
+    private static void MergePurgineInstalls(List<GameEntry> games)
+    {
+        foreach (var rec in EpicInstallRegistry.Load())
+        {
+            if (string.IsNullOrEmpty(rec.AppName) || !Directory.Exists(rec.InstallDir)) continue;
+            var index = games.FindIndex(g => g.AppId == rec.AppName);
+            if (index >= 0)
+            {
+                if (string.Equals(games[index].InstallDir?.TrimEnd('\\'), rec.InstallDir.TrimEnd('\\'),StringComparison.OrdinalIgnoreCase))
+                    games[index] = games[index] with { EpicVersion = rec.BuildVersion };
+                continue;
+            }
+            games.Add(new GameEntry
+            {
+                Id = GameEntry.MakeEpicId(rec.AppName),
+                Platform = GamePlatform.Epic,
+                AppId = rec.AppName,
+                Name = rec.Title,
+                InstallDir = rec.InstallDir,
+                ExecutablePath = string.IsNullOrEmpty(rec.LaunchExe) ? null : Path.GetFullPath(Path.Combine(rec.InstallDir, rec.LaunchExe)),
+                Arguments = string.IsNullOrEmpty(rec.LaunchCommand) ? null : rec.LaunchCommand,
+                SizeOnDisk = rec.InstallSize,
+                EpicNamespace = rec.Namespace,
+                EpicCatalogItemId = rec.CatalogItemId,
+                EpicCategories = rec.Categories,
+                EpicVersion = rec.BuildVersion,
+                EpicManagedByPurgine = true,
+            });
+        }
     }
 
     private static IEnumerable<string> SafeFiles(string dir)

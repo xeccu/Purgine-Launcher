@@ -66,6 +66,12 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     private readonly GameNotesStore _notes;
     private readonly SteamLocator _steam;
     private readonly EpicNet.EpicAccountService _epic;
+    private readonly EpicNet.EpicDownloadManager _epicDownloads;
+
+    /// <summary>Juegos de la cuenta de Epic que no están instalados (última consulta a la red).</summary>
+    private List<GameEntry> _epicOwned = [];
+    /// <summary>Build pública y tamaño instalado de cada juego de Epic (caché en disco).</summary>
+    private readonly Dictionary<string, EpicBuildInfo> _epicBuilds = JsonFileStore.Load<Dictionary<string, EpicBuildInfo>>(AppPaths.EpicBuildsFile);
 
     /// <summary>AppIDs de la cuenta (red de Steam si hay sesión; si no, caché local del cliente).</summary>
     private IReadOnlySet<string> _owned = new HashSet<string>();
@@ -117,6 +123,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         _notes = notes;
         _steam = steam;
         _epic = epic;
+        _epicDownloads = new EpicNet.EpicDownloadManager(epic, AppPaths.EpicQueueFile);
         _saveSettings = new DebouncedAction(saveSettings, TimeSpan.FromMilliseconds(600));
 
         Store = new StoreViewModel(this);
@@ -148,6 +155,9 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         _downloads.QueueChanged += () => OnUi(SyncDownloads);
         _downloads.JobChanged += job => OnUi(() => OnJobChanged(job));
         _downloads.JobFinished += job => OnUi(() => OnJobFinished(job));
+        _epicDownloads.QueueChanged += () => OnUi(SyncDownloads);
+        _epicDownloads.JobChanged += job => OnUi(() => OnJobChanged(job));
+        _epicDownloads.JobFinished += job => OnUi(() => OnJobFinished(job));
         _session.StateChanged += (state, message) => OnUi(() => OnSessionState(state, message));
 
         RebuildTagFilters();
@@ -220,7 +230,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             _detail?.Close();
             _detail = value is null ? null
                 : new GameDetailViewModel(value, _art, _session, OpenInStoreTab, ShowHomeCommand, _downloads.InstallTarget,
-                    _community, _notes, _steam.SteamPath);
+                    _community, _notes, _steam.SteamPath, _epic);
             OnPropertyChanged();
             OnPropertyChanged(nameof(Detail));
             OnPropertyChanged(nameof(IsHomeVisible));
@@ -558,6 +568,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
 
             // Epic Games: juegos instalados según sus manifiestos locales (sin red).
             foreach (var epic in await Task.Run(EpicLibraryScanner.Scan)) Games.Add(CreateCard(epic));
+            AddEpicOwned();
             foreach (var local in _library.LocalGames) Games.Add(CreateCard(local.ToEntry()));
             foreach (var g in Games) g.IsRunning = running.Contains(g.Entry.Id);
             ApplyRemoteUpdates();
@@ -654,6 +665,21 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             var remote = uint.TryParse(card.Entry.AppId, out var id) ? _ownership.Find(id)?.PublicBuildId ?? 0 : 0;
             card.SetRemoteUpdate(remote != 0 && card.Entry.BuildId != 0 && remote != card.Entry.BuildId);
         }
+        // Epic: tamaño del manifiesto actual y «Actualizar» si la versión instalada no es la build pública.
+        foreach (var card in Games.Where(g => g.IsEpic))
+        {
+            if (!_epicBuilds.TryGetValue(card.Entry.AppId, out var build)) continue;
+            card.SetInstallSize((ulong)Math.Max(0, build.InstallSize));
+            if (!card.IsNotInstalled)
+                card.SetRemoteUpdate(card.Entry.EpicVersion is { Length: > 0 } v && build.BuildVersion.Length > 0 && v != build.BuildVersion);
+        }
+    }
+
+    /// <summary>Añade como «no instalados» los juegos de la cuenta de Epic que no están en disco.</summary>
+    private void AddEpicOwned()
+    {
+        foreach (var entry in _epicOwned)
+            if (Games.All(g => g.Entry.Id != entry.Id)) Games.Add(CreateCard(entry));
     }
 
     /// <summary>Consulta la red de Steam (licencias y builds) y refleja los cambios en la biblioteca.</summary>
@@ -956,6 +982,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
                 foreach (var g in Games.Where(g => g.IsEpic)) g.RefreshStats();
                 RaiseLibraryTexts();
             }
+            await SyncEpicOwnedAsync();
             foreach (var card in Games.Where(g => g.IsEpic).ToList())
             {
                 if (card.Entry.EpicNamespace is not { } ns || card.Entry.EpicCatalogItemId is not { } id) continue;
@@ -966,6 +993,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
                 if (info.CoverUrl is { } cover && card.Entry.CoverImagePath is null)
                     card.SetCover(await _art.LoadRemoteAsync(cover, $"epic_cover_{card.Entry.AppId}.jpg", 180));
             }
+            await SyncEpicBuildsAsync();
         }
         catch (Exception ex)
         {
@@ -973,29 +1001,111 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         }
     }
 
+    /// <summary>
+    /// Biblioteca completa de Epic: lo comprado o reclamado que no está instalado aparece como «No instalado»
+    /// (sin Unreal Engine/Fab, contenidos descargables ni lo que no es juego o aplicación).
+    /// </summary>
+    private async Task SyncEpicOwnedAsync()
+    {
+        var items = await Task.Run(() => _epic.GetLibraryItemsAsync(CancellationToken.None));
+        if (items is null) return;
+        var owned = new List<GameEntry>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in items)
+        {
+            if (item.Namespace == "ue" || !seen.Add(item.AppName)) continue;
+            var info = await Task.Run(() => _epic.GetCatalogInfoAsync(item.Namespace, item.CatalogItemId, CancellationToken.None));
+            if (info is null || info.IsAddOn || !(info.IsGame || info.IsApplication)) continue;
+            owned.Add(new GameEntry
+            {
+                Id = GameEntry.MakeEpicId(item.AppName),
+                Platform = GamePlatform.Epic,
+                AppId = item.AppName,
+                Name = info.Title.Trim(),
+                IsInstalled = false,
+                EpicNamespace = item.Namespace,
+                EpicCatalogItemId = item.CatalogItemId,
+                EpicCategories = info.IsGame ? ["games"] : ["applications"],
+            });
+        }
+        _epicOwned = owned;
+        var before = Games.Count;
+        AddEpicOwned();
+        if (Games.Count != before)
+        {
+            ApplyRemoteUpdates();
+            SyncDownloads();
+            RebuildTagFilters();
+            RaiseLibraryTexts();
+        }
+    }
+
+    /// <summary>
+    /// Build pública de cada juego de Epic (actualizaciones) y, si cambió, su tamaño instalado según el
+    /// manifiesto. Uno a uno y con caché en disco: tras la primera vez solo se consulta la versión.
+    /// </summary>
+    private async Task SyncEpicBuildsAsync()
+    {
+        var changed = false;
+        foreach (var card in Games.Where(g => g.IsEpic).ToList())
+        {
+            var e = card.Entry;
+            if (e.EpicNamespace is not { } ns || e.EpicCatalogItemId is not { } item) continue;
+            try
+            {
+                var asset = await Task.Run(() => _epic.GetAssetInfoAsync(ns, item, e.AppId, CancellationToken.None));
+                if (asset is null) continue;
+                _epicBuilds.TryGetValue(e.AppId, out var known);
+                if (known is not null && known.BuildVersion == asset.BuildVersion) continue;
+                // Instalados: el tamaño ya se conoce (no hace falta su manifiesto, que puede pesar decenas de MB).
+                long size = card.IsNotInstalled ? 0 : e.SizeOnDisk;
+                if (card.IsNotInstalled)
+                {
+                    try
+                    {
+                        var bytes = await Task.Run(() => _epic.DownloadManifestAsync(asset, CancellationToken.None));
+                        size = await Task.Run(() => EpicNet.EpicManifest.Parse(bytes).InstallSize);
+                    }
+                    catch (NotSupportedException) { /* manifiesto antiguo: sin tamaño */ }
+                }
+                _epicBuilds[e.AppId] = new EpicBuildInfo(asset.BuildVersion, size);
+                changed = true;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Log.Warn($"Epic: versión de {e.Name} no disponible: {ex.Message}");
+            }
+        }
+        if (!changed) return;
+        JsonFileStore.Save(AppPaths.EpicBuildsFile, _epicBuilds);
+        ApplyRemoteUpdates();
+    }
+
     // =====================================================================================
     // Descargas nativas (IDownloadActions)
     // =====================================================================================
 
+    private IReadOnlyList<DownloadJob> AllJobs => [.. _downloads.Jobs, .. _epicDownloads.Jobs];
+
     private void SyncDownloads()
     {
-        var jobs = _downloads.Jobs;
+        var jobs = AllJobs;
         Downloads.SyncJobs(jobs);
-        foreach (var g in Games.Where(g => g.IsSteam))
-            g.SetJob(jobs.FirstOrDefault(j => j.AppId.ToString() == g.Entry.AppId));
+        foreach (var g in Games.Where(g => g.IsSteam || g.IsEpic))
+            g.SetJob(jobs.FirstOrDefault(j => j.GameKey == g.Entry.Id));
         GamesView.Refresh();
     }
 
     private void OnJobChanged(DownloadJob job)
     {
         Downloads.RefreshJob(job);
-        Games.FirstOrDefault(g => g.IsSteam && g.Entry.AppId == job.AppId.ToString())?.SetJob(job);
+        Games.FirstOrDefault(g => g.Entry.Id == job.GameKey)?.SetJob(job);
     }
 
     private void OnJobFinished(DownloadJob job)
     {
         Downloads.AddFinished(job);
-        var card = Games.FirstOrDefault(g => g.IsSteam && g.Entry.AppId == job.AppId.ToString());
+        var card = Games.FirstOrDefault(g => g.Entry.Id == job.GameKey);
         card?.SetJob(null);
 
         switch (job.State)
@@ -1004,7 +1114,17 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
                 StatusText = $"{job.Name}: {JobText.Phase(job).ToLowerInvariant()} y listo para jugar.";
                 Notify(job.Kind == DownloadJobKind.Update ? "Actualización completada" : "Instalación completada",
                     $"{job.Name} está listo para jugar.");
-                if (_scanner.FindGame(job.AppId.ToString()) is { } entry) UpsertGame(entry);
+                if (job.IsEpic)
+                {
+                    if (EpicLibraryScanner.Scan().FirstOrDefault(e => e.AppId == job.EpicAppName) is { } epicEntry)
+                    {
+                        if (_epicBuilds.TryGetValue(epicEntry.AppId, out var b) && epicEntry.EpicVersion is { } v)
+                            _epicBuilds[epicEntry.AppId] = b with { BuildVersion = v };
+                        UpsertGame(epicEntry);
+                        _ = SyncEpicAccountAsync(); // arte del catálogo en la tarjeta ya instalada
+                    }
+                }
+                else if (_scanner.FindGame(job.AppId.ToString()) is { } entry) UpsertGame(entry);
                 if (job.Kind == DownloadJobKind.Install) _ = CreateShortcutsAsync(job);
                 break;
             case DownloadJobState.Failed:
@@ -1018,32 +1138,39 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         GamesView.Refresh();
     }
 
-    public void PauseDownload(DownloadJob job) => _downloads.Pause(job);
+    public void PauseDownload(DownloadJob job)
+    {
+        if (job.IsEpic) _epicDownloads.Pause(job); else _downloads.Pause(job);
+    }
 
-    public void ResumeDownload(DownloadJob job) => _downloads.Resume(job);
+    public void ResumeDownload(DownloadJob job)
+    {
+        if (job.IsEpic) _epicDownloads.Resume(job); else _downloads.Resume(job);
+    }
 
     public void CancelDownload(DownloadJob job)
     {
         var message = job.Kind == DownloadJobKind.Install
             ? $"¿Cancelar la instalación de «{job.Name}»? Se borrará lo descargado."
             : $"¿Cancelar la actualización de «{job.Name}»? Los archivos quedarán a medio actualizar hasta que vuelvas a actualizar.";
-        if (Dialogs?.Confirm("Cancelar descarga", message) ?? false) _downloads.Cancel(job);
+        if (!(Dialogs?.Confirm("Cancelar descarga", message) ?? false)) return;
+        if (job.IsEpic) _epicDownloads.Cancel(job); else _downloads.Cancel(job);
     }
 
-    public void PauseAllDownloads() => _downloads.PauseAll();
+    public void PauseAllDownloads() { _downloads.PauseAll(); _epicDownloads.PauseAll(); }
 
-    public void ResumeAllDownloads() => _downloads.ResumeAll();
+    public void ResumeAllDownloads() { _downloads.ResumeAll(); _epicDownloads.ResumeAll(); }
 
-    public void PlayDownloaded(string appId)
+    public void PlayDownloaded(string gameKey)
     {
-        var card = Games.FirstOrDefault(g => g.IsSteam && g.Entry.AppId == appId && !g.IsNotInstalled);
+        var card = Games.FirstOrDefault(g => g.Entry.Id == gameKey && !g.IsNotInstalled);
         if (card is null) return;
         CurrentView = AppView.Library;
         Launch(card);
     }
 
-    public ImageSource? CoverFor(string appId) =>
-        Games.FirstOrDefault(g => g.IsSteam && g.Entry.AppId == appId)?.Cover;
+    public ImageSource? CoverFor(string gameKey) =>
+        Games.FirstOrDefault(g => g.Entry.Id == gameKey)?.Cover;
 
     // ----- Instalar / actualizar / desinstalar (ICardHost) -----
 
@@ -1057,6 +1184,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
 
     private async Task EnqueueAsync(GameEntry entry, DownloadJobKind kind)
     {
+        if (entry.Platform == GamePlatform.Epic) { await EnqueueEpicAsync(entry, kind); return; }
         if (entry.Platform != GamePlatform.Steam) return;
         if (!await EnsureSteamAccountAsync()) return;
 
@@ -1084,6 +1212,51 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         _ = job;
     }
 
+    /// <summary>Instalar o actualizar un juego de Epic sin Epic Games Launcher (directo desde su CDN).</summary>
+    private async Task EnqueueEpicAsync(GameEntry entry, DownloadJobKind kind)
+    {
+        if (!await EnsureEpicAccountAsync()) return;
+        if (kind == DownloadJobKind.Install && _epicDownloads.Find(entry.AppId) is null)
+        {
+            StatusText = $"Consultando el tamaño de {entry.Name} en Epic…";
+            long size = _epicBuilds.TryGetValue(entry.AppId, out var b) ? b.InstallSize : 0;
+            if (size <= 0)
+            {
+                try
+                {
+                    size = await Task.Run(() => _epicDownloads.Engine.GetInstallSizeAsync(
+                        entry.EpicNamespace!, entry.EpicCatalogItemId!, entry.AppId, CancellationToken.None)) ?? 0;
+                }
+                catch (NotSupportedException ex)
+                {
+                    StatusText = $"{entry.Name}: {ex.Message}";
+                    Notify("No se puede instalar", $"{entry.Name}: {ex.Message}");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn($"Epic: tamaño de {entry.Name}: {ex.Message}");
+                }
+            }
+            var choice = await AskInstallOptionsAsync(entry, (ulong)Math.Max(0, size));
+            if (choice is null)
+            {
+                StatusText = $"Instalación de {entry.Name} cancelada.";
+                return;
+            }
+            _epicDownloads.Enqueue(entry, kind, choice.LibraryPath, choice.CreateDesktopShortcut, choice.CreateStartMenuShortcut);
+        }
+        else
+        {
+            _epicDownloads.Enqueue(entry, kind);
+        }
+        StatusText = kind == DownloadJobKind.Install
+            ? $"{entry.Name} en la cola de descargas (directo desde la CDN de Epic, sin su launcher)."
+            : $"Actualizando {entry.Name} (solo se descargará lo que ha cambiado).";
+        SyncDownloads();
+        CurrentView = AppView.Downloads;
+    }
+
     // ----- Diálogo de instalar (superposición dentro de la ventana) -----
 
     private InstallDialogViewModel? _installDialog;
@@ -1099,14 +1272,16 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         }
     }
 
-    private async Task<InstallChoice?> AskInstallOptionsAsync(GameEntry entry)
+    private async Task<InstallChoice?> AskInstallOptionsAsync(GameEntry entry, ulong? knownSize = null)
     {
         if (_installDialog is not null) return null; // ya hay uno abierto
+        var isEpic = entry.Platform == GamePlatform.Epic;
         uint.TryParse(entry.AppId, out var appId);
-        var size = _ownership.Find(appId)?.InstallSize ?? 0;
+        var size = knownSize ?? _ownership.Find(appId)?.InstallSize ?? 0;
 
-        var libraries = _downloads.Libraries;
-        var defaultRoot = _downloads.InstallTarget() is { } target ? Path.GetPathRoot(target.Library) : null;
+        IReadOnlyList<string> libraries = isEpic ? [] : _downloads.Libraries;
+        var defaultRoot = isEpic ? DefaultEpicDrive()
+            : _downloads.InstallTarget() is { } target ? Path.GetPathRoot(target.Library) : null;
         var drives = new List<DriveOptionViewModel>();
         foreach (var drive in DriveInfo.GetDrives())
         {
@@ -1114,8 +1289,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             {
                 if (drive.DriveType != DriveType.Fixed || !drive.IsReady) continue;
                 var root = drive.RootDirectory.FullName;
-                var library = LibraryFolders.ForDrive(libraries, root);
-                var isNew = !libraries.Any(l => string.Equals(l, library, StringComparison.OrdinalIgnoreCase));
+                var library = isEpic ? EpicNet.EpicDownloadManager.LibraryForDrive(root) : LibraryFolders.ForDrive(libraries, root);
+                var isNew = isEpic ? !Directory.Exists(library) : !libraries.Any(l => string.Equals(l, library, StringComparison.OrdinalIgnoreCase));
                 var label = string.IsNullOrWhiteSpace(drive.VolumeLabel) ? "Unidad local" : drive.VolumeLabel;
                 drives.Add(new DriveOptionViewModel(root, $"{label} ({root.TrimEnd('\\')})", drive.AvailableFreeSpace, library,
                     string.Equals(root, defaultRoot, StringComparison.OrdinalIgnoreCase), isNew, size));
@@ -1128,7 +1303,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
 
         var dialog = new InstallDialogViewModel(entry.Name, size, drives);
         InstallDialog = dialog;
-        _ = LoadBannerAsync(dialog, entry.AppId);
+        if (isEpic) dialog.Banner = Games.FirstOrDefault(g => g.Entry.Id == entry.Id)?.Cover;
+        else _ = LoadBannerAsync(dialog, entry.AppId);
         try
         {
             return await dialog.Result;
@@ -1137,6 +1313,19 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         {
             InstallDialog = null;
         }
+    }
+
+    /// <summary>Unidad por defecto para Epic: la que ya tiene «Epic Games»; si no, la de más espacio libre.</summary>
+    private static string? DefaultEpicDrive()
+    {
+        try
+        {
+            return DriveInfo.GetDrives().Where(d => d.DriveType == DriveType.Fixed && d.IsReady)
+                .OrderByDescending(d => Directory.Exists(EpicNet.EpicDownloadManager.LibraryForDrive(d.RootDirectory.FullName)))
+                .ThenByDescending(d => d.AvailableFreeSpace)
+                .Select(d => d.RootDirectory.FullName).FirstOrDefault();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
     }
 
     private async Task LoadBannerAsync(InstallDialogViewModel dialog, string appId)
@@ -1149,6 +1338,18 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     private async Task CreateShortcutsAsync(DownloadJob job)
     {
         if (!job.CreateDesktopShortcut && !job.CreateStartMenuShortcut) return;
+        if (job.IsEpic)
+        {
+            // El icono es el del propio ejecutable del juego; el acceso directo abre Purgine (--run epic:App).
+            var exe = Games.FirstOrDefault(g => g.Entry.Id == job.GameKey)?.Entry.ExecutablePath;
+            var key = job.GameKey;
+            await Task.Run(() =>
+            {
+                if (job.CreateDesktopShortcut) ShortcutWriter.CreateGameShortcut(ShortcutWriter.DesktopFolder, job.Name, key, exe);
+                if (job.CreateStartMenuShortcut) ShortcutWriter.CreateGameShortcut(ShortcutWriter.StartMenuFolder, job.Name, key, exe);
+            });
+            return;
+        }
         var icon = await _art.GetClientIconFileAsync(job.AppId.ToString(), _ownership.Find(job.AppId)?.ClientIcon);
         var appId = job.AppId.ToString();
         await Task.Run(() =>
@@ -1167,7 +1368,9 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     {
         if (IsScanning || Games.Count == 0) { _pendingLaunch = appId; return; }
         _pendingLaunch = null;
-        var card = Games.FirstOrDefault(g => g.IsSteam && g.Entry.AppId == appId);
+        var card = appId.StartsWith("epic:", StringComparison.Ordinal)
+            ? Games.FirstOrDefault(g => g.Entry.Id == appId)
+            : Games.FirstOrDefault(g => g.IsSteam && g.Entry.AppId == appId);
         if (card is null) { StatusText = $"El juego {appId} no está en tu biblioteca."; return; }
         if (card.IsNotInstalled) { ShowDetails(card); return; }
         Launch(card);
@@ -1186,7 +1389,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
                 "(no van a la papelera). Las partidas en la nube y el tiempo jugado se conservan.") ?? false))
             return;
 
-        var error = _downloads.Uninstall(card.Entry);
+        var error = card.IsEpic ? _epicDownloads.Uninstall(card.Entry) : _downloads.Uninstall(card.Entry);
+        if (error is null && card.IsEpic) _ = RefreshAsync(); // vuelve a «No instalado» con los de la cuenta
         StatusText = error ?? $"{card.Name} desinstalado.";
         if (error is not null) Notify("No se pudo desinstalar", error);
     }
@@ -1457,6 +1661,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         Store.Release();
         _detail?.Close();
         _downloads.Dispose();
+        _epicDownloads.Dispose();
         _saveSettings.Flush();
         _saveSettings.Dispose();
         _watcher.Dispose();
@@ -1484,3 +1689,6 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         else dispatcher.BeginInvoke(action);
     }
 }
+
+/// <summary>Build pública de un juego de Epic y su tamaño instalado (caché <c>epic-builds.json</c>).</summary>
+public sealed record EpicBuildInfo(string BuildVersion, long InstallSize);

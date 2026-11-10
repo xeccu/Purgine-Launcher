@@ -47,6 +47,7 @@ public sealed partial class GameDetailViewModel : ObservableObject
 
     private readonly SteamArtService _art;
     private readonly SteamSession _session;
+    private readonly EpicNet.EpicAccountService? _epic;
     private readonly Action<string> _openWeb;
     private CancellationTokenSource _cts = new();
     private ImageSource? _hero;
@@ -62,8 +63,9 @@ public sealed partial class GameDetailViewModel : ObservableObject
 
     public GameDetailViewModel(GameCardViewModel card, SteamArtService art, SteamSession session,
         Action<string> openWeb, ICommand backCommand, Func<(string Library, long FreeBytes)?> installTarget,
-        SteamCommunityService community, GameNotesStore notes, string? steamPath)
+        SteamCommunityService community, GameNotesStore notes, string? steamPath, EpicNet.EpicAccountService? epic = null)
     {
+        _epic = epic;
         Card = card;
         _glow = GraphicsTheme.GlowFor(null);
         GraphicsTheme.Changed += OnGraphicsChanged;
@@ -152,7 +154,7 @@ public sealed partial class GameDetailViewModel : ObservableObject
 
     // ----- Logros -----
 
-    public bool ShowAchievements => Card.IsSteam;
+    public bool ShowAchievements => Card.IsSteam || Card.IsEpic;
 
     public string AchievementsText
     {
@@ -189,6 +191,7 @@ public sealed partial class GameDetailViewModel : ObservableObject
         var tasks = new List<Task>();
         if (!_imagesLoaded) tasks.Add(LoadImagesAsync(ct));
         if (!_achievementsLoaded && Card.IsSteam) tasks.Add(LoadAchievementsAsync(ct));
+        else if (!_achievementsLoaded && Card.IsEpic) tasks.Add(LoadEpicAchievementsAsync(ct));
         tasks.AddRange(LoadExtrasTasks(ct));
         try { await Task.WhenAll(tasks); }
         catch (OperationCanceledException) { /* se cambió de juego */ }
@@ -271,6 +274,72 @@ public sealed partial class GameDetailViewModel : ObservableObject
             {
                 if (info.IconUrl is null) continue;
                 var cacheName = $"ach_{appId}_{Path.GetFileName(new Uri(info.IconUrl).AbsolutePath)}";
+                vm.Icon = await _art.LoadRemoteAsync(info.IconUrl, cacheName, AchievementIconSize, ct);
+                if (ct.IsCancellationRequested) return;
+            }
+        }
+        finally
+        {
+            IsLoadingAchievements = false;
+        }
+    }
+
+    /// <summary>
+    /// Logros de Epic (GraphQL de la cuenta vinculada; el sandbox es el espacio de nombres del catálogo), con la
+    /// misma plantilla que los de Steam: progreso y los desbloqueados más raros.
+    /// </summary>
+    private async Task LoadEpicAchievementsAsync(CancellationToken ct)
+    {
+        _achievementsLoaded = true;
+        if (_epic is not { HasSession: true })
+        {
+            AchievementsText = "Vincula tu cuenta de Epic Games (Ajustes) para ver tus logros.";
+            return;
+        }
+        if (Card.Entry.EpicNamespace is not { } sandbox) return;
+
+        IsLoadingAchievements = true;
+        AchievementsText = "Consultando tus logros en Epic Games…";
+        try
+        {
+            EpicNet.EpicAchievementSet? set;
+            try { set = await Task.Run(() => _epic.GetAchievementsAsync(sandbox, ct), ct); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Infrastructure.Log.Warn($"Epic: logros de {Card.Name}: {ex.Message}");
+                set = null;
+                AchievementsText = "No se pudieron consultar los logros (¿sin conexión?).";
+                _achievementsLoaded = false;
+                return;
+            }
+            if (ct.IsCancellationRequested) return;
+            if (set is null || set.Achievements.Count == 0)
+            {
+                AchievementsText = "Este juego no tiene logros de Epic.";
+                return;
+            }
+
+            var total = set.Achievements.Count;
+            var unlocked = set.Achievements.Count(a => a.Unlocked);
+            var percent = unlocked * 100.0 / total;
+            AchievementsPercent = percent;
+            HasAchievementProgress = true;
+            AchievementsText = $"Has desbloqueado {unlocked} de {total} ({percent:0} %)";
+
+            // Los desbloqueados más raros primero (como en Steam); a igualdad, los más recientes.
+            var top = set.Achievements.Where(a => a.Unlocked)
+                .OrderBy(a => a.RarityPercent ?? 100).ThenByDescending(a => a.UnlockedUtc)
+                .Take(MaxTopAchievements)
+                .Select(a => new AchievementInfo(a.Name, a.Description, a.IconUrl,
+                    a.RarityPercent?.ToString(System.Globalization.CultureInfo.InvariantCulture)))
+                .ToList();
+            TopAchievements.Clear();
+            var items = top.Select(a => (Info: a, Vm: new AchievementItemViewModel(a))).ToList();
+            foreach (var (_, vm) in items) TopAchievements.Add(vm);
+            foreach (var (info, vm) in items)
+            {
+                if (info.IconUrl is null || !Uri.TryCreate(info.IconUrl, UriKind.Absolute, out var uri)) continue;
+                var cacheName = $"ach_epic_{sandbox}_{Path.GetFileName(uri.AbsolutePath)}";
                 vm.Icon = await _art.LoadRemoteAsync(info.IconUrl, cacheName, AchievementIconSize, ct);
                 if (ct.IsCancellationRequested) return;
             }

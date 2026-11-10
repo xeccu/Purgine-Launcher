@@ -53,6 +53,15 @@ public sealed class DownloadJob
     /// <summary>Al terminar una instalación: acceso directo en el menú Inicio.</summary>
     public bool CreateStartMenuShortcut { get; set; }
 
+    // ----- Epic Games (null en los trabajos de Steam) -----
+    public string? EpicAppName { get; init; }
+    public string? EpicNamespace { get; init; }
+    public string? EpicCatalogItemId { get; init; }
+    public bool IsEpic => EpicAppName is not null;
+
+    /// <summary>Id del juego en la biblioteca («steam:730», «epic:Sugar»).</summary>
+    public string GameKey => EpicAppName is { } app ? Library.GameEntry.MakeEpicId(app) : Library.GameEntry.MakeSteamId(AppId.ToString());
+
     public uint AppId { get; }
     public string Name { get; }
     public DownloadJobKind Kind { get; }

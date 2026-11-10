@@ -114,9 +114,18 @@ public partial class App : Application
     private static string? ParseRunArgument(string[] args)
     {
         for (var i = 0; i < args.Length - 1; i++)
-            if (args[i].Equals("--run", StringComparison.OrdinalIgnoreCase) && uint.TryParse(args[i + 1], out var id))
-                return id.ToString();
+            if (args[i].Equals("--run", StringComparison.OrdinalIgnoreCase) && NormalizeRunId(args[i + 1]) is { } id)
+                return id;
         return null;
+    }
+
+    /// <summary>«440» (Steam) o «epic:AppName» (Epic); cualquier otra cosa se ignora.</summary>
+    private static string? NormalizeRunId(string text)
+    {
+        if (uint.TryParse(text, out var id)) return id.ToString();
+        return text.StartsWith("epic:", StringComparison.Ordinal) && text.Length > 5 && text.Length < 200 &&
+               text[5..].All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.')
+            ? text : null;
     }
 
     private static string? TakeLaunchRequest()
@@ -126,7 +135,7 @@ public partial class App : Application
             if (!File.Exists(AppPaths.LaunchRequestFile)) return null;
             var text = File.ReadAllText(AppPaths.LaunchRequestFile).Trim();
             File.Delete(AppPaths.LaunchRequestFile);
-            return uint.TryParse(text, out var id) ? id.ToString() : null;
+            return NormalizeRunId(text);
         }
         catch (Exception) { return null; }
     }

@@ -13,8 +13,9 @@ public interface IDownloadActions
     void CancelDownload(DownloadJob job);
     void PauseAllDownloads();
     void ResumeAllDownloads();
-    void PlayDownloaded(string appId);
-    ImageSource? CoverFor(string appId);
+    /// <summary>Juego por su id de biblioteca («steam:730», «epic:Sugar»).</summary>
+    void PlayDownloaded(string gameKey);
+    ImageSource? CoverFor(string gameKey);
 }
 
 /// <summary>Textos de estado de una descarga (compartidos por el panel y las tarjetas).</summary>
@@ -62,7 +63,7 @@ public sealed class DownloadItemViewModel : ObservableObject
     public DownloadJob Job { get; }
     public uint AppId => Job.AppId;
     public string Name => Job.Name;
-    public ImageSource? Cover => _actions.CoverFor(Job.AppId.ToString());
+    public ImageSource? Cover => _actions.CoverFor(Job.GameKey);
     public string KindText => Job.Kind == DownloadJobKind.Update ? "Actualización" : "Instalación";
     public string PhaseText => JobText.Phase(Job);
     public bool IsActive => Job.IsActive;
@@ -102,7 +103,7 @@ public sealed class CompletedDownloadViewModel
 {
     public CompletedDownloadViewModel(DownloadJob job, IDownloadActions actions)
     {
-        AppId = job.AppId.ToString();
+        AppId = job.GameKey;
         Name = job.Name;
         Completed = job.State == DownloadJobState.Completed;
         StatusText = $"{JobText.Phase(job)} · {DateTime.Now:HH:mm}";
@@ -149,7 +150,8 @@ public sealed class DownloadsViewModel : ObservableObject
         {
             var active = Items.FirstOrDefault(i => i.IsDownloading);
             if (active is not null && active.Job.BytesPerSecond > 0)
-                return $"{active.Name}: {Formatting.Speed(active.Job.BytesPerSecond)} · sin abrir el cliente de Steam";
+                return $"{active.Name}: {Formatting.Speed(active.Job.BytesPerSecond)} · " +
+                       (active.Job.IsEpic ? "sin abrir Epic Games Launcher" : "sin abrir el cliente de Steam");
             if (Items.Any(i => i.IsActive)) return "Preparando la descarga…";
             if (Items.Count > 0 && Items.All(i => i.Job.State == DownloadJobState.Paused)) return "Descargas en pausa.";
             return Items.Count > 0 ? "En cola." : "No hay descargas.";

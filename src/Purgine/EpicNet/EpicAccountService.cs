@@ -17,7 +17,20 @@ public sealed class SavedEpicSession
 }
 
 /// <summary>Arte y datos de un artículo del catálogo de Epic.</summary>
-public sealed record EpicCatalogInfo(string Title, string? CoverUrl, string? HeroUrl, string? LogoUrl, bool RequiresOwnershipToken);
+public sealed record EpicCatalogInfo(string Title, string? CoverUrl, string? HeroUrl, string? LogoUrl, bool RequiresOwnershipToken,
+    bool IsGame = true, bool IsApplication = false, bool IsAddOn = false);
+
+/// <summary>Un artículo de la biblioteca de la cuenta de Epic.</summary>
+public sealed record EpicLibraryItem(string Namespace, string CatalogItemId, string AppName);
+
+/// <summary>Build pública de un juego y dónde está su manifiesto.</summary>
+public sealed record EpicAssetInfo(string BuildVersion, string? ManifestHash, IReadOnlyList<string> ManifestUrls);
+
+/// <summary>Un logro de Epic (nombre visible según esté desbloqueado o no).</summary>
+public sealed record EpicAchievement(string Id, string Name, string Description, string? IconUrl, bool Unlocked, DateTimeOffset? UnlockedUtc, double? RarityPercent, bool Hidden);
+
+/// <summary>Logros de un juego de Epic.</summary>
+public sealed record EpicAchievementSet(string ProductId, IReadOnlyList<EpicAchievement> Achievements);
 
 /// <summary>Credenciales de un lanzamiento directo (sin Epic Games Launcher).</summary>
 public sealed record EpicLaunchAuth(string AccountId, string DisplayName, string ExchangeCode, string? OwnershipTokenPath);
@@ -276,12 +289,20 @@ public sealed class EpicAccountService : IDisposable
                 var ovt = item.TryGetProperty("customAttributes", out var attrs) &&
                           attrs.TryGetProperty("OwnershipToken", out var o) &&
                           o.TryGetProperty("value", out var v) && v.GetString() == "true";
+                var categories = item.TryGetProperty("categories", out var cats)
+                    ? cats.EnumerateArray().Select(c => c.TryGetProperty("path", out var p) ? p.GetString() ?? "" : "").ToHashSet()
+                    : [];
+                var isAddOn = item.TryGetProperty("mainGameItem", out var mg) && mg.ValueKind == JsonValueKind.Object
+                              || categories.Contains("addons") || categories.Any(c => c.StartsWith("addons/", StringComparison.Ordinal));
                 info = new EpicCatalogInfo(
                     item.TryGetProperty("title", out var t) ? t.GetString() ?? string.Empty : string.Empty,
                     Img("DieselGameBoxTall", "OfferImageTall", "Thumbnail"),
                     Img("DieselGameBox", "OfferImageWide", "DieselStoreFrontWide"),
                     Img("DieselGameBoxLogo"),
-                    ovt);
+                    ovt,
+                    IsGame: categories.Contains("games"),
+                    IsApplication: categories.Contains("applications"),
+                    IsAddOn: isAddOn);
             }
         }
         catch (EpicApiException ex)
@@ -290,6 +311,179 @@ public sealed class EpicAccountService : IDisposable
         }
         lock (_catalog) _catalog[key] = info;
         return info;
+    }
+
+    // =====================================================================================
+    // Biblioteca de la cuenta, manifiestos y logros
+    // =====================================================================================
+
+    private const string LauncherHost = "https://launcher-public-service-prod06.ol.epicgames.com";
+    /// <summary>Servidores GraphQL de Epic (se prueban en orden; algunos rechazan clientes que no son el launcher).</summary>
+    private static readonly string[] GraphQlUrls =
+    [
+        "https://launcher.store.epicgames.com/graphql",
+        "https://graphql.epicgames.com/graphql",
+        "https://store.epicgames.com/graphql",
+    ];
+    private const string LauncherUserAgent = "EpicGamesLauncher/20.3.8-60034553+++UE5+Release-Distro-5.5 Windows/10.0.26200.1.256.64bit";
+    private string? _workingGraphQlUrl;
+
+    /// <summary>Artículos de la biblioteca de la cuenta (todo lo comprado o reclamado), paginado.</summary>
+    public async Task<List<EpicLibraryItem>?> GetLibraryItemsAsync(CancellationToken ct)
+    {
+        var token = await AccessTokenAsync(ct).ConfigureAwait(false);
+        if (token is null) return null;
+        var items = new List<EpicLibraryItem>();
+        string? cursor = null;
+        for (var page = 0; page < 50; page++)
+        {
+            var url = $"{LibraryHost}/library/api/public/items?includeMetadata=true" + (cursor is null ? "" : $"&cursor={Uri.EscapeDataString(cursor)}");
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Authorization = new AuthenticationHeaderValue("bearer", token);
+            var json = await SendJsonAsync(req, ct).ConfigureAwait(false);
+            foreach (var r in json.GetProperty("records").EnumerateArray())
+            {
+                var ns = r.TryGetProperty("namespace", out var n) ? n.GetString() : null;
+                var id = r.TryGetProperty("catalogItemId", out var c) ? c.GetString() : null;
+                var app = r.TryGetProperty("appName", out var a) ? a.GetString() : null;
+                if (ns is null || id is null || app is null) continue;
+                items.Add(new EpicLibraryItem(ns, id, app));
+            }
+            cursor = json.TryGetProperty("responseMetadata", out var meta) && meta.TryGetProperty("nextCursor", out var nc) ? nc.GetString() : null;
+            if (string.IsNullOrEmpty(cursor)) break;
+        }
+        return items;
+    }
+
+    /// <summary>
+    /// Build pública de un juego (rama «Live») y su manifiesto: versión, hash, URL del manifiesto firmada y las
+    /// URL base de las CDN para los fragmentos.
+    /// </summary>
+    public async Task<EpicAssetInfo?> GetAssetInfoAsync(string ns, string itemId, string appName, CancellationToken ct)
+    {
+        var token = await AccessTokenAsync(ct).ConfigureAwait(false);
+        if (token is null) return null;
+        using var req = new HttpRequestMessage(HttpMethod.Get,
+            $"{LauncherHost}/launcher/api/public/assets/v2/platform/Windows/namespace/{ns}/catalogItem/{itemId}/app/{appName}/label/Live");
+        req.Headers.Authorization = new AuthenticationHeaderValue("bearer", token);
+        var json = await SendJsonAsync(req, ct).ConfigureAwait(false);
+        var element = json.GetProperty("elements")[0];
+        var urls = new List<string>();
+        foreach (var m in element.GetProperty("manifests").EnumerateArray())
+        {
+            var uri = m.GetProperty("uri").GetString()!;
+            if (m.TryGetProperty("queryParams", out var qp) && qp.GetArrayLength() > 0)
+                uri += "?" + string.Join("&", qp.EnumerateArray().Select(p =>
+                    $"{p.GetProperty("name").GetString()}={p.GetProperty("value").GetString()}"));
+            urls.Add(uri);
+        }
+        return new EpicAssetInfo(
+            element.GetProperty("buildVersion").GetString() ?? string.Empty,
+            element.TryGetProperty("hash", out var h) ? h.GetString() : null,
+            urls);
+    }
+
+    /// <summary>Descarga el manifiesto (de la primera CDN que responda).</summary>
+    public async Task<byte[]> DownloadManifestAsync(EpicAssetInfo asset, CancellationToken ct)
+    {
+        Exception? last = null;
+        foreach (var url in asset.ManifestUrls)
+        {
+            try { return await _http.Value.GetByteArrayAsync(url, ct).ConfigureAwait(false); }
+            catch (HttpRequestException ex) { last = ex; }
+        }
+        throw new EpicApiException($"No se pudo descargar el manifiesto: {last?.Message}", false);
+    }
+
+    /// <summary>
+    /// Logros de un juego de Epic: definiciones (nombre, descripción, iconos, rareza) y los del jugador
+    /// (desbloqueados y fecha), por el GraphQL que usa Epic Games Launcher. Null si el juego no tiene logros
+    /// o Epic no responde.
+    /// </summary>
+    public async Task<EpicAchievementSet?> GetAchievementsAsync(string sandboxId, CancellationToken ct)
+    {
+        var token = await AccessTokenAsync(ct).ConfigureAwait(false);
+        if (token is null || AccountId is null) return null;
+
+        const string definitionsQuery = """
+            query Achievement($sandboxId: String!, $locale: String!) {
+              Achievement { productAchievementsRecordBySandbox(sandboxId: $sandboxId, locale: $locale) {
+                productId totalAchievements
+                achievements { achievement { name unlockedDisplayName lockedDisplayName unlockedDescription lockedDescription hidden unlockedIconLink lockedIconLink rarity { percent } } }
+              } } }
+            """;
+        var defs = await GraphQlAsync(token, definitionsQuery, new { sandboxId, locale = "es-ES" }, ct).ConfigureAwait(false);
+        var record = defs.GetProperty("data").GetProperty("Achievement").GetProperty("productAchievementsRecordBySandbox");
+        if (record.ValueKind == JsonValueKind.Null) return null;
+        var productId = record.GetProperty("productId").GetString() ?? string.Empty;
+
+        const string playerQuery = """
+            query PlayerAchievement($epicAccountId: String!, $sandboxId: String!) {
+              PlayerAchievement { playerAchievementGameRecordsBySandbox(epicAccountId: $epicAccountId, sandboxId: $sandboxId) {
+                records { playerAchievements { playerAchievement { achievementName unlocked unlockDate } } }
+              } } }
+            """;
+        var unlocked = new Dictionary<string, DateTimeOffset?>(StringComparer.Ordinal);
+        try
+        {
+            var player = await GraphQlAsync(token, playerQuery, new { epicAccountId = AccountId, sandboxId }, ct).ConfigureAwait(false);
+            var records = player.GetProperty("data").GetProperty("PlayerAchievement").GetProperty("playerAchievementGameRecordsBySandbox").GetProperty("records");
+            foreach (var rec in records.EnumerateArray())
+                foreach (var pa in rec.GetProperty("playerAchievements").EnumerateArray())
+                {
+                    var a = pa.GetProperty("playerAchievement");
+                    if (a.TryGetProperty("unlocked", out var u) && u.ValueKind == JsonValueKind.True)
+                        unlocked[a.GetProperty("achievementName").GetString() ?? string.Empty] =
+                            a.TryGetProperty("unlockDate", out var d) && d.TryGetDateTimeOffset(out var dt) ? dt : null;
+                }
+        }
+        catch (Exception ex) when (ex is EpicApiException or KeyNotFoundException or InvalidOperationException)
+        {
+            Log.Warn($"Epic: logros del jugador no disponibles ({ex.Message}).");
+        }
+
+        var list = new List<EpicAchievement>();
+        foreach (var item in record.GetProperty("achievements").EnumerateArray())
+        {
+            var a = item.GetProperty("achievement");
+            var name = a.GetProperty("name").GetString() ?? string.Empty;
+            var isUnlocked = unlocked.TryGetValue(name, out var when);
+            list.Add(new EpicAchievement(name,
+                (isUnlocked ? a.GetProperty("unlockedDisplayName") : a.GetProperty("lockedDisplayName")).GetString() ?? name,
+                (isUnlocked ? a.GetProperty("unlockedDescription") : a.GetProperty("lockedDescription")).GetString() ?? string.Empty,
+                (isUnlocked ? a.GetProperty("unlockedIconLink") : a.GetProperty("lockedIconLink")).GetString(),
+                isUnlocked, when,
+                a.TryGetProperty("rarity", out var r) && r.TryGetProperty("percent", out var p) && p.TryGetDouble(out var pct) ? pct : null,
+                a.TryGetProperty("hidden", out var hid) && hid.ValueKind == JsonValueKind.True));
+        }
+        return new EpicAchievementSet(productId, list);
+    }
+
+    private async Task<JsonElement> GraphQlAsync(string token, string query, object variables, CancellationToken ct)
+    {
+        EpicApiException? last = null;
+        foreach (var url in _workingGraphQlUrl is { } ok ? [ok] : GraphQlUrls)
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(new { query, variables }), Encoding.UTF8, "application/json"),
+            };
+            req.Headers.Authorization = new AuthenticationHeaderValue("bearer", token);
+            req.Headers.UserAgent.Clear();
+            req.Headers.UserAgent.ParseAdd(LauncherUserAgent);
+            try
+            {
+                var json = await SendJsonAsync(req, ct).ConfigureAwait(false);
+                _workingGraphQlUrl = url;
+                return json;
+            }
+            catch (EpicApiException ex)
+            {
+                Log.Warn($"Epic GraphQL {new Uri(url).Host}: {ex.Message}");
+                last = ex;
+            }
+        }
+        throw last ?? new EpicApiException("Sin servidor GraphQL de Epic.", false);
     }
 
     // =====================================================================================

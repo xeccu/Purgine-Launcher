@@ -215,10 +215,20 @@ marcan y no se pueden elegir.
   juego directamente, Epic no lo registra), y el catálogo de la cuenta aporta portada, imagen panorámica y logo.
 - **Tienda**: selector **Steam / Epic Games** en la pestaña Tienda (el mismo navegador para las dos). Los
   botones de la web de Epic que abrirían su launcher se bloquean (Purgine no lo abre).
-- **Pendiente**: descargar, actualizar e instalar juegos de Epic desde Purgine (requiere implementar su
-  formato de manifiestos y fragmentos), los juegos de la cuenta que no están instalados y los logros de Epic
-  (no hay una API pública sin las credenciales EOS de cada juego). Por ahora se instalan con Epic Games
-  Launcher; una vez instalados, se juegan desde Purgine sin él.
+- **Biblioteca completa**: con la cuenta vinculada aparecen también los juegos comprados o reclamados que no
+  están instalados («No instalado», con portada del catálogo, tamaño e **INSTALAR**). Se omiten Unreal
+  Engine/Fab, los contenidos descargables y lo que no es juego ni aplicación.
+- **Instalar y actualizar sin Epic Games Launcher**: motor propio en C# (el mismo formato que interpreta
+  Legendary): build pública y manifiesto binario de la cuenta, y descarga de los fragmentos desde la CDN de
+  Epic (8 en paralelo, rotando entre CDN con reintentos), escritos directamente en cada archivo. Cola con
+  pausar / reanudar / cancelar en la pestaña Descargas, diálogo de instalar con unidad (`X:\Epic Games`) y
+  accesos directos. Reanudar y actualizar son incrementales: los archivos con el SHA-1 correcto no se vuelven
+  a bajar. **ACTUALIZAR** aparece cuando la versión instalada no es la build pública. Lo instalado por
+  Purgine se registra en `epic-installs.json` y se puede desinstalar desde Purgine; los juegos de Epic Games
+  Launcher que Purgine actualiza siguen en su carpeta. Los pocos juegos con manifiesto antiguo (JSON) aún no
+  se pueden instalar.
+- **Logros**: la sección LOGROS de la ficha muestra tu progreso en Epic y los desbloqueados más raros, con la
+  misma plantilla que Steam (definiciones y estado del jugador desde la cuenta vinculada).
 
 ### Otras funciones
 
@@ -258,6 +268,7 @@ Todo en `%LocalAppData%\Purgine\` (botón «Abrir carpeta de datos» en Ajustes)
 | `download-queue.json` | Cola de descargas pendientes (con la unidad y los accesos directos elegidos) |
 | `settings.json` · `library.json` · `playtime.json` | Ajustes, etiquetas/ejecutables locales, tiempo jugado |
 | `epic-session.bin` | Refresh token de Epic Games cifrado con DPAPI (nunca la contraseña) |
+| `epic-installs.json` · `epic-download-queue.json` · `epic-builds.json` | Juegos de Epic instalados por Purgine, su cola de descargas y la caché de builds/tamaños |
 | `game-notes.json` | Notas y reseñas personales por juego (solo locales) |
 | `art\` | Iconos, imágenes panorámicas, logos e iconos de logros que no estaban en la caché de Steam |
 | `webview\` | Perfil del navegador de la Tienda (cookies y sesión web de Steam, caché) |

@@ -161,8 +161,8 @@ public sealed class GameCardViewModel : ObservableObject
     }
     public string PlatformLabel =>
         IsLocal ? "Local"
-        : IsEpic ? "Epic Games"
         : IsNotInstalled ? "No instalado"
+        : IsEpic ? (HasUpdate ? "Actualización pendiente" : "Epic Games")
         : HasUpdate ? "Actualización pendiente"
         : "Steam";
 
@@ -284,7 +284,7 @@ public sealed class GameCardViewModel : ObservableObject
     /// <summary>«Descargando 45,2 % · 12,3 MB/s · 4 min» / «En cola» / «En pausa».</summary>
     public string DownloadText => _job is { } j ? JobText.Short(j) : string.Empty;
 
-    public bool CanUninstall => IsSteam && !IsNotInstalled && !IsRunning && !HasActiveJob;
+    public bool CanUninstall => (IsSteam || (IsEpic && Entry.EpicManagedByPurgine)) && !IsNotInstalled && !IsRunning && !HasActiveJob;
 
     // ----- Espacio necesario (juegos no instalados) -----
 
@@ -323,7 +323,7 @@ public sealed class GameCardViewModel : ObservableObject
     }
 
     /// <summary>Hay actualización: según el manifiesto local o según la build pública de Steam.</summary>
-    public bool HasUpdate => IsSteam && !IsNotInstalled && (Entry.HasPendingUpdate || _remoteUpdate);
+    public bool HasUpdate => !IsNotInstalled && ((IsSteam && (Entry.HasPendingUpdate || _remoteUpdate)) || (IsEpic && _remoteUpdate));
 
     /// <summary>Botón «Actualizar» visible: hay actualización y no hay ya una descarga de este juego.</summary>
     public bool ShowUpdateButton => HasUpdate && !IsRunning && !HasActiveJob;
