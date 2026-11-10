@@ -434,9 +434,11 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             var installed = Games.Count(g => g.IsSteam && !g.IsNotInstalled && IsTypeShown(g.ContentType));
             var notInstalled = Games.Count(g => g.IsNotInstalled && IsTypeShown(g.ContentType));
             var local = Games.Count(g => g.IsLocal);
+            var epic = Games.Count(g => g.IsEpic && IsTypeShown(g.ContentType));
             var total = _tracker.GetGrandTotal();
             var count = $"{installed} instalados";
             if (notInstalled > 0) count += $" · {notInstalled} más en tu cuenta";
+            if (epic > 0) count += $" · {epic} de Epic";
             if (local > 0) count += $" · {local} {(local == 1 ? "local" : "locales")}";
             var played = total == TimeSpan.Zero ? "aún sin tiempo registrado" : $"{Formatting.Duration(total)} jugadas en total";
             return $"{count} · {played}";
@@ -550,6 +552,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
                 _owned = snapshot.Installed.Select(e => e.AppId).ToHashSet();
             }
 
+            // Epic Games: juegos instalados según sus manifiestos locales (sin red).
+            foreach (var epic in await Task.Run(EpicLibraryScanner.Scan)) Games.Add(CreateCard(epic));
             foreach (var local in _library.LocalGames) Games.Add(CreateCard(local.ToEntry()));
             foreach (var g in Games) g.IsRunning = running.Contains(g.Entry.Id);
             ApplyRemoteUpdates();
@@ -596,6 +600,9 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     /// <summary>Tipo según Steam (red de Steam o appinfo.vdf local); por defecto, juego.</summary>
     private LibraryContentType TypeFor(GameEntry entry)
     {
+        if (entry.Platform == GamePlatform.Epic)
+            return entry.EpicCategories.Contains("games") || !entry.EpicCategories.Contains("applications")
+                ? LibraryContentType.Game : LibraryContentType.Software;
         if (entry.Platform != GamePlatform.Steam) return LibraryContentType.Game;
         var type = uint.TryParse(entry.AppId, out var id) && _ownership.Find(id) is { } app ? app.Type
                  : _appInfo.TryGetValue(entry.AppId, out var info) ? info.Type : "game";
@@ -1178,25 +1185,30 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         switch (s.Phase)
         {
             case LaunchPhase.SyncingCloud:
+            {
+                var launcher = s.Game?.Platform == GamePlatform.Epic ? "Epic Games Launcher" : "Steam";
                 IsBannerVisible = true;
-                BannerText = "Sincronizando partidas guardadas con Steam Cloud…";
+                BannerText = s.Game?.Platform == GamePlatform.Epic
+                    ? "Sincronizando partidas guardadas con la nube de Epic…"
+                    : "Sincronizando partidas guardadas con Steam Cloud…";
                 BannerDetail = s.SecondsRemaining is int left
-                    ? $"Steam se cerrará de forma segura en {left} s. No apagues el equipo."
-                    : "Esperando a Steam…";
+                    ? $"{launcher} se cerrará en {left} s. No apagues el equipo."
+                    : $"Esperando a {launcher}…";
                 if (!_cloudNotified)
                 {
                     _cloudNotified = true;
-                    Notify("Steam Cloud", "Sincronizando partidas guardadas…");
+                    Notify(s.Game?.Platform == GamePlatform.Epic ? "Nube de Epic" : "Steam Cloud", "Sincronizando partidas guardadas…");
                 }
                 break;
+            }
 
             case LaunchPhase.CleaningUp:
                 IsBannerVisible = true;
-                BannerText = "Cerrando Steam de forma segura…";
-                BannerDetail = "Steam termina de subir tus partidas y se cierra. Después se liberará la memoria.";
+                BannerText = s.Game?.Platform == GamePlatform.Epic ? "Cerrando Epic Games Launcher…" : "Cerrando Steam de forma segura…";
+                BannerDetail = "El launcher termina de subir tus partidas y se cierra. Después se liberará la memoria.";
                 break;
 
-            case LaunchPhase.Finished when s.Game?.Platform == GamePlatform.Steam:
+            case LaunchPhase.Finished when s.Game?.Platform is GamePlatform.Steam or GamePlatform.Epic:
                 IsBannerVisible = false;
                 Notify("Sesión terminada", s.Message);
                 break;
@@ -1252,7 +1264,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
 
     public void ViewInStore(GameCardViewModel card)
     {
-        Store.ShowApp(card.Entry.AppId);
+        if (card.IsEpic) Store.Navigate(StoreViewModel.EpicSearchUrl(card.Name));
+        else Store.ShowApp(card.Entry.AppId);
         CurrentView = AppView.Store;
     }
 

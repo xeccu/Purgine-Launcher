@@ -7,6 +7,8 @@ public enum GamePlatform
     Steam,
     /// <summary>Ejecutable añadido a mano por el usuario (proyectos propios, emuladores, juegos sin tienda).</summary>
     Local,
+    /// <summary>Juego instalado con Epic Games Launcher (detectado por sus manifiestos .item).</summary>
+    Epic,
 }
 
 /// <summary>Un juego de la biblioteca, independiente de su origen.</summary>
@@ -74,6 +76,19 @@ public sealed record GameEntry
             ? Math.Clamp((double)BytesDownloaded / BytesToDownload, 0, 1)
             : null;
 
+    // ----- Epic Games -----
+    /// <summary>Espacio de nombres del catálogo de Epic (para lanzarlo por URI).</summary>
+    public string? EpicNamespace { get; init; }
+    /// <summary>Id del artículo en el catálogo de Epic.</summary>
+    public string? EpicCatalogItemId { get; init; }
+    /// <summary>Categorías del manifiesto de Epic («games», «applications»…).</summary>
+    public IReadOnlyList<string> EpicCategories { get; init; } = [];
+
+    /// <summary>URI con la que Epic Games Launcher lanza el juego sin mostrar su ventana.</summary>
+    public string? EpicLaunchUri => EpicNamespace is null || EpicCatalogItemId is null ? null
+        : $"com.epicgames.launcher://apps/{Uri.EscapeDataString($"{EpicNamespace}:{EpicCatalogItemId}:{AppId}")}?action=launch&silent=true";
+
     public static string MakeSteamId(string appId) => $"steam:{appId}";
+    public static string MakeEpicId(string appName) => $"epic:{appName}";
     public static string MakeLocalId(string guid) => $"local:{guid}";
 }

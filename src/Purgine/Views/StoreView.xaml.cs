@@ -176,7 +176,7 @@ public partial class StoreView : UserControl
             core.LaunchingExternalUriScheme += OnLaunchingExternalUriScheme;
             core.ProcessFailed += OnProcessFailed;
 
-            core.Navigate(_vm.TakePendingUrl() ?? _resumeUrl ?? StoreViewModel.HomeUrl);
+            core.Navigate(_vm.TakePendingUrl() ?? _resumeUrl ?? _vm.CurrentHomeUrl);
             _resumeUrl = null;
             StartingPanel.Visibility = Visibility.Collapsed;
             Log.Info($"Tienda: navegador WebView2 {environment.BrowserVersionString} iniciado.");
@@ -277,8 +277,13 @@ public partial class StoreView : UserControl
     }
 
     /// <summary>Protocolos externos: steam:// lo resuelve Purgine; el resto no se abre desde la tienda.</summary>
+    /// <summary>
+    /// Protocolos externos: steam:// lo resuelve Purgine; com.epicgames.launcher:// (botones «Instalar» o «Abrir»
+    /// de la tienda de Epic) se deja pasar a Epic Games Launcher, que es quien instala esos juegos; el resto no se abre.
+    /// </summary>
     private void OnLaunchingExternalUriScheme(object? sender, CoreWebView2LaunchingExternalUriSchemeEventArgs e)
     {
+        if (e.Uri.StartsWith("com.epicgames.launcher:", StringComparison.OrdinalIgnoreCase)) return;
         e.Cancel = true;
         if (IsSteamLink(e.Uri)) HandleSteamLink(e.Uri);
     }
@@ -304,6 +309,7 @@ public partial class StoreView : UserControl
         BackButton.IsEnabled = core.CanGoBack;
         ForwardButton.IsEnabled = core.CanGoForward;
         AddressText.Text = core.Source;
+        _vm?.SyncStoreFromUrl(core.Source);
     }
 
     // =====================================================================================
@@ -318,8 +324,9 @@ public partial class StoreView : UserControl
 
     private void OnHome(object sender, RoutedEventArgs e)
     {
-        if (_web?.CoreWebView2 is { } core) core.Navigate(StoreViewModel.HomeUrl);
-        else _vm?.Navigate(StoreViewModel.HomeUrl);
+        var home = _vm?.CurrentHomeUrl ?? StoreViewModel.HomeUrl;
+        if (_web?.CoreWebView2 is { } core) core.Navigate(home);
+        else _vm?.Navigate(home);
     }
 
     private void OnOpenExternal(object sender, RoutedEventArgs e)

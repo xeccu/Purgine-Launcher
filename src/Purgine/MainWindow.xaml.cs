@@ -21,6 +21,7 @@ public partial class MainWindow : Window, IDialogService
     private readonly LauncherSettings _settings;
     private readonly UserLibrary _library;
     private TrayIcon? _tray;
+    private readonly DispatcherTimer _idleTrim;
     private bool _exitRequested;
     private bool _trayHintShown;
 
@@ -43,6 +44,16 @@ public partial class MainWindow : Window, IDialogService
             ApplyBackdrop(GraphicsTheme.Current);
         };
         GraphicsTheme.Changed += ApplyBackdrop;
+
+        // Reposo: si la ventana se queda en segundo plano (otra app delante) un rato, se compacta la memoria.
+        _idleTrim = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(45) };
+        _idleTrim.Tick += (_, _) =>
+        {
+            _idleTrim.Stop();
+            if (!IsActive) ProcessUtils.TrimCurrentProcess();
+        };
+        Deactivated += (_, _) => _idleTrim.Start();
+        Activated += (_, _) => _idleTrim.Stop();
         Loaded += async (_, _) => await _vm.RefreshAsync();
         StateChanged += OnStateChanged;
 

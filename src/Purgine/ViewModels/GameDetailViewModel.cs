@@ -80,6 +80,8 @@ public sealed partial class GameDetailViewModel : ObservableObject
 
         var id = Uri.EscapeDataString(card.Entry.AppId);
         OpenStoreCommand = new RelayCommand(_ => _openWeb($"https://store.steampowered.com/app/{id}/?l=spanish"), _ => card.IsSteam);
+        // Epic: sin API pública de catálogo, la ficha de la tienda se busca por nombre.
+        OpenEpicStoreCommand = new RelayCommand(_ => _openWeb(StoreViewModel.EpicSearchUrl(card.Name)), _ => card.IsEpic);
         OpenCommunityCommand = new RelayCommand(_ => _openWeb($"https://steamcommunity.com/app/{id}/?l=spanish"), _ => card.IsSteam);
         OpenDiscussionsCommand = new RelayCommand(_ => _openWeb($"https://steamcommunity.com/app/{id}/discussions/?l=spanish"), _ => card.IsSteam);
         OpenGuidesCommand = new RelayCommand(_ => _openWeb($"https://steamcommunity.com/app/{id}/guides/?l=spanish"), _ => card.IsSteam);
@@ -115,6 +117,7 @@ public sealed partial class GameDetailViewModel : ObservableObject
     public ICommand OpenGuidesCommand { get; }
     public ICommand OpenSupportCommand { get; }
     public ICommand OpenWorkshopCommand { get; }
+    public ICommand OpenEpicStoreCommand { get; }
     public ICommand OpenPointsShopCommand { get; }
     public ICommand OpenAchievementsCommand { get; }
 

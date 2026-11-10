@@ -12,6 +12,16 @@
                 BorderThickness="0,0,0,1" Padding="12,6">
             <Grid>
                 <DockPanel LastChildFill="True">
+                    <!-- Selector de tienda: el mismo navegador para las dos (no se duplican procesos) -->
+                    <Border DockPanel.Dock="Left" CornerRadius="6" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                            Padding="2" Margin="0,0,10,0" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton Style="{StaticResource IconToggle}" GroupName="StoreKind" FontFamily="Segoe UI Variable Text, Segoe UI"
+                                         FontSize="12" Content="Steam" IsChecked="{Binding IsSteamStore, Mode=TwoWay}" />
+                            <RadioButton Style="{StaticResource IconToggle}" GroupName="StoreKind" FontFamily="Segoe UI Variable Text, Segoe UI"
+                                         FontSize="12" Content="Epic Games" IsChecked="{Binding IsEpicStore, Mode=TwoWay}" />
+                        </StackPanel>
+                    </Border>
                     <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
                         <Button x:Name="BackButton" Style="{StaticResource IconButton}" Content="&#xE72B;" Click="OnBack"
                                 ToolTip="Atrás" IsEnabled="False" />

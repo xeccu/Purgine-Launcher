@@ -121,6 +121,7 @@ public sealed class ProcessOrchestrator
     {
         GamePlatform.Steam => LaunchSteamGameAsync(game, ct),
         GamePlatform.Local => LaunchLocalGameAsync(game, ct),
+        GamePlatform.Epic => LaunchEpicGameAsync(game, ct),
         _ => Task.FromResult(new LaunchResult(false, $"Plataforma no soportada: {game.Platform}")),
     };
 
@@ -304,6 +305,139 @@ public sealed class ProcessOrchestrator
             ProcessUtils.TrimCurrentProcess();
             _sessionGate.Release();
         }
+    }
+
+    // =====================================================================================
+    // Epic Games
+    // =====================================================================================
+
+    private const string EpicLauncherProcess = "EpicGamesLauncher";
+    /// <summary>Procesos que deja Epic Games Launcher (se cierran tras la partida si lo abrió Purgine).</summary>
+    private static readonly string[] EpicProcessesToClean = ["EpicGamesLauncher", "EpicWebHelper"];
+
+    /// <summary>
+    /// Juego de Epic: se lanza con la URI de Epic Games Launcher en modo silencioso (sin su ventana; el launcher
+    /// valida la licencia y la sesión online, igual que hace Steam con steam://run), se vigila el proceso del
+    /// juego por su carpeta y, al salir, tras la espera de la nube, se cierra el launcher si lo abrió Purgine.
+    /// </summary>
+    public async Task<LaunchResult> LaunchEpicGameAsync(GameEntry game, CancellationToken ct = default)
+    {
+        if (!await _sessionGate.WaitAsync(0, CancellationToken.None).ConfigureAwait(false))
+            return new LaunchResult(false, "Ya hay una sesión de juego en curso.");
+
+        var epicStartedByUs = !ProcessUtils.IsRunning(EpicLauncherProcess);
+        var runCleanup = false;
+        try
+        {
+            if (game.InstallDir is null || !Directory.Exists(game.InstallDir))
+                return Fail(game, $"No se encuentra la carpeta de {game.Name}. Repara o reinstala el juego en Epic Games.");
+            if (game.EpicLaunchUri is not { } uri)
+                return Fail(game, $"El manifiesto de Epic de {game.Name} no tiene los datos de catálogo para lanzarlo.");
+
+            Report(LaunchPhase.LaunchingGame, $"Lanzando {game.Name} con Epic Games…", game);
+            Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true })?.Dispose();
+            runCleanup = true;
+            Log.Info($"Epic: {uri} enviado ({game.Name}).");
+
+            var watchDir = GameProcessWatcher.IsSafeWatchDirectory(game.InstallDir) ? game.InstallDir : null;
+            _currentWatchDir = watchDir;
+            var watcher = new GameProcessWatcher(null, watchDir, rootPid: null, TimeSpan.FromSeconds(_settings.RelaunchGraceSeconds));
+            Report(LaunchPhase.WaitingForGame, $"Esperando a que arranque {game.Name} (Epic puede tardar en iniciar sesión)…", game);
+
+            // Epic Games Launcher puede tardar más que Steam en arrancar e iniciar sesión.
+            var timeout = TimeSpan.FromSeconds(Math.Max(120, _settings.GameStartTimeoutSeconds));
+            if (!await watcher.WaitForStartAsync(timeout, ct).ConfigureAwait(false))
+            {
+                // Lo habitual: Epic pide iniciar sesión o actualizarse. No se cierra: el usuario lo necesita abierto.
+                runCleanup = false;
+                return Fail(game, $"{game.Name} no arrancó en {timeout.TotalSeconds:0} s. Epic Games Launcher se ha dejado abierto: " +
+                                  "si te pide iniciar sesión o actualizar, hazlo y vuelve a pulsar Jugar.");
+            }
+
+            var session = await TrackSessionAsync(game, watcher, ct).ConfigureAwait(false);
+            var played = session is null ? TimeSpan.Zero : TimeSpan.FromSeconds(session.DurationSeconds);
+            return new LaunchResult(true, $"{game.Name}: sesión de {Formatting.Duration(played)}.", session);
+        }
+        catch (OperationCanceledException) when (_forceStopRequested)
+        {
+            runCleanup = false;
+            var session = _tracker.EndSession();
+            Report(LaunchPhase.Finished, $"{game.Name} se cerró a la fuerza. Listo para jugar.", game);
+            if (EpicCleanupAllowed(epicStartedByUs))
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Max(5, _settings.CloudSyncGraceSeconds))).ConfigureAwait(false);
+                    if (!IsBusy) ProcessUtils.KillByNames(EpicProcessesToClean);
+                });
+            return new LaunchResult(true, $"{game.Name} se cerró a la fuerza.", session);
+        }
+        catch (OperationCanceledException)
+        {
+            runCleanup = false; // dejar de vigilar: el juego puede seguir abierto
+            var session = _tracker.EndSession();
+            Report(LaunchPhase.Cancelled, "Vigilancia cancelada. Epic Games Launcher se ha dejado abierto.", game);
+            return new LaunchResult(false, "Vigilancia cancelada.", session);
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            runCleanup = false;
+            Log.Warn($"Epic: no se pudo abrir la URI ({ex.Message}).");
+            return Fail(game, "No se pudo abrir Epic Games Launcher. ¿Está instalado?");
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Error en la sesión de Epic de {game.Name}", ex);
+            _tracker.EndSession();
+            return Fail(game, $"Error: {ex.Message}");
+        }
+        finally
+        {
+            try
+            {
+                if (runCleanup) await CleanupEpicAsync(epicStartedByUs, game).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Error durante la limpieza de Epic", ex);
+            }
+            finally
+            {
+                ResetForceStopState();
+                ProcessUtils.TrimCurrentProcess();
+                _sessionGate.Release();
+            }
+        }
+    }
+
+    private bool EpicCleanupAllowed(bool startedByUs) =>
+        _settings.SteamCleanupPolicy == CleanupPolicy.Always ||
+        (_settings.SteamCleanupPolicy == CleanupPolicy.OnlyIfStartedByLauncher && startedByUs);
+
+    /// <summary>
+    /// Tras la partida de Epic: espera para que el launcher suba las partidas a la nube y lo cierra (Epic no
+    /// tiene un cierre ordenado por línea de comandos), según la misma política que Steam.
+    /// </summary>
+    private async Task CleanupEpicAsync(bool startedByUs, GameEntry game)
+    {
+        if (!EpicCleanupAllowed(startedByUs))
+        {
+            Report(LaunchPhase.Finished, "Sesión terminada. Epic Games Launcher se deja abierto (según ajustes).", game);
+            return;
+        }
+        if (!ProcessUtils.IsRunning(EpicLauncherProcess))
+        {
+            Report(LaunchPhase.Finished, "Sesión terminada. Epic Games Launcher ya estaba cerrado.", game);
+            return;
+        }
+        for (var left = Math.Max(0, _settings.CloudSyncGraceSeconds); left > 0; left--)
+        {
+            Report(LaunchPhase.SyncingCloud, "Sincronizando partidas guardadas con la nube de Epic…", game, left);
+            await Task.Delay(1000).ConfigureAwait(false);
+        }
+        Report(LaunchPhase.CleaningUp, "Cerrando Epic Games Launcher…", game);
+        var killed = ProcessUtils.KillByNames(EpicProcessesToClean);
+        Log.Info($"Epic: {killed} proceso(s) del launcher cerrados tras la partida.");
+        Report(LaunchPhase.Finished, "Sesión terminada. Epic Games Launcher cerrado.", game);
     }
 
     private static int? SafePid(Process? process)

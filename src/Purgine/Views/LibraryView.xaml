@@ -92,6 +92,10 @@
                     <TextBlock Text="&#xE777;" FontFamily="{StaticResource IconFont}" FontSize="11"
                                Foreground="{StaticResource SteamBlueBrush}" ToolTip="Actualización disponible"
                                Visibility="{Binding ShowUpdateButton, Converter={StaticResource BoolToVis}}" />
+                    <Border CornerRadius="3" Padding="4,0" Margin="4,0,0,0" Background="#33FFFFFF" VerticalAlignment="Center"
+                            Visibility="{Binding IsEpic, Converter={StaticResource BoolToVis}}" ToolTip="Epic Games">
+                        <TextBlock Text="EPIC" FontSize="9" FontWeight="Bold" Foreground="{StaticResource TextBrush}" />
+                    </Border>
                     <TextBlock Text="EN CURSO" FontSize="10" FontWeight="Bold" Foreground="{StaticResource SteamBlueBrush}"
                                Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
@@ -146,9 +150,22 @@
 
                         <!-- Insignias -->
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
-                            <Border CornerRadius="4" Background="#CC0E1014" Padding="6,2" Margin="0,0,4,0"
-                                    Visibility="{Binding IsLocal, Converter={StaticResource BoolToVis}}">
-                                <TextBlock Text="LOCAL" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextBrush}" />
+                            <!-- Plataforma: STEAM / EPIC / LOCAL -->
+                            <Border CornerRadius="4" Padding="6,2" Margin="0,0,4,0" ToolTip="{Binding PlatformLabel}">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Background" Value="#CC0E1014" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsEpic}" Value="True">
+                                                <Setter Property="Background" Value="#E6202020" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsSteam}" Value="True">
+                                                <Setter Property="Background" Value="#CC10263F" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <TextBlock Text="{Binding PlatformBadge}" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextBrush}" />
                             </Border>
                             <Border CornerRadius="4" Background="#CC0E1014" Padding="5,2"
                                     Visibility="{Binding IsFavorite, Converter={StaticResource BoolToVis}}">

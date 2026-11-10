@@ -8,6 +8,42 @@ namespace Purgine.ViewModels;
 public sealed class StoreViewModel : ObservableObject
 {
     public const string HomeUrl = "https://store.steampowered.com/?l=spanish";
+    public const string EpicHomeUrl = "https://store.epicgames.com/es-ES/";
+
+    /// <summary>Búsqueda en Epic Games Store (Epic no ofrece un catálogo público para enlazar la ficha exacta).</summary>
+    public static string EpicSearchUrl(string name) => $"https://store.epicgames.com/es-ES/browse?q={Uri.EscapeDataString(name)}";
+
+    private bool _isEpicStore;
+
+    /// <summary>Tienda mostrada: Steam o Epic Games Store (el mismo navegador, para no duplicar procesos).</summary>
+    public bool IsEpicStore
+    {
+        get => _isEpicStore;
+        set
+        {
+            if (!SetProperty(ref _isEpicStore, value)) return;
+            OnPropertyChanged(nameof(IsSteamStore));
+            Navigate(CurrentHomeUrl);
+        }
+    }
+
+    public bool IsSteamStore { get => !_isEpicStore; set => IsEpicStore = !value; }
+
+    public string CurrentHomeUrl => _isEpicStore ? EpicHomeUrl : HomeUrl;
+
+    /// <summary>La página actual pertenece a Epic: el selector se ajusta sin recargar.</summary>
+    public void SyncStoreFromUrl(string? url)
+    {
+        if (url is null || !url.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return;
+        var epic = url.Contains("epicgames.com", StringComparison.OrdinalIgnoreCase);
+        var steam = url.Contains("steampowered.com", StringComparison.OrdinalIgnoreCase) || url.Contains("steamcommunity.com", StringComparison.OrdinalIgnoreCase);
+        if ((epic && !_isEpicStore) || (steam && _isEpicStore))
+        {
+            _isEpicStore = epic;
+            OnPropertyChanged(nameof(IsEpicStore));
+            OnPropertyChanged(nameof(IsSteamStore));
+        }
+    }
 
     private readonly IStoreActions _actions;
     private bool _isActive;

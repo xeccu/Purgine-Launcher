@@ -353,6 +353,13 @@
                                 <TextBlock Text="Soporte" Margin="6,0,0,0" />
                             </StackPanel>
                         </Button>
+                        <Button Style="{StaticResource LinkRow}" Command="{Binding OpenEpicStoreCommand}"
+                                Visibility="{Binding Card.IsEpic, Converter={StaticResource BoolToVis}}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE719;" FontFamily="{StaticResource IconFont}" Width="22" VerticalAlignment="Center" />
+                                <TextBlock Text="Epic Games Store" Margin="6,0,0,0" />
+                            </StackPanel>
+                        </Button>
                         <Button Style="{StaticResource LinkRow}" Command="{Binding Card.OpenFolderCommand}"
                                 Visibility="{Binding Card.IsNotInstalled, Converter={StaticResource InverseBoolToVis}}">
                             <StackPanel Orientation="Horizontal">

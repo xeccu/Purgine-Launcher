@@ -198,6 +198,22 @@ marcan y no se pueden elegir.
   Purgine: Steam se abre solo para jugar y se cierra al terminar. Usan el icono del juego. Si Purgine ya está
   abierto, la petición se le pasa a esa instancia.
 
+### 9. Epic Games
+
+- **Biblioteca unificada**: los juegos instalados con Epic Games Launcher aparecen junto a los de Steam, leídos
+  de sus manifiestos locales (`%ProgramData%\Epic\EpicGamesLauncher\Data\Manifests\*.item`, sin red). Las
+  portadas y la lista lateral llevan un distintivo **STEAM / EPIC / LOCAL**; filtros, orden, «Listos para
+  jugar», notas, forzar cierre y tiempo jugado funcionan igual.
+- **Jugar**: Purgine lanza el juego con la URI de Epic Games Launcher en modo silencioso (el launcher valida la
+  licencia y la sesión online, como Steam con `steam://run`), vigila su proceso y, al salir, tras la espera de
+  la nube, cierra el launcher si lo abrió Purgine (misma política que Steam). Si el juego no arranca —lo
+  habitual es que Epic pida iniciar sesión o actualizarse— Epic se deja abierto para que lo hagas.
+- **Tienda**: selector **Steam / Epic Games** en la pestaña Tienda (el mismo navegador para las dos). Los
+  botones de la tienda de Epic que abren su launcher (instalar, abrir) se le pasan a Epic Games Launcher.
+- **Límites**: solo los juegos *instalados* (la lista completa de la cuenta de Epic necesita su API con inicio
+  de sesión); Epic no publica arte, logros ni cromos sin sesión, así que su ficha usa el icono del juego y los
+  enlaces a Epic Games Store. Instalar, actualizar y desinstalar juegos de Epic se hace en Epic Games Launcher.
+
 ### Otras funciones
 
 - **Tiempo jugado**: histórico de Steam (`localconfig.vdf`) más las sesiones locales que Steam aún no ha
@@ -205,6 +221,8 @@ marcan y no se pueden elegir.
 - **Organización**: etiquetas, filtros «Todos / Instalados», orden A-Z o por tiempo, cuadrícula o lista,
   tamaño de portadas.
 - **Ejecutables propios** (Godot, emuladores…): con portada y tiempo jugado.
+- **Reposo**: si Purgine se queda en segundo plano 45 s, compacta su memoria (GC + recorte del working set);
+  igual al minimizar y al ocultarlo en la bandeja.
 - **Bandeja del sistema** con `Shell_NotifyIcon` (sin WinForms), como Steam: la **X** oculta Purgine en la
   bandeja (menú «Abrir Purgine» / «Salir») y **minimizar** lo deja en la barra de tareas como cualquier
   ventana. En la bandeja ocupa ~10 MB de RAM.

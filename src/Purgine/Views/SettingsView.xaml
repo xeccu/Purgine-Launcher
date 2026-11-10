@@ -53,13 +53,13 @@
             <!-- ===== Al terminar de jugar ===== -->
             <Border Style="{StaticResource Panel}">
                 <StackPanel>
-                    <TextBlock Text="Al cerrar un juego de Steam" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Text="Al cerrar un juego de Steam o Epic" Style="{StaticResource SectionTitle}" />
                     <RadioButton GroupName="Cleanup" IsChecked="{Binding CleanupAlways, Mode=TwoWay}"
-                                 Content="Cerrar Steam siempre (máximo ahorro de RAM y CPU)" />
+                                 Content="Cerrar el launcher (Steam o Epic) siempre (máximo ahorro de RAM y CPU)" />
                     <RadioButton GroupName="Cleanup" IsChecked="{Binding CleanupOnlyOurs, Mode=TwoWay}"
-                                 Content="Cerrar Steam solo si lo abrió Purgine" />
+                                 Content="Cerrar el launcher solo si lo abrió Purgine" />
                     <RadioButton GroupName="Cleanup" IsChecked="{Binding CleanupNever, Mode=TwoWay}"
-                                 Content="Dejar Steam abierto" />
+                                 Content="Dejar el launcher abierto" />
 
                     <Grid Margin="0,16,0,0">
                         <Grid.ColumnDefinitions>

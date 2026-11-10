@@ -79,7 +79,7 @@ public sealed class GameCardViewModel : ObservableObject
         UpdateCommand = new RelayCommand(_ => _host.Update(this), _ => ShowUpdateButton);
         NewTagCommand = new RelayCommand(_ => _host.CreateTagFor(this));
         OpenFolderCommand = new RelayCommand(_ => _host.OpenInstallFolder(this), _ => Entry.InstallDir is not null);
-        ViewInStoreCommand = new RelayCommand(_ => _host.ViewInStore(this), _ => IsSteam);
+        ViewInStoreCommand = new RelayCommand(_ => _host.ViewInStore(this), _ => IsSteam || IsEpic);
         EditCommand = new RelayCommand(_ => _host.EditLocal(this), _ => IsLocal);
         RemoveCommand = new RelayCommand(_ => _host.RemoveLocal(this), _ => IsLocal && !IsRunning);
 
@@ -139,8 +139,18 @@ public sealed class GameCardViewModel : ObservableObject
     public string Name => Entry.Name;
     public bool IsLocal => Entry.Platform == GamePlatform.Local;
     public bool IsSteam => Entry.Platform == GamePlatform.Steam;
+    public bool IsEpic => Entry.Platform == GamePlatform.Epic;
+
+    /// <summary>Distintivo de plataforma de la tarjeta: «STEAM», «EPIC» o «LOCAL».</summary>
+    public string PlatformBadge => Entry.Platform switch
+    {
+        GamePlatform.Epic => "EPIC",
+        GamePlatform.Local => "LOCAL",
+        _ => "STEAM",
+    };
     public string PlatformLabel =>
         IsLocal ? "Local"
+        : IsEpic ? "Epic Games"
         : IsNotInstalled ? "No instalado"
         : HasUpdate ? "Actualización pendiente"
         : "Steam";
@@ -430,7 +440,8 @@ public sealed class GameCardViewModel : ObservableObject
             if (Cover is not null) return;
         }
 
-        if (IsLocal && Entry.ExecutablePath is { } exe)
+        // Locales y Epic (sin portada local): el icono del ejecutable.
+        if ((IsLocal || IsEpic) && Entry.ExecutablePath is { } exe && File.Exists(exe))
             AppIcon = await Task.Run(() => ImageLoader.IconFromExecutable(exe));
     }
 
@@ -443,9 +454,9 @@ public sealed class GameCardViewModel : ObservableObject
         if (_iconRequested) return;
         _iconRequested = true;
 
-        if (IsLocal)
+        if (IsLocal || IsEpic)
         {
-            if (AppIcon is null && Entry.ExecutablePath is { } exe)
+            if (AppIcon is null && Entry.ExecutablePath is { } exe && File.Exists(exe))
                 AppIcon = await Task.Run(() => ImageLoader.IconFromExecutable(exe));
             SmallIcon = AppIcon ?? Cover;
             return;
