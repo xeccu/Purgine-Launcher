@@ -68,6 +68,11 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     private readonly EpicNet.EpicAccountService _epic;
     private readonly EpicNet.EpicDownloadManager _epicDownloads;
 
+    /// <summary>Peticiones de metadatos de red en curso (la recarga forzada las cancela y empieza de cero).</summary>
+    private CancellationTokenSource _metadataCts = new();
+    private CancellationToken MetadataToken => _metadataCts.Token;
+    private bool _isReloadingMetadata;
+
     /// <summary>Juegos de la cuenta de Epic que no están instalados (última consulta a la red).</summary>
     private List<GameEntry> _epicOwned = [];
     /// <summary>Build pública y tamaño instalado de cada juego de Epic (caché en disco).</summary>
@@ -136,6 +141,11 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         GamesView.Filter = FilterGame;
 
         RefreshCommand = new RelayCommand(async _ => await RefreshAsync(), _ => !IsScanning);
+        ReloadMetadataCommand = new RelayCommand(async _ => await ReloadMetadataAsync(), _ => !IsReloadingMetadata);
+        PlatformFilters = PlatformRegistry.All
+            .Select(info => new PlatformFilterViewModel(info,
+                !_settings.LibraryHiddenPlatforms.Contains(info.Platform.ToString()), OnPlatformFilterChanged))
+            .ToList();
         CancelCommand = new RelayCommand(_ => _sessionCts?.Cancel(), _ => IsSessionActive);
         ForceCloseCommand = new RelayCommand(_ => ForceCloseRunning(), _ => IsSessionActive);
         OpenDataFolderCommand = new RelayCommand(_ => OpenPath(AppPaths.DataDir));
@@ -352,9 +362,51 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     }
 
     /// <summary>Listos para jugar entre los tipos visibles.</summary>
-    public int InstalledCount => Games.Count(g => IsTypeShown(g.ContentType) && g.IsReadyToPlay);
+    public int InstalledCount => Games.Count(g => IsShown(g) && g.IsReadyToPlay);
     /// <summary>Todo lo de los tipos visibles.</summary>
-    public int AllCount => Games.Count(g => IsTypeShown(g.ContentType));
+    public int AllCount => Games.Count(g => IsShown(g));
+
+    // ----- Filtro por launcher (Steam / Epic Games / … / Local) -----
+
+    /// <summary>Una casilla por plataforma conocida (se generan desde <see cref="GamePlatform"/>).</summary>
+    public IReadOnlyList<PlatformFilterViewModel> PlatformFilters { get; }
+
+    private bool IsPlatformShown(GamePlatform platform) =>
+        !_settings.LibraryHiddenPlatforms.Contains(platform.ToString());
+
+    /// <summary>Visible según los filtros de tipo y de launcher (la búsqueda, «Listos» y etiquetas van aparte).</summary>
+    private bool IsShown(GameCardViewModel g) => IsTypeShown(g.ContentType) && IsPlatformShown(g.Entry.Platform);
+
+    /// <summary>«Todos», «Steam», «Steam y Epic Games», «Ninguno».</summary>
+    public string PlatformFilterSummary
+    {
+        get
+        {
+            var on = PlatformFilters.Where(f => f.IsShown).Select(f => f.DisplayName).ToList();
+            return on.Count == PlatformFilters.Count ? "Todos"
+                 : on.Count == 0 ? "Ninguno"
+                 : on.Count == 1 ? on[0]
+                 : string.Join(", ", on[..^1]) + " y " + on[^1];
+        }
+    }
+
+    private void OnPlatformFilterChanged(PlatformFilterViewModel filter)
+    {
+        var key = filter.Platform.ToString();
+        _settings.LibraryHiddenPlatforms.Remove(key);
+        if (!filter.IsShown) _settings.LibraryHiddenPlatforms.Add(key);
+        OnPropertyChanged(nameof(PlatformFilterSummary));
+        GamesView.Refresh();
+        RebuildTagFilters();
+        RaiseLibraryTexts();
+        _saveSettings.Request();
+    }
+
+    private void UpdatePlatformCounts()
+    {
+        foreach (var f in PlatformFilters)
+            f.Count = Games.Count(g => g.Entry.Platform == f.Platform && IsTypeShown(g.ContentType));
+    }
 
     // ----- Filtros por tipo (Juegos / Software / Herramientas) -----
 
@@ -445,10 +497,10 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         get
         {
             // Solo los tipos visibles (las herramientas ocultas no inflan «más en tu cuenta»).
-            var installed = Games.Count(g => g.IsSteam && !g.IsNotInstalled && IsTypeShown(g.ContentType));
-            var notInstalled = Games.Count(g => g.IsNotInstalled && IsTypeShown(g.ContentType));
+            var installed = Games.Count(g => g.IsSteam && !g.IsNotInstalled && IsShown(g));
+            var notInstalled = Games.Count(g => g.IsNotInstalled && IsShown(g));
             var local = Games.Count(g => g.IsLocal);
-            var epic = Games.Count(g => g.IsEpic && IsTypeShown(g.ContentType));
+            var epic = Games.Count(g => g.IsEpic && IsShown(g));
             var total = _tracker.GetGrandTotal();
             var count = $"{installed} instalados";
             if (notInstalled > 0) count += $" · {notInstalled} más en tu cuenta";
@@ -687,7 +739,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     {
         try
         {
-            var cache = await Task.Run(() => _ownership.RefreshAsync(CancellationToken.None));
+            var cache = await Task.Run(() => _ownership.RefreshAsync(MetadataToken));
             if (cache is null) { UpdateAccountText(); return; }
 
             // Quitar las aproximaciones locales que la red no confirma (y no estén instaladas).
@@ -706,11 +758,88 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             foreach (var card in Games.Where(g => g.SmallIcon is null).ToList()) await LoadIconAsync(card);
             foreach (var card in Games.Where(g => !g.HasCover).ToList()) await card.LoadCoverAsync();
         }
+        catch (OperationCanceledException) { UpdateAccountText(); }
         catch (Exception ex)
         {
             Log.Warn($"No se pudo consultar la biblioteca en Steam: {ex.Message}");
             UpdateAccountText();
         }
+    }
+
+    // =====================================================================================
+    // Recarga forzada de metadatos de red
+    // =====================================================================================
+
+    public ICommand ReloadMetadataCommand { get; }
+
+    /// <summary>Hay una recarga en marcha (el icono gira).</summary>
+    public bool IsReloadingMetadata
+    {
+        get => _isReloadingMetadata;
+        private set { if (SetProperty(ref _isReloadingMetadata, value)) CommandManager.InvalidateRequerySuggested(); }
+    }
+
+    /// <summary>
+    /// Recupera la conexión sin reiniciar Purgine (p. ej. tras una partida en la que fallaron tokens o peticiones):
+    /// cancela lo colgado, vacía las cachés de respuestas de Steam y Epic, reconecta ambas en paralelo y vuelve a
+    /// consultar propiedad, builds, tiempo jugado, arte y, en la ficha abierta, logros, cromos, amigos y comunidad.
+    /// </summary>
+    public async Task ReloadMetadataAsync()
+    {
+        if (IsReloadingMetadata) return;
+        IsReloadingMetadata = true;
+        StatusText = "Recargando la información de Steam y Epic Games…";
+
+        // 1. Cancelar peticiones colgadas.
+        _metadataCts.Cancel();
+        _metadataCts.Dispose();
+        _metadataCts = new CancellationTokenSource();
+        var ct = MetadataToken;
+
+        // 2. Vaciar cachés de respuestas.
+        _community.ClearCache();
+        _epic.ResetNetworkState();
+        _detail?.BeginNetworkReload(); // la ficha pasa a «Consultando…» ya, aunque la reconexión tarde
+
+        try
+        {
+            // 3 y 4. Reconectar y volver a consultar las dos plataformas a la vez.
+            //    La ficha espera a que Steam esté reconectado: si pidiera los logros a mitad de la reconexión, la
+            //    petición moriría con ella.
+            var epic = _epic.HasSession ? SyncEpicAccountAsync() : Task.CompletedTask;
+            var steam = ReloadSteamAsync(ct);
+            await steam;
+            var detail = _detail?.ReloadNetworkDataAsync() ?? Task.CompletedTask;
+            await Task.WhenAll(epic, detail);
+
+            UpdateAccountText();
+            UpdateEpicAccountText();
+            StatusText = "Información de Steam y Epic Games recargada.";
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = "Recarga cancelada.";
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Recarga de metadatos: {ex.Message}");
+            StatusText = $"No se pudo recargar todo: {ex.Message}";
+        }
+        finally
+        {
+            IsReloadingMetadata = false;
+        }
+    }
+
+    /// <summary>Reconecta Steam (en segundo plano) y vuelve a consultar propiedad, builds y tiempo jugado.</summary>
+    private async Task ReloadSteamAsync(CancellationToken ct)
+    {
+        if (_session.HasSavedSession)
+        {
+            await Task.Run(() => _session.ReconnectAsync(ct), ct);
+            await RefreshOwnershipAsync();
+        }
+        await ReloadSteamPlaytimeAsync();
     }
 
     /// <summary>Vuelve a leer el histórico de Steam (tras una partida) y refresca los tiempos mostrados.</summary>
@@ -779,7 +908,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     private bool FilterGame(object o)
     {
         if (o is not GameCardViewModel g) return false;
-        if (!IsTypeShown(g.ContentType)) return false;
+        if (!IsShown(g)) return false;
         if (_settings.LibraryInstalledOnly && !g.IsReadyToPlay) return false;
         if (_searchText.Length > 0 && !g.Name.Contains(_searchText.Trim(), StringComparison.CurrentCultureIgnoreCase))
             return false;
@@ -835,8 +964,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         }
 
         foreach (var f in TagFilters)
-            f.Count = f.Tag is null ? Games.Count(g => IsTypeShown(g.ContentType))
-                : Games.Count(g => IsTypeShown(g.ContentType) && _library.HasTag(g.Entry.Id, f.Tag));
+            f.Count = f.Tag is null ? Games.Count(g => IsShown(g))
+                : Games.Count(g => IsShown(g) && _library.HasTag(g.Entry.Id, f.Tag));
 
         var keep = TagFilters.FirstOrDefault(f => f.Tag == selected) ?? TagFilters[0];
         if (!ReferenceEquals(keep, _selectedTagFilter))
@@ -856,6 +985,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         OnPropertyChanged(nameof(GamesFilterLabel));
         OnPropertyChanged(nameof(SoftwareFilterLabel));
         OnPropertyChanged(nameof(ToolsFilterLabel));
+        UpdatePlatformCounts();
     }
 
     private void SetViewMode(LibraryViewMode mode)
@@ -974,7 +1104,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     {
         try
         {
-            var playtime = await Task.Run(() => _epic.GetPlaytimeAsync(CancellationToken.None));
+            var playtime = await Task.Run(() => _epic.GetPlaytimeAsync(MetadataToken));
             if (playtime is not null)
             {
                 _tracker.SetPlatformPlaytime("epic", playtime.ToDictionary(
@@ -986,7 +1116,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             foreach (var card in Games.Where(g => g.IsEpic).ToList())
             {
                 if (card.Entry.EpicNamespace is not { } ns || card.Entry.EpicCatalogItemId is not { } id) continue;
-                var info = await Task.Run(() => _epic.GetCatalogInfoAsync(ns, id, CancellationToken.None));
+                var info = await Task.Run(() => _epic.GetCatalogInfoAsync(ns, id, MetadataToken));
                 if (info is null) continue;
                 card.RemoteHeroUrl = info.HeroUrl;
                 card.RemoteLogoUrl = info.LogoUrl;
@@ -995,6 +1125,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             }
             await SyncEpicBuildsAsync();
         }
+        catch (OperationCanceledException) { /* recarga forzada: empieza otra consulta */ }
         catch (Exception ex)
         {
             Log.Warn($"Epic: no se pudieron leer los datos de la cuenta: {ex.Message}");
@@ -1007,14 +1138,14 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     /// </summary>
     private async Task SyncEpicOwnedAsync()
     {
-        var items = await Task.Run(() => _epic.GetLibraryItemsAsync(CancellationToken.None));
+        var items = await Task.Run(() => _epic.GetLibraryItemsAsync(MetadataToken));
         if (items is null) return;
         var owned = new List<GameEntry>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var item in items)
         {
             if (item.Namespace == "ue" || !seen.Add(item.AppName)) continue;
-            var info = await Task.Run(() => _epic.GetCatalogInfoAsync(item.Namespace, item.CatalogItemId, CancellationToken.None));
+            var info = await Task.Run(() => _epic.GetCatalogInfoAsync(item.Namespace, item.CatalogItemId, MetadataToken));
             if (info is null || info.IsAddOn || !(info.IsGame || info.IsApplication)) continue;
             owned.Add(new GameEntry
             {
@@ -1053,7 +1184,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             if (e.EpicNamespace is not { } ns || e.EpicCatalogItemId is not { } item) continue;
             try
             {
-                var asset = await Task.Run(() => _epic.GetAssetInfoAsync(ns, item, e.AppId, CancellationToken.None));
+                var asset = await Task.Run(() => _epic.GetAssetInfoAsync(ns, item, e.AppId, MetadataToken));
                 if (asset is null) continue;
                 _epicBuilds.TryGetValue(e.AppId, out var known);
                 if (known is not null && known.BuildVersion == asset.BuildVersion) continue;
@@ -1063,7 +1194,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
                 {
                     try
                     {
-                        var bytes = await Task.Run(() => _epic.DownloadManifestAsync(asset, CancellationToken.None));
+                        var bytes = await Task.Run(() => _epic.DownloadManifestAsync(asset, MetadataToken));
                         size = await Task.Run(() => EpicNet.EpicManifest.Parse(bytes).InstallSize);
                     }
                     catch (NotSupportedException) { /* manifiesto antiguo: sin tamaño */ }
@@ -1071,7 +1202,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
                 _epicBuilds[e.AppId] = new EpicBuildInfo(asset.BuildVersion, size);
                 changed = true;
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (OperationCanceledException) { return; }
+            catch (Exception ex)
             {
                 Log.Warn($"Epic: versión de {e.Name} no disponible: {ex.Message}");
             }

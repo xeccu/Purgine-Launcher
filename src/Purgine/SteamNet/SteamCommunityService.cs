@@ -282,6 +282,13 @@ public sealed class SteamCommunityService : IDisposable
 
     // =====================================================================================
 
+    /// <summary>Olvida las respuestas guardadas (amigos, cromos, comunidad, inventario): la próxima consulta va a la red.</summary>
+    public void ClearCache()
+    {
+        _cache.Clear();
+        _inventory = null;
+    }
+
     private async Task<T?> Cached<T>(string key, Func<Task<T?>> load) where T : class
     {
         if (_cache.TryGetValue(key, out var hit) && DateTime.UtcNow - hit.At < CacheFor) return (T)hit.Value;

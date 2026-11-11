@@ -153,6 +153,12 @@ public sealed class LauncherSettings
     /// <summary>Desactivado por defecto, como en Steam: la mayoría son servidores dedicados y SDK gratuitos.</summary>
     public bool LibraryShowTools { get; set; }
 
+    /// <summary>
+    /// Launchers ocultos en la biblioteca (nombres de <see cref="Library.GamePlatform"/>). Se guarda lo oculto, no
+    /// lo visible: un proveedor nuevo aparece activado sin tocar los ajustes.
+    /// </summary>
+    public List<string> LibraryHiddenPlatforms { get; set; } = [];
+
     /// <summary>Orden de la lista lateral y de la cuadrícula: actividad reciente, alfabético o tiempo jugado.</summary>
     public LibrarySortMode SortMode { get; set; } = LibrarySortMode.Name;
 

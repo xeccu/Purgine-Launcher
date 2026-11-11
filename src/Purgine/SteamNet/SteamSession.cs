@@ -393,6 +393,23 @@ public sealed class SteamSession : IAsyncDisposable
     // =====================================================================================
 
     /// <summary>Mantiene la conexión abierta (descargas en curso). Devolver con <see cref="Release"/>.</summary>
+    /// <summary>
+    /// Recarga forzada: si la conexión no está sana (o nadie la está usando) se cierra y se vuelve a abrir con la
+    /// sesión guardada. Con descargas en curso y la sesión activa, se conserva para no cortarlas.
+    /// </summary>
+    public async Task<bool> ReconnectAsync(CancellationToken ct)
+    {
+        if (!HasSavedSession) return false;
+        var healthy = IsLoggedIn && _client?.IsConnected == true;
+        if (!healthy || Volatile.Read(ref _holds) == 0) await DisconnectAsync().ConfigureAwait(false);
+        try { return await LoginWithSavedSessionAsync(ct).ConfigureAwait(false); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Warn($"Steam (red): no se pudo reconectar ({ex.Message}).");
+            return false;
+        }
+    }
+
     public void Hold() { Interlocked.Increment(ref _holds); Touch(); }
 
     public void Release() { Interlocked.Decrement(ref _holds); Touch(); }

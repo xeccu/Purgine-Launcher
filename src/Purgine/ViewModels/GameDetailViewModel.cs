@@ -194,12 +194,27 @@ public sealed partial class GameDetailViewModel : ObservableObject
         else if (!_achievementsLoaded && Card.IsEpic) tasks.Add(LoadEpicAchievementsAsync(ct));
         tasks.AddRange(LoadExtrasTasks(ct));
         try { await Task.WhenAll(tasks); }
-        catch (OperationCanceledException) { /* se cambió de juego */ }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { /* se cambió de juego o se recarga */ }
         catch (Exception ex)
         {
             // Se llama sin await (fire-and-forget): cualquier fallo se registra aquí y no queda sin observar.
+            // Una cancelación que no pidió la ficha (conexión cortada a mitad) también es un fallo: sin esto, la
+            // sección se quedaría en «Consultando…» para siempre.
             Infrastructure.Log.Warn($"Ficha de {Card.Name}: {ex.Message}");
+            MarkInterrupted();
         }
+    }
+
+    /// <summary>Lo que se quedó a medias pasa a «no se pudo» y se reintentará (al reabrir la ficha o al recargar).</summary>
+    private void MarkInterrupted()
+    {
+        const string retry = " Pulsa recargar para reintentar.";
+        if (AchievementsText.StartsWith("Consultando", StringComparison.Ordinal))
+        {
+            AchievementsText = "No se pudieron consultar los logros (¿sin conexión?)." + retry;
+            _achievementsLoaded = false;
+        }
+        if (MarkExtrasInterrupted(retry)) { /* los extras ya quedaron marcados para reintentar */ }
     }
 
     private async Task LoadImagesAsync(CancellationToken ct)
@@ -349,6 +364,30 @@ public sealed partial class GameDetailViewModel : ObservableObject
             IsLoadingAchievements = false;
         }
     }
+
+    /// <summary>
+    /// Recarga forzada: cancela lo que esté pendiente (peticiones colgadas), vuelve a poner logros, amigos, cromos
+    /// y comunidad en «cargando» y los consulta de nuevo.
+    /// </summary>
+    public void BeginNetworkReload()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+        _cts = new CancellationTokenSource();
+        _achievementsLoaded = false;
+        HasAchievementProgress = false;
+        AchievementsPercent = 0;
+        TopAchievements.Clear();
+        if (ShowAchievements)
+        {
+            IsLoadingAchievements = true;
+            AchievementsText = "Consultando tus logros…";
+        }
+        ResetExtras();
+    }
+
+    /// <summary>Segunda parte de la recarga, con las conexiones ya rehechas: vuelve a consultarlo todo.</summary>
+    public Task ReloadNetworkDataAsync() => LoadAsync();
 
     /// <summary>Suelta las imágenes grandes (ventana en la bandeja). <see cref="LoadAsync"/> las recupera.</summary>
     public void ReleaseImages()

@@ -112,6 +112,12 @@
                     <Button DockPanel.Dock="Right" x:Name="OptionsButton" Style="{StaticResource IconButton}" Content="&#xE713;"
                             VerticalAlignment="Center" HorizontalAlignment="Right" ToolTip="Más opciones"
                             DataContext="{Binding Card}" ContextMenu="{StaticResource CardMenu}" Click="OnOptionsClick" />
+                    <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" VerticalAlignment="Center" HorizontalAlignment="Right"
+                            Margin="0,0,6,0" DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                            Command="{Binding ReloadMetadataCommand}"
+                            ToolTip="Recargar la información de Steam y Epic Games (logros, cromos, tiempo jugado, conexión) sin reiniciar Purgine">
+                        <TextBlock Style="{StaticResource ReloadSpinIcon}" />
+                    </Button>
                 </DockPanel>
             </Border>
 

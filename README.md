@@ -236,6 +236,13 @@ marcan y no se pueden elegir.
   volcado, sin doble conteo.
 - **Organización**: etiquetas, filtros «Todos / Instalados», orden A-Z o por tiempo, cuadrícula o lista,
   tamaño de portadas.
+- **Filtro por launcher**: desplegable «Launcher» con una casilla por plataforma (Steam, Epic Games, Local),
+  generada a partir del registro de plataformas: un proveedor nuevo (GOG, Ubisoft, EA…) aparece solo. Se
+  combina con los tipos, «Listos», etiquetas, búsqueda y orden, y se recuerda entre sesiones.
+- **Recargar información de red** (icono ⟳ de la barra de la biblioteca y de la ficha): si tras una partida
+  los logros, cromos o la conexión se quedan «cargando» o «sin conexión», cancela lo colgado, vacía las
+  cachés de respuestas de Steam y Epic, reconecta las dos cuentas y vuelve a consultar propiedad,
+  actualizaciones, tiempo jugado, logros, cromos, amigos y comunidad sin reiniciar Purgine.
 - **Ejecutables propios** (Godot, emuladores…): con portada y tiempo jugado.
 - **Reposo**: si Purgine se queda en segundo plano 45 s, compacta su memoria (GC + recorte del working set);
   igual al minimizar y al ocultarlo en la bandeja.

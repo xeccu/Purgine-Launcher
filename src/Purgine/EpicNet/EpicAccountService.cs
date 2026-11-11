@@ -261,6 +261,18 @@ public sealed class EpicAccountService : IDisposable
 
     private readonly Dictionary<string, EpicCatalogInfo?> _catalog = new();
 
+    /// <summary>
+    /// Recarga forzada: descarta el token de acceso (se pide uno nuevo con el refresh token), el catálogo en
+    /// memoria y el servidor GraphQL recordado.
+    /// </summary>
+    public void ResetNetworkState()
+    {
+        _accessToken = null;
+        _accessExpiresUtc = DateTimeOffset.MinValue;
+        lock (_catalog) _catalog.Clear();
+        _workingGraphQlUrl = null;
+    }
+
     /// <summary>Título, arte y si exige token de propiedad, del catálogo de Epic (se recuerda en memoria).</summary>
     public async Task<EpicCatalogInfo?> GetCatalogInfoAsync(string ns, string itemId, CancellationToken ct)
     {

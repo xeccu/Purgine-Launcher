@@ -378,6 +378,8 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="6" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="6" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
                         <ToggleButton x:Name="TypesToggle" Grid.Row="0" Style="{StaticResource DropdownToggle}" ToolTip="Tipos de contenido que se muestran">
@@ -405,7 +407,36 @@
                             </Border>
                         </Popup>
 
-                        <ToggleButton x:Name="SortToggle" Grid.Row="2" Style="{StaticResource DropdownToggle}" ToolTip="Orden de la biblioteca">
+                        <!-- Launchers: una casilla por plataforma (se generan desde el registro de plataformas) -->
+                        <ToggleButton x:Name="PlatformsToggle" Grid.Row="2" Style="{StaticResource DropdownToggle}" ToolTip="Launchers que se muestran">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Left" Text="&#xE7FC;" FontFamily="{StaticResource IconFont}" FontSize="11"
+                                           VerticalAlignment="Center" Margin="0,0,7,0" Foreground="{StaticResource MutedBrush}" />
+                                <TextBlock DockPanel.Dock="Right" Text="&#xE70D;" FontFamily="{StaticResource IconFont}" FontSize="9"
+                                           VerticalAlignment="Center" Margin="6,0,0,0" Foreground="{StaticResource MutedBrush}" />
+                                <TextBlock TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                                    <Run Text="Launcher:" Foreground="{StaticResource MutedBrush}" />
+                                    <Run Text="{Binding PlatformFilterSummary, Mode=OneWay}" />
+                                </TextBlock>
+                            </DockPanel>
+                        </ToggleButton>
+                        <Popup PlacementTarget="{Binding ElementName=PlatformsToggle}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
+                               IsOpen="{Binding IsChecked, ElementName=PlatformsToggle, Mode=TwoWay}">
+                            <Border Style="{StaticResource DropdownPanel}">
+                                <StackPanel>
+                                    <TextBlock Text="LAUNCHER" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,8" />
+                                    <ItemsControl ItemsSource="{Binding PlatformFilters}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <CheckBox Content="{Binding Label}" IsChecked="{Binding IsShown, Mode=TwoWay}" Margin="0,0,0,6" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+
+                        <ToggleButton x:Name="SortToggle" Grid.Row="4" Style="{StaticResource DropdownToggle}" ToolTip="Orden de la biblioteca">
                             <DockPanel>
                                 <TextBlock DockPanel.Dock="Left" Text="&#xE8CB;" FontFamily="{StaticResource IconFont}" FontSize="11"
                                            VerticalAlignment="Center" Margin="0,0,7,0" Foreground="{StaticResource MutedBrush}" />
@@ -504,6 +535,10 @@
                         </StackPanel>
                     </Border>
 
+                    <Button Style="{StaticResource IconButton}" Command="{Binding ReloadMetadataCommand}" Margin="0,0,4,0"
+                            ToolTip="Recargar la información de Steam y Epic Games (logros, cromos, tiempo jugado, conexión) sin reiniciar Purgine">
+                        <TextBlock Style="{StaticResource ReloadSpinIcon}" />
+                    </Button>
                     <Button Style="{StaticResource IconButton}" Content="&#xE72C;" Command="{Binding RefreshCommand}"
                             Margin="0,0,8,0" ToolTip="Volver a escanear las bibliotecas" />
                     <Button Style="{StaticResource PrimaryButton}" Command="{Binding AddLocalGameCommand}"

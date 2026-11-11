@@ -18,6 +18,10 @@ public static class PlatformRegistry
         [GamePlatform.Local] = new(GamePlatform.Local, "Local", "LOCAL", Frozen("#CC0E1014")),
     };
 
+    /// <summary>Todas las plataformas de <see cref="GamePlatform"/>, con los ejecutables locales al final.</summary>
+    public static IReadOnlyList<PlatformInfo> All { get; } =
+        Enum.GetValues<GamePlatform>().Select(Get).OrderBy(p => p.Platform == GamePlatform.Local).ToList();
+
     public static PlatformInfo Get(GamePlatform platform) =>
         Platforms.TryGetValue(platform, out var info) ? info : new(platform, platform.ToString(), platform.ToString().ToUpperInvariant(), Frozen("#CC0E1014"));
 

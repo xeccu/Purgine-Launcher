@@ -319,6 +319,38 @@ public sealed partial class GameDetailViewModel
         finally { IsLoadingCommunity = false; }
     }
 
+    /// <summary>Amigos, cromos y comunidad que se quedaron cargando pasan a «no se pudo». True si había alguno.</summary>
+    private bool MarkExtrasInterrupted(string retry)
+    {
+        var any = false;
+        if (FriendsText.StartsWith("Consultando", StringComparison.Ordinal)) { FriendsText = "No se pudo consultar (¿sin conexión?)." + retry; any = true; }
+        if (CardsText.StartsWith("Consultando", StringComparison.Ordinal)) { CardsText = "No se pudieron consultar los cromos (¿sin conexión?)." + retry; any = true; }
+        if (CommunityText.StartsWith("Cargando", StringComparison.Ordinal)) { CommunityText = "No se pudo cargar el contenido de la comunidad." + retry; any = true; }
+        if (any) _extrasLoaded = false;
+        return any;
+    }
+
+    /// <summary>Vacía lo que viene de la red para volver a consultarlo (las notas y capturas locales se quedan).</summary>
+    private void ResetExtras()
+    {
+        _extrasLoaded = false;
+        Friends.Clear();
+        Cards.Clear();
+        Screenshots.Clear();
+        CommunityItems.Clear();
+        if (!Card.IsSteam) return;
+        if (_session.HasSavedSession)
+        {
+            IsLoadingFriends = true;
+            FriendsText = "Consultando a tus amigos…";
+            IsLoadingCards = true;
+            CardsText = "Consultando cromos…";
+            CardsPercent = 0;
+        }
+        IsLoadingCommunity = true;
+        CommunityText = "Cargando guías y novedades…";
+    }
+
     private void CloseExtras()
     {
         _notes.Flush();

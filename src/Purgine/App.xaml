@@ -112,6 +112,32 @@
             <Setter Property="Padding" Value="9,7" />
         </Style>
 
+        <!-- Icono de «Recargar información de red»: gira mientras IsReloadingMetadata (de MainViewModel) es true -->
+        <Style x:Key="ReloadSpinIcon" TargetType="TextBlock">
+            <Setter Property="Text" Value="&#xE895;" />
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+            <Setter Property="RenderTransform">
+                <Setter.Value>
+                    <RotateTransform />
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsReloadingMetadata}" Value="True">
+                    <DataTrigger.EnterActions>
+                        <BeginStoryboard x:Name="ReloadSpin">
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                 From="0" To="360" Duration="0:0:0.9" RepeatBehavior="Forever" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.EnterActions>
+                    <DataTrigger.ExitActions>
+                        <StopStoryboard BeginStoryboardName="ReloadSpin" />
+                    </DataTrigger.ExitActions>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- Tarjeta de juego (el contenido lo pone el DataTemplate) -->
         <Style x:Key="GameCardButton" TargetType="Button">
             <Setter Property="Cursor" Value="Hand" />
