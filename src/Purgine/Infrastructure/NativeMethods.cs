@@ -79,8 +79,25 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
 
-    public const int SW_HIDE = 0;
     public const int SW_SHOWNORMAL = 1;
+    public const int SW_SHOW = 5;
+    public const int SW_RESTORE = 9;
+    public const uint FLASHW_ALL = 3;
+    public const uint FLASHW_TIMERNOFG = 12;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct FLASHWINFO
+    {
+        public uint cbSize;
+        public IntPtr hwnd;
+        public uint dwFlags;
+        public uint uCount;
+        public uint dwTimeout;
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool FlashWindowEx(ref FLASHWINFO info);
     public const uint GW_OWNER = 4;
     public const int GWL_EXSTYLE = -20;
     public const int WS_EX_TOOLWINDOW = 0x00000080;
@@ -109,16 +126,6 @@ internal static class NativeMethods
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern int GetClassName(IntPtr hwnd, StringBuilder className, int maxCount);
 
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool BringWindowToTop(IntPtr hwnd);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, [MarshalAs(UnmanagedType.Bool)] bool attach);
-
-    [DllImport("kernel32.dll")]
-    public static extern uint GetCurrentThreadId();
 
     /// <summary>DWMWA_SYSTEMBACKDROP_TYPE (Windows 11 22H2+): 1 = ninguno, 2 = Mica, 3 = acrílico.</summary>
     public const int DWMWA_SYSTEMBACKDROP_TYPE = 38;

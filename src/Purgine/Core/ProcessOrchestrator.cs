@@ -162,7 +162,7 @@ public sealed class ProcessOrchestrator
 
             Report(LaunchPhase.LaunchingGame, $"Lanzando {game.Name}…", game);
             // Diálogos previos al juego (contrato de licencia, opciones de inicio, requisitos, conflicto de la nube):
-            // se muestran flotando y al frente, con el cliente de Steam oculto.
+            // se traen al frente con el foco; el resto de Steam queda en la bandeja (sin tocar sus ventanas).
             SteamWindowGuard.WatchLaunch(TimeSpan.FromSeconds(Math.Max(120, _settings.GameStartTimeoutSeconds)));
             ProcessUtils.Start(steamExe, $"-- \"steam://run/{game.AppId}\"");
             Log.Info($"steam://run/{game.AppId} enviado ({game.Name}).");
@@ -516,7 +516,7 @@ public sealed class ProcessOrchestrator
         Report(LaunchPhase.StartingClient, "Iniciando Steam en modo ligero…", game);
         ProcessUtils.Start(steamExe, _settings.SteamClientArguments);
         Log.Info($"steam.exe {_settings.SteamClientArguments}");
-        SteamWindowGuard.Watch(TimeSpan.FromSeconds(90));
+        // Las ventanas de Steam no se ocultan: -silent ya lo deja en la bandeja de forma nativa.
 
         var ready = await ProcessUtils
             .WaitUntilAsync(SteamLocator.IsClientReady, TimeSpan.FromSeconds(90), ct)

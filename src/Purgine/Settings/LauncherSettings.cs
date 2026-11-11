@@ -64,11 +64,17 @@ public sealed class LauncherSettings
     public const int MaxCoverWidth = 240;
 
     /// <summary>Versión del esquema de ajustes (para migrar valores por defecto antiguos).</summary>
-    public const int CurrentVersion = 5;
+    public const int CurrentVersion = 6;
 
-    public const string DefaultSteamArguments = "-silent -nofriendsui -nochatui -minimized -vgui -fulldesktopres 0";
+    /// <summary>
+    /// Solo los argumentos nativos: <c>-silent</c> deja la interfaz en la bandeja y <c>-nochatui</c> no abre el chat.
+    /// Sin <c>-minimized</c>: con la ventana principal minimizada, Windows escondía los diálogos que dependen de
+    /// ella (contrato de licencia, opciones de inicio) y no se podían aceptar.
+    /// </summary>
+    public const string DefaultSteamArguments = "-silent -nochatui";
     public const string LegacySteamArguments = "-silent -nofriendsui -nochatui";
     public const string V2SteamArguments = "-silent -nofriendsui -nochatui -minimized -vgui -nolightbox";
+    public const string V3SteamArguments = "-silent -nofriendsui -nochatui -minimized -vgui -fulldesktopres 0";
 
     /// <summary>0 = archivo anterior a las migraciones (o recién creado).</summary>
     public int SettingsVersion { get; set; }
@@ -173,7 +179,8 @@ public sealed class LauncherSettings
         // Solo se sustituyen valores por defecto antiguos; los argumentos personalizados se respetan.
         var args = SteamClientArguments?.Trim();
         if (string.Equals(args, LegacySteamArguments, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(args, V2SteamArguments, StringComparison.OrdinalIgnoreCase))
+            string.Equals(args, V2SteamArguments, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(args, V3SteamArguments, StringComparison.OrdinalIgnoreCase))
         {
             SteamClientArguments = DefaultSteamArguments;
         }

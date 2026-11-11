@@ -103,13 +103,15 @@ progreso, la velocidad y el tiempo restante son los **bytes reales recibidos de 
 
 La **única** función de `steam.exe`:
 
-1. Si Steam está cerrado, se abre en modo ligero (`-silent -nofriendsui -nochatui -minimized …`) y se oculta
-   su ventana principal si aparece.
-2. `steam://run/{appId}` (Steam valida la licencia y lanza el juego). Los **diálogos previos al juego**
-   (contrato de licencia / EULA, acuerdos, opciones de inicio DirectX / Vulkan / modo seguro, instalación de
-   requisitos, conflicto de Steam Cloud…) nunca se ocultan: si Steam los deja escondidos porque pertenecen a su
-   ventana principal minimizada, Purgine los muestra flotando y los trae al frente para aceptar sin abrir el
-   cliente; el resto de Steam sigue oculto. Mientras haya uno abierto, el plazo de arranque del juego se alarga.
+1. Si Steam está cerrado, se abre solo con sus argumentos nativos `-silent -nochatui`: la interfaz se queda en
+   la bandeja de forma nativa. Purgine **no oculta ni modifica ninguna ventana de Steam** (sin `SW_HIDE`, sin
+   cambiar estilos). Sin `-minimized`: con la ventana principal minimizada, Windows escondía los diálogos que
+   dependen de ella y no se podían aceptar.
+2. `steam://run/{appId}` (Steam valida la licencia y lanza el juego). Un monitor ligero detecta los **diálogos
+   previos al juego** (contrato de licencia / EULA, acuerdos, términos, opciones de inicio DirectX / Vulkan /
+   modo seguro, requisitos, conflicto de Steam Cloud…) y los trae al frente con el foco (`SW_SHOW` si Steam los
+   tenía sin mostrar + `SetForegroundWindow`; si Windows no deja cambiar el foco, parpadean en la barra de
+   tareas) para aceptar sin abrir el cliente. Mientras haya uno abierto, el plazo de arranque del juego se alarga.
 3. Vigilancia del proceso del juego (carpeta de instalación + registro de Steam), cronómetro de la sesión y,
    durante la partida, `steamwebhelper` en prioridad baja y recorte de la RAM de Steam.
 4. Al salir: cuenta atrás para que Steam suba las partidas a la nube, `steam.exe -shutdown` y cierre de
