@@ -55,12 +55,14 @@ public partial class StoreView : UserControl
             _vm.PropertyChanged -= OnVmPropertyChanged;
             _vm.NavigationRequested -= OnNavigationRequested;
             _vm.ReleaseRequested -= OnReleaseRequested;
+            _vm.RedeemRequested -= OnRedeemRequested;
         }
         _vm = e.NewValue as StoreViewModel;
         if (_vm is null) return;
         _vm.PropertyChanged += OnVmPropertyChanged;
         _vm.NavigationRequested += OnNavigationRequested;
         _vm.ReleaseRequested += OnReleaseRequested;
+        _vm.RedeemRequested += OnRedeemRequested;
         if (_vm.IsActive) _ = ActivateAsync();
     }
 
@@ -262,6 +264,7 @@ public partial class StoreView : UserControl
 
     private void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
+        _navigationDone?.TrySetResult();
         LoadingBar.Visibility = Visibility.Collapsed;
         UpdateNavigationState();
         if (!e.IsSuccess && e.WebErrorStatus != CoreWebView2WebErrorStatus.OperationCanceled)
@@ -320,6 +323,166 @@ public partial class StoreView : UserControl
     // =====================================================================================
     // Barra de navegación
     // =====================================================================================
+
+    // =====================================================================================
+    // Canjear clave
+    // =====================================================================================
+
+    private TaskCompletionSource? _navigationDone;
+
+    private void OnKeyBoxKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter && _vm?.RedeemCommand.CanExecute(null) == true) _vm.RedeemCommand.Execute(null);
+    }
+
+    private void OnOpenAgreement(object sender, RoutedEventArgs e) => OpenInBrowser(StoreViewModel.SteamSubscriberAgreementUrl);
+
+    private async void OnRedeemRequested(RedeemRequest request)
+    {
+        try { await RedeemAsync(request); }
+        catch (Exception ex)
+        {
+            Log.Warn($"Canjear clave: {ex.Message}");
+            _vm?.ReportRedeem($"No se pudo completar: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Rellena la página oficial de canje (y la envía si procede). La clave nunca sale del equipo salvo hacia la
+    /// propia página de Steam / Epic, con la sesión de la tienda.
+    /// </summary>
+    private async Task RedeemAsync(RedeemRequest request)
+    {
+        if (_web?.CoreWebView2 is null) await EnsureBrowserAsync();
+        if (_web?.CoreWebView2 is not { } core) { _vm?.ReportRedeem("El navegador no está disponible."); return; }
+
+        var target = request.Platform == RedeemPlatform.Epic ? StoreViewModel.EpicRedeemUrl : StoreViewModel.SteamRedeemUrl;
+        var host = new Uri(target).Host;
+        if (!core.Source.Contains(host, StringComparison.OrdinalIgnoreCase) || !core.Source.Contains("redeem", StringComparison.OrdinalIgnoreCase) &&
+            !core.Source.Contains("registerkey", StringComparison.OrdinalIgnoreCase))
+        {
+            _navigationDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            core.Navigate(target);
+            await Task.WhenAny(_navigationDone.Task, Task.Delay(TimeSpan.FromSeconds(20)));
+        }
+
+        var keyJson = System.Text.Json.JsonSerializer.Serialize(request.Key);
+        if (request.Platform == RedeemPlatform.Steam) await RedeemSteamAsync(core, keyJson, request.Submit);
+        else await RedeemEpicAsync(core, keyJson);
+    }
+
+    private static async Task<string?> RunJsonAsync(CoreWebView2 core, string script)
+    {
+        var raw = await core.ExecuteScriptAsync(script);
+        // ExecuteScriptAsync devuelve el valor como JSON: una cadena llega entre comillas.
+        return raw is null or "null" ? null : System.Text.Json.JsonSerializer.Deserialize<string>(raw);
+    }
+
+    private async Task RedeemSteamAsync(CoreWebView2 core, string keyJson, bool submit)
+    {
+        string? state = null;
+        for (var i = 0; i < 20; i++)
+        {
+            state = await RunJsonAsync(core, $$"""
+                (() => {
+                  if (/login/i.test(location.pathname)) return 'login';
+                  const input = document.getElementById('product_key');
+                  if (!input) return 'wait';
+                  input.focus(); input.value = {{keyJson}};
+                  input.dispatchEvent(new Event('input', { bubbles: true }));
+                  if ({{(submit ? "true" : "false")}}) {
+                    const ssa = document.getElementById('accept_ssa');
+                    if (ssa) { ssa.checked = true; ssa.dispatchEvent(new Event('change', { bubbles: true })); }
+                    if (typeof RegisterProductKey === 'function') RegisterProductKey();
+                    else document.getElementById('register_btn')?.click();
+                    return 'submitted';
+                  }
+                  return 'filled';
+                })()
+                """);
+            if (state != "wait") break;
+            await Task.Delay(500);
+        }
+        switch (state)
+        {
+            case "login":
+                _vm?.ReportRedeem("Inicia sesión en Steam en la página de abajo y vuelve a pulsar «Canjear clave».");
+                return;
+            case "filled":
+                _vm?.ReportRedeem("Clave rellenada en la página. Marca el Acuerdo de Suscriptor (aquí o abajo) para canjearla.");
+                return;
+            case not "submitted":
+                _vm?.ReportRedeem("La página de canje de Steam no respondió. Puedes terminar el canje abajo.");
+                return;
+        }
+
+        // Resultado: error de Steam (clave no válida, ya canjeada…) o recibo con los productos.
+        for (var i = 0; i < 30; i++)
+        {
+            await Task.Delay(700);
+            var result = await RunJsonAsync(core, """
+                (() => {
+                  const vis = el => el && el.offsetParent !== null && el.innerText.trim().length > 0;
+                  const err = document.getElementById('error_display');
+                  if (vis(err)) return 'error:' + err.innerText.trim();
+                  const receipt = document.getElementById('receipt_form');
+                  if (vis(receipt)) {
+                    const list = document.getElementById('registerkey_productlist');
+                    return 'ok:' + (list ? list.innerText.trim().replace(/\s+/g, ' ') : '');
+                  }
+                  return '';
+                })()
+                """);
+            if (string.IsNullOrEmpty(result)) continue;
+            if (result.StartsWith("ok:", StringComparison.Ordinal))
+            {
+                var products = result[3..];
+                _vm?.ReportRedeem(products.Length > 0 ? $"✔ Clave canjeada: {products}" : "✔ Clave canjeada en tu cuenta de Steam.", succeeded: true);
+            }
+            else _vm?.ReportRedeem($"Steam: {result[6..]}");
+            return;
+        }
+        _vm?.ReportRedeem("Enviada. Mira el resultado en la página de abajo.");
+    }
+
+    private async Task RedeemEpicAsync(CoreWebView2 core, string keyJson)
+    {
+        string? state = null;
+        for (var i = 0; i < 24; i++)
+        {
+            state = await RunJsonAsync(core, $$"""
+                (() => {
+                  if (/login|id\/login/i.test(location.href)) return 'login';
+                  const inputs = [...document.querySelectorAll('input')].filter(x => x.offsetParent !== null &&
+                    (x.type === 'text' || x.type === '' || /code|redeem/i.test(x.name + x.id + (x.getAttribute('aria-label') || ''))));
+                  const input = inputs[0];
+                  if (!input) return 'wait';
+                  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+                  input.focus(); setter.call(input, {{keyJson}});
+                  input.dispatchEvent(new Event('input', { bubbles: true }));
+                  input.dispatchEvent(new Event('change', { bubbles: true }));
+                  return 'filled';
+                })()
+                """);
+            if (state != "wait") break;
+            await Task.Delay(500);
+        }
+        if (state == "login") { _vm?.ReportRedeem("Inicia sesión en Epic Games en la página de abajo y vuelve a pulsar «Canjear clave»."); return; }
+        if (state != "filled") { _vm?.ReportRedeem("La página de canje de Epic no respondió. Puedes terminar el canje abajo."); return; }
+
+        await Task.Delay(600); // la página habilita el botón al validar el formato
+        var clicked = await RunJsonAsync(core, """
+            (() => {
+              const btn = [...document.querySelectorAll('button')].find(b => !b.disabled && b.offsetParent !== null &&
+                /^(canjear|redeem)$/i.test(b.innerText.trim()));
+              if (!btn) return 'nobutton';
+              btn.click(); return 'clicked';
+            })()
+            """);
+        _vm?.ReportRedeem(clicked == "clicked"
+            ? "Código enviado a Epic. Si la página pide confirmar el producto, termina el canje abajo."
+            : "Código rellenado. Pulsa «Canjear» en la página de abajo para terminar.");
+    }
 
     private void OnBack(object sender, RoutedEventArgs e) { if (_web?.CoreWebView2 is { CanGoBack: true } c) c.GoBack(); }
 

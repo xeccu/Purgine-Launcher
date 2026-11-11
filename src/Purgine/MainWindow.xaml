@@ -47,6 +47,13 @@
                             <TextBlock Text="Tienda" />
                         </StackPanel>
                     </RadioButton>
+                    <RadioButton Style="{StaticResource NavTab}" GroupName="Nav" IsChecked="{Binding IsRedeemView, Mode=TwoWay}"
+                                 ToolTip="Canjear una clave de producto de Steam o de Epic Games">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE8D7;" FontFamily="{StaticResource IconFont}" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <TextBlock Text="Canjear" />
+                        </StackPanel>
+                    </RadioButton>
                     <RadioButton Style="{StaticResource NavTab}" GroupName="Nav" IsChecked="{Binding IsDownloadsView, Mode=TwoWay}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE896;" FontFamily="{StaticResource IconFont}" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0" />
@@ -89,7 +96,7 @@
         <!-- ===== Contenido ===== -->
         <Grid Grid.Row="2">
             <views:LibraryView Visibility="{Binding IsLibraryView, Converter={StaticResource BoolToVis}}" infra:Fx.FadeIn="True" />
-            <Grid Visibility="{Binding IsStoreView, Converter={StaticResource BoolToVis}}" infra:Fx.FadeIn="True">
+            <Grid Visibility="{Binding IsStoreBrowserVisible, Converter={StaticResource BoolToVis}}" infra:Fx.FadeIn="True">
                 <views:StoreView DataContext="{Binding Store}" />
             </Grid>
             <Grid Visibility="{Binding IsDownloadsView, Converter={StaticResource BoolToVis}}" Background="{DynamicResource ContentBrush}" infra:Fx.FadeIn="True">

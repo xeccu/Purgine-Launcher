@@ -183,6 +183,12 @@ Organizada como la biblioteca de un cliente de escritorio:
   memoria marcada como prescindible: de ~450 MB a ~35 MB en las pruebas) y, tras **60 s** fuera de la pestaña
   o al ocultar la ventana en la bandeja, se **cierra del todo** (sus procesos `msedgewebview2.exe`
   terminan). Al volver se reabre en la última página.
+- **Canjear clave** (pestaña «Canjear»): panel encima de la página oficial de canje
+  (`store.steampowered.com/account/registerkey` o `store.epicgames.com/redeem`), en el mismo navegador y con la
+  misma sesión que la tienda. Selector Steam / Epic Games, campo grande para la clave (mayúsculas y guiones de 5 en
+  5 si se pega sin ellos) y «Canjear clave»: Purgine la escribe en la página y la envía, y muestra el resultado
+  (productos activados o el error de Steam). En Steam hay que marcar tú el **Acuerdo de Suscriptor de Steam**;
+  sin marcarlo, la clave solo se rellena. En Epic, si la página pide confirmar el producto, se termina en ella.
 
 ### 7. Calidad gráfica (`Infrastructure/GraphicsTheme.cs`, `Infrastructure/Fx.cs`)
 

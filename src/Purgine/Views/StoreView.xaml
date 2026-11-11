@@ -4,6 +4,7 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -14,7 +15,8 @@
                 <DockPanel LastChildFill="True">
                     <!-- Selector de tienda: el mismo navegador para las dos (no se duplican procesos) -->
                     <Border DockPanel.Dock="Left" CornerRadius="6" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                            Padding="2" Margin="0,0,10,0" VerticalAlignment="Center">
+                            Padding="2" Margin="0,0,10,0" VerticalAlignment="Center"
+                            Visibility="{Binding IsRedeemMode, Converter={StaticResource InverseBoolToVis}}">
                         <StackPanel Orientation="Horizontal">
                             <RadioButton Style="{StaticResource IconToggle}" GroupName="StoreKind" FontFamily="Segoe UI Variable Text, Segoe UI"
                                          FontSize="12" Content="Steam" IsChecked="{Binding IsSteamStore, Mode=TwoWay}" />
@@ -49,8 +51,89 @@
             </Grid>
         </Border>
 
+        <!-- ===== Canjear clave (pestaña «Canjear»): panel encima de la página oficial de canje ===== -->
+        <Border Grid.Row="1" Background="{DynamicResource ChromeBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1"
+                Padding="20,14" Visibility="{Binding IsRedeemMode, Converter={StaticResource BoolToVis}}">
+            <StackPanel>
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#xE8D7;" FontFamily="{StaticResource IconFont}" FontSize="20"
+                               VerticalAlignment="Center" Margin="0,0,12,0" />
+                    <Border DockPanel.Dock="Right" CornerRadius="6" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="2"
+                            VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton Style="{StaticResource IconToggle}" GroupName="RedeemKind" FontFamily="Segoe UI Variable Text, Segoe UI"
+                                         FontSize="12" Content="Steam" IsChecked="{Binding IsSteamRedeem, Mode=TwoWay}" />
+                            <RadioButton Style="{StaticResource IconToggle}" GroupName="RedeemKind" FontFamily="Segoe UI Variable Text, Segoe UI"
+                                         FontSize="12" Content="Epic Games" IsChecked="{Binding IsEpicRedeem, Mode=TwoWay}" />
+                        </StackPanel>
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Canjear clave de producto" FontSize="18" FontWeight="SemiBold" />
+                        <TextBlock Text="Se canjea en la página oficial, abajo, con tu sesión de la tienda. Purgine rellena la clave por ti."
+                                   Style="{StaticResource MutedText}" FontSize="12" />
+                    </StackPanel>
+                </DockPanel>
+
+                <DockPanel Margin="0,12,0,0">
+                    <Button DockPanel.Dock="Right" Style="{StaticResource PrimaryButton}" Command="{Binding RedeemCommand}" Padding="18,10"
+                            Margin="10,0,0,0" VerticalAlignment="Stretch">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE8FB;" FontFamily="{StaticResource IconFont}" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <TextBlock Text="Canjear clave" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </Button>
+                    <Border CornerRadius="6" Background="{StaticResource BgBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                            Padding="12,6">
+                        <Grid>
+                            <TextBox x:Name="KeyBox" Text="{Binding RedeemKey, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas, Cascadia Mono"
+                                     FontSize="20" CharacterCasing="Upper" Background="Transparent" BorderThickness="0"
+                                     Foreground="{StaticResource TextBrush}" CaretBrush="{StaticResource TextBrush}" VerticalContentAlignment="Center"
+                                     KeyDown="OnKeyBoxKeyDown" />
+                            <TextBlock Text="{Binding KeyHint}" FontSize="15" Foreground="{StaticResource MutedBrush}" IsHitTestVisible="False"
+                                       VerticalAlignment="Center" Margin="3,0,0,0">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=KeyBox}" Value="">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                    </Border>
+                </DockPanel>
+
+                <DockPanel Margin="0,10,0,0">
+                    <CheckBox DockPanel.Dock="Left" IsChecked="{Binding AcceptSteamAgreement}" VerticalAlignment="Center"
+                              Visibility="{Binding IsSteamRedeem, Converter={StaticResource BoolToVis}}"
+                              ToolTip="Steam exige aceptarlo para canjear. Sin marcarlo, Purgine solo rellena la clave en la página.">
+                        <TextBlock>
+                            <Run Text="Acepto el" />
+                            <Hyperlink Click="OnOpenAgreement">Acuerdo de Suscriptor de Steam</Hyperlink>
+                        </TextBlock>
+                    </CheckBox>
+                    <TextBlock Text="{Binding RedeemStatus}" TextWrapping="Wrap" Margin="16,0,0,0" VerticalAlignment="Center"
+                               Visibility="{Binding HasRedeemStatus, Converter={StaticResource BoolToVis}}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding RedeemSucceeded}" Value="True">
+                                        <Setter Property="Foreground" Value="#5BC47E" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </DockPanel>
+            </StackPanel>
+        </Border>
+
         <!-- ===== Navegador (el WebView2 se crea al abrir la pestaña y se libera al salir) ===== -->
-        <Grid Grid.Row="1" x:Name="Host" Background="{StaticResource BgBrush}">
+        <Grid Grid.Row="2" x:Name="Host" Background="{StaticResource BgBrush}">
             <StackPanel x:Name="StartingPanel" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <ProgressBar Style="{StaticResource SlimProgress}" Width="180" IsIndeterminate="True" />
                 <TextBlock Text="Abriendo la tienda de Steam…" Margin="0,12,0,0" HorizontalAlignment="Center"

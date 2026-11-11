@@ -20,6 +20,8 @@ public enum AppView
     Store,
     Downloads,
     Settings,
+    /// <summary>Canjear una clave de producto (Steam / Epic) en el navegador de la tienda.</summary>
+    Redeem,
 }
 
 /// <summary>Chip de filtro por etiqueta («Todas» tiene <see cref="Tag"/> = null).</summary>
@@ -216,7 +218,10 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             OnPropertyChanged(nameof(IsStoreView));
             OnPropertyChanged(nameof(IsDownloadsView));
             OnPropertyChanged(nameof(IsSettingsView));
-            Store.IsActive = value == AppView.Store;
+            OnPropertyChanged(nameof(IsRedeemView));
+            OnPropertyChanged(nameof(IsStoreBrowserVisible));
+            Store.IsRedeemMode = value == AppView.Redeem;
+            Store.IsActive = value is AppView.Store or AppView.Redeem;
         }
     }
 
@@ -224,6 +229,10 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     public bool IsStoreView { get => _currentView == AppView.Store; set { if (value) CurrentView = AppView.Store; } }
     public bool IsSettingsView { get => _currentView == AppView.Settings; set { if (value) CurrentView = AppView.Settings; } }
     public bool IsDownloadsView { get => _currentView == AppView.Downloads; set { if (value) CurrentView = AppView.Downloads; } }
+    public bool IsRedeemView { get => _currentView == AppView.Redeem; set { if (value) CurrentView = AppView.Redeem; } }
+
+    /// <summary>La tienda y «Canjear» comparten el mismo navegador (y la misma sesión).</summary>
+    public bool IsStoreBrowserVisible => _currentView is AppView.Store or AppView.Redeem;
 
     // =====================================================================================
     // Biblioteca

@@ -1,4 +1,12 @@
+using System.Windows.Input;
+
 namespace Purgine.ViewModels;
+
+/// <summary>Plataforma en la que se canjea una clave.</summary>
+public enum RedeemPlatform { Steam, Epic }
+
+/// <summary>Petición de canje para la vista (rellenar la página oficial y, si procede, enviarla).</summary>
+public sealed record RedeemRequest(RedeemPlatform Platform, string Key, bool Submit);
 
 /// <summary>
 /// Pestaña Tienda: la web oficial de Steam dentro de un WebView2 (lo gestiona <c>StoreView</c>).
@@ -49,7 +57,141 @@ public sealed class StoreViewModel : ObservableObject
     private bool _isActive;
     private string? _pendingUrl;
 
-    public StoreViewModel(IStoreActions actions) => _actions = actions;
+    public StoreViewModel(IStoreActions actions)
+    {
+        _actions = actions;
+        RedeemCommand = new RelayCommand(_ => Redeem(), _ => !IsRedeeming && NormalizedKey.Length >= 5);
+    }
+
+    // =====================================================================================
+    // Canjear clave (Steam / Epic Games) en el mismo navegador, con la sesión de la tienda
+    // =====================================================================================
+
+    public const string SteamRedeemUrl = "https://store.steampowered.com/account/registerkey?l=spanish";
+    public const string EpicRedeemUrl = "https://store.epicgames.com/es-ES/redeem";
+    public const string SteamSubscriberAgreementUrl = "https://store.steampowered.com/subscriber_agreement/?l=spanish";
+
+    private bool _isRedeemMode;
+    private RedeemPlatform _redeemPlatform = RedeemPlatform.Steam;
+    private string _redeemKey = string.Empty;
+    private bool _acceptSteamAgreement;
+    private bool _isRedeeming;
+    private string _redeemStatus = string.Empty;
+    private bool _redeemSucceeded;
+
+    /// <summary>Pestaña «Canjear»: panel de canje encima del navegador, que muestra la página oficial de canje.</summary>
+    public bool IsRedeemMode
+    {
+        get => _isRedeemMode;
+        set
+        {
+            if (!SetProperty(ref _isRedeemMode, value)) return;
+            RedeemStatus = string.Empty;
+            Navigate(value ? RedeemUrl : CurrentHomeUrl);
+        }
+    }
+
+    public RedeemPlatform RedeemPlatform
+    {
+        get => _redeemPlatform;
+        set
+        {
+            if (!SetProperty(ref _redeemPlatform, value)) return;
+            OnPropertyChanged(nameof(IsSteamRedeem));
+            OnPropertyChanged(nameof(IsEpicRedeem));
+            OnPropertyChanged(nameof(KeyHint));
+            RedeemStatus = string.Empty;
+            if (_isRedeemMode) Navigate(RedeemUrl);
+        }
+    }
+
+    public bool IsSteamRedeem { get => _redeemPlatform == RedeemPlatform.Steam; set { if (value) RedeemPlatform = RedeemPlatform.Steam; } }
+    public bool IsEpicRedeem { get => _redeemPlatform == RedeemPlatform.Epic; set { if (value) RedeemPlatform = RedeemPlatform.Epic; } }
+
+    public string RedeemUrl => _redeemPlatform == RedeemPlatform.Epic ? EpicRedeemUrl : SteamRedeemUrl;
+
+    public string KeyHint => _redeemPlatform == RedeemPlatform.Epic
+        ? "Código de Epic Games (p. ej. XXXXX-XXXXX-XXXXX-XXXXX)"
+        : "Clave de producto de Steam (p. ej. AAAAA-BBBBB-CCCCC)";
+
+    /// <summary>Clave escrita o pegada (se guarda en mayúsculas; los guiones se completan al canjear).</summary>
+    public string RedeemKey
+    {
+        get => _redeemKey;
+        set
+        {
+            if (!SetProperty(ref _redeemKey, (value ?? string.Empty).ToUpperInvariant())) return;
+            OnPropertyChanged(nameof(NormalizedKey));
+            CommandManager.InvalidateRequerySuggested();
+        }
+    }
+
+    /// <summary>
+    /// Clave limpia: sin espacios, en mayúsculas y, si se pegó sin guiones (15, 20 o 25 caracteres), agrupada de 5 en
+    /// 5 como la escriben Steam y Epic.
+    /// </summary>
+    public string NormalizedKey
+    {
+        get
+        {
+            var raw = new string(_redeemKey.Where(c => !char.IsWhiteSpace(c)).ToArray()).ToUpperInvariant();
+            var alnum = new string(raw.Where(char.IsAsciiLetterOrDigit).ToArray());
+            if (!raw.Contains('-') && alnum.Length is 15 or 20 or 25)
+                return string.Join('-', Enumerable.Range(0, alnum.Length / 5).Select(i => alnum.Substring(i * 5, 5)));
+            return raw;
+        }
+    }
+
+    /// <summary>Casilla del Acuerdo de Suscriptor de Steam: la marca el usuario (sin ella la clave solo se rellena).</summary>
+    public bool AcceptSteamAgreement
+    {
+        get => _acceptSteamAgreement;
+        set => SetProperty(ref _acceptSteamAgreement, value);
+    }
+
+    public bool IsRedeeming
+    {
+        get => _isRedeeming;
+        set { if (SetProperty(ref _isRedeeming, value)) CommandManager.InvalidateRequerySuggested(); }
+    }
+
+    public string RedeemStatus
+    {
+        get => _redeemStatus;
+        private set { if (SetProperty(ref _redeemStatus, value)) OnPropertyChanged(nameof(HasRedeemStatus)); }
+    }
+
+    public bool HasRedeemStatus => _redeemStatus.Length > 0;
+
+    public bool RedeemSucceeded
+    {
+        get => _redeemSucceeded;
+        private set => SetProperty(ref _redeemSucceeded, value);
+    }
+
+    public ICommand RedeemCommand { get; }
+
+    /// <summary>La vista rellena (y envía, si procede) la página oficial de canje.</summary>
+    public event Action<RedeemRequest>? RedeemRequested;
+
+    private void Redeem()
+    {
+        var submit = _redeemPlatform == RedeemPlatform.Epic || _acceptSteamAgreement;
+        RedeemKey = NormalizedKey;
+        RedeemSucceeded = false;
+        RedeemStatus = submit ? "Canjeando…" : "Rellenando la clave en la página…";
+        IsRedeeming = true;
+        RedeemRequested?.Invoke(new RedeemRequest(_redeemPlatform, NormalizedKey, submit));
+    }
+
+    /// <summary>Resultado que comunica la vista.</summary>
+    public void ReportRedeem(string status, bool succeeded = false)
+    {
+        IsRedeeming = false;
+        RedeemSucceeded = succeeded;
+        RedeemStatus = status;
+        if (succeeded) RedeemKey = string.Empty;
+    }
 
     /// <summary>La pestaña está a la vista. Al salir, la vista suspende el navegador y lo libera al rato.</summary>
     public bool IsActive
