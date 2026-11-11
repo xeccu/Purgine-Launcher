@@ -230,17 +230,30 @@ marcan y no se pueden elegir.
 - **Logros**: la sección LOGROS de la ficha muestra tu progreso en Epic y los desbloqueados más raros, con la
   misma plantilla que Steam (definiciones y estado del jugador desde la cuenta vinculada).
 - **Partidas en la nube sin su launcher**: los juegos que usan la nube de Epic Games Launcher (atributo
-  `CloudSaveFolder` del catálogo) se sincronizan con esa misma nube. Antes de jugar, si la nube tiene una partida
-  más nueva (más de 60 s), se copia lo local y se descarga encima. Al cerrar el juego, en segundo plano, si lo local
-  es más nuevo se empaqueta en el formato de Epic (manifiesto y fragmentos) y se sube como partida nueva; las
-  anteriores siguen en la nube. Aviso discreto al subir y una marca al terminar.
+  `CloudSaveFolder` del catálogo) se sincronizan con esa misma nube, con la lógica de Steam Cloud. Tras cada
+  sincronización se anota qué partida de la nube quedó y la huella (tamaño + SHA-1) de los archivos locales
+  (`cloud-sync.json`). Al jugar y al cerrar: si solo cambió la nube, se descarga (con copia previa de lo local);
+  si solo cambió lo local, se sube en segundo plano empaquetada en el formato de Epic (manifiesto y fragmentos;
+  las partidas anteriores siguen en la nube); si **cambiaron las dos**, aparece el diálogo de conflicto. Aviso
+  discreto al subir y una marca al terminar.
+- **Conflicto de partidas** (como el de Steam): «Partida de este equipo» frente a «Partida en la nube», con día y
+  hora de cada una, cuál es la más reciente y desde qué equipo se subió; eliges **Usar la de la nube** o **Usar la
+  de este equipo** (o «no jugar ahora»). La que no eliges no se pierde: la local queda en las copias de Purgine y
+  la de la nube en su historial. También salta al cerrar si, mientras jugabas, otro equipo subió una partida.
+- **Steam Cloud**: Purgine lee el registro del cliente (`userdata\<cuenta>\<appid>\remotecache.vdf`: archivos,
+  SHA-1 y número de cambio de la nube sincronizados) y consulta la nube con `Cloud.GetAppFileChangelist`, como
+  hace Steam, para saber si cambió lo local, la nube o las dos. La ficha lo muestra («Steam Cloud al día»,
+  «Cambios sin subir», «Nube más reciente», «Conflicto»). Antes de jugar, si va a bajar algo o hay conflicto, hace
+  una copia de lo local; ante un conflicto enseña el mismo diálogo con los detalles y la elección se hace en la
+  ventana de Steam, que es quien sincroniza esos juegos y mantiene su registro coherente (Purgine no escribe en
+  la nube de Steam).
 - **Carpeta de partidas**: se obtiene de la plantilla de Epic (`{AppData}`, `{UserDir}`, `{UserSavedGames}`,
   `{InstallDir}`, `{EpicID}`…), se elige a mano en la ficha o se deduce buscando el nombre del juego en las rutas
   habituales (Saved Games, Documentos, AppData, LocalLow). Cada descarga y cada cierre guardan una copia
   comprimida en `save-backups` (las 10 últimas por juego).
-- **Indicador NUBE** en la ficha: «Nube sincronizada», «Sincronizando…», «Guardado local», «Lo gestiona el
-  juego» (los que guardan en sus propios servidores o con EOS) o «Sin conexión». Con un clic: elegir, abrir o
-  restablecer la carpeta de partidas y abrir las copias de seguridad.
+- **Indicador NUBE** en la ficha (Epic y Steam): «Nube sincronizada», «Sincronizando…», «Guardado local»,
+  «Nube más reciente», «Conflicto», «Lo gestiona el juego» (los que guardan en sus propios servidores o con EOS)
+  o «Sin conexión». Con un clic: elegir, abrir o restablecer la carpeta de partidas y abrir las copias.
 
 ### Otras funciones
 
@@ -289,6 +302,7 @@ Todo en `%LocalAppData%\Purgine\` (botón «Abrir carpeta de datos» en Ajustes)
 | `epic-session.bin` | Refresh token de Epic Games cifrado con DPAPI (nunca la contraseña) |
 | `epic-installs.json` · `epic-download-queue.json` · `epic-builds.json` | Juegos de Epic instalados por Purgine, su cola de descargas y la caché de builds/tamaños |
 | `save-paths.json` · `save-backups\` | Carpetas de partidas elegidas a mano y copias comprimidas de las partidas |
+| `cloud-sync.json` | Última sincronización con la nube de Epic de cada juego (para detectar conflictos como Steam) |
 | `game-notes.json` | Notas y reseñas personales por juego (solo locales) |
 | `art\` | Iconos, imágenes panorámicas, logos e iconos de logros que no estaban en la caché de Steam |
 | `webview\` | Perfil del navegador de la Tienda (cookies y sesión web de Steam, caché) |

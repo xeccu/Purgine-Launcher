@@ -87,6 +87,7 @@ public partial class MainWindow : Window, IDialogService
     {
         _tray = new TrayIcon("Purgine");
         _tray.RestoreRequested += (_, _) => RestoreFromTray();
+        _vm.AttentionRequested += (_, _) => RestoreFromTray();
         _tray.RefreshRequested += async (_, _) => await _vm.RefreshAsync();
         _tray.ExitRequested += (_, _) => ExitApplication();
     }

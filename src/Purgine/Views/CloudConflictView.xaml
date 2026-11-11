@@ -1,0 +1,103 @@
+<UserControl x:Class="Purgine.Views.CloudConflictView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:infra="clr-namespace:Purgine.Infrastructure">
+    <UserControl.Resources>
+        <!-- Tarjeta de una partida (local / nube); la más reciente lleva la etiqueta «MÁS RECIENTE» -->
+        <Style x:Key="SaveCard" TargetType="Border">
+            <Setter Property="Background" Value="#343A48" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PlayButtonCornerRadius}" />
+            <Setter Property="Padding" Value="16,14" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Background="#B3050608">
+        <Border Width="620" HorizontalAlignment="Center" VerticalAlignment="Center" infra:Fx.FadeIn="True"
+                Background="#FF1E222C" CornerRadius="{DynamicResource PanelCornerRadius}"
+                BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="{DynamicResource PanelBorderThickness}"
+                Effect="{DynamicResource ActionBarEffect}">
+            <Grid>
+                <Border Height="2" VerticalAlignment="Top" Background="#E0A040" CornerRadius="{DynamicResource PanelCornerRadius}" />
+                <StackPanel Margin="24,18,24,22">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE711;" FontSize="11" Padding="7"
+                                BorderBrush="Transparent" VerticalAlignment="Top" Command="{Binding CancelCommand}" ToolTip="No jugar ahora" />
+                        <TextBlock Text="&#xE753;" FontFamily="{StaticResource IconFont}" FontSize="22" Foreground="#E0A040"
+                                   VerticalAlignment="Center" Margin="0,0,12,0" />
+                        <TextBlock Text="{Binding Title}" FontSize="22" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </DockPanel>
+
+                    <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,14,0,12" />
+
+                    <DockPanel Margin="0,0,0,12">
+                        <Border DockPanel.Dock="Left" Width="120" Height="56" CornerRadius="3" Background="{StaticResource CardBrush}" ClipToBounds="True">
+                            <Image Source="{Binding Banner}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality" />
+                        </Border>
+                        <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" Margin="16,0,0,0"
+                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    </DockPanel>
+
+                    <TextBlock Text="{Binding Explanation}" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,14" />
+
+                    <!-- Partida local -->
+                    <Border Style="{StaticResource SaveCard}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Left" Text="&#xE7F8;" FontFamily="{StaticResource IconFont}" FontSize="22"
+                                       VerticalAlignment="Center" Margin="0,0,14,0" />
+                            <Border DockPanel.Dock="Right" Background="#2E7D4F" CornerRadius="3" Padding="6,2" VerticalAlignment="Top"
+                                    Visibility="{Binding LocalIsNewer, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="MÁS RECIENTE" FontSize="10" FontWeight="Bold" />
+                            </Border>
+                            <StackPanel>
+                                <TextBlock Text="PARTIDA DE ESTE EQUIPO" FontSize="11" FontWeight="Bold" Foreground="{StaticResource MutedBrush}" />
+                                <TextBlock Text="{Binding LocalWhen}" FontSize="15" FontWeight="SemiBold" Margin="0,3,0,0" />
+                                <TextBlock Text="{Binding LocalDetail}" FontSize="12" Foreground="{StaticResource MutedBrush}" />
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- Partida en la nube -->
+                    <Border Style="{StaticResource SaveCard}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Left" Text="&#xE753;" FontFamily="{StaticResource IconFont}" FontSize="22"
+                                       VerticalAlignment="Center" Margin="0,0,14,0" />
+                            <Border DockPanel.Dock="Right" Background="#2E7D4F" CornerRadius="3" Padding="6,2" VerticalAlignment="Top"
+                                    Visibility="{Binding CloudIsNewer, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="MÁS RECIENTE" FontSize="10" FontWeight="Bold" />
+                            </Border>
+                            <StackPanel>
+                                <TextBlock Text="PARTIDA EN LA NUBE" FontSize="11" FontWeight="Bold" Foreground="{StaticResource MutedBrush}" />
+                                <TextBlock Text="{Binding CloudWhen}" FontSize="15" FontWeight="SemiBold" Margin="0,3,0,0" />
+                                <TextBlock Text="{Binding CloudDetail}" FontSize="12" Foreground="{StaticResource MutedBrush}" />
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- Epic: elegir aquí -->
+                    <UniformGrid Columns="2" Margin="0,8,0,0" Visibility="{Binding PurgineDecides, Converter={StaticResource BoolToVis}}">
+                        <Button Style="{StaticResource GhostButton}" Command="{Binding KeepLocalCommand}" Margin="0,0,6,0" Padding="12,10"
+                                ToolTip="Tu partida de este equipo se sube y pasa a ser la de la nube">
+                            <TextBlock Text="Usar la de este equipo" FontWeight="SemiBold" />
+                        </Button>
+                        <Button Style="{StaticResource PrimaryButton}" Command="{Binding UseCloudCommand}" Margin="6,0,0,0" Padding="12,10"
+                                ToolTip="La partida de la nube se descarga encima de la local (antes se hace una copia)">
+                            <TextBlock Text="Usar la de la nube" FontWeight="SemiBold" />
+                        </Button>
+                    </UniformGrid>
+
+                    <!-- Steam: la elección se hace en la ventana de Steam -->
+                    <UniformGrid Columns="2" Margin="0,8,0,0" Visibility="{Binding SteamDecides, Converter={StaticResource BoolToVis}}">
+                        <Button Style="{StaticResource GhostButton}" Command="{Binding CancelCommand}" Margin="0,0,6,0" Padding="12,10">
+                            <TextBlock Text="Ahora no" FontWeight="SemiBold" />
+                        </Button>
+                        <Button Style="{StaticResource PrimaryButton}" Command="{Binding ContinueCommand}" Margin="6,0,0,0" Padding="12,10"
+                                ToolTip="Steam abrirá su ventana de conflicto para elegir">
+                            <TextBlock Text="Jugar y elegir en Steam" FontWeight="SemiBold" />
+                        </Button>
+                    </UniformGrid>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

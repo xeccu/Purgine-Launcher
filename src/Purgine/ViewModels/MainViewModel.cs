@@ -117,6 +117,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         CloudSaveManager? cloud = null)
     {
         _cloud = cloud;
+        if (_cloud is not null) _cloud.ResolveConflict = AskCloudConflictAsync;
         _scanner = scanner;
         _orchestrator = orchestrator;
         _tracker = tracker;
@@ -1547,6 +1548,16 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     {
         if (IsSessionActive || _orchestrator.IsBusy) return;
         if (card.IsEpic && !await EnsureEpicAccountAsync()) return;
+        if (card.IsSteam && _cloud is not null)
+        {
+            // Steam Cloud: como el cliente de Steam, se mira si cambiaron la partida local y la de la nube.
+            StatusText = $"Comprobando tus partidas de {card.Name} en Steam Cloud…";
+            if (!await Task.Run(() => _cloud.SteamPreLaunchAsync(card.Entry, CancellationToken.None)))
+            {
+                StatusText = $"{card.Name}: no se ha lanzado (conflicto de partidas sin resolver).";
+                return;
+            }
+        }
 
         _sessionCts = new CancellationTokenSource();
         _cloudNotified = false;
@@ -1566,7 +1577,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             if (!result.Success)
             {
                 StatusText = result.Message;
-                if (result.Message != "Vigilancia cancelada.") Notify("No se pudo jugar", result.Message);
+                if (result.Message is not ("Vigilancia cancelada." or ProcessOrchestrator.LaunchCanceledMessage))
+                    Notify("No se pudo jugar", result.Message);
             }
             else if (card.IsLocal)
             {
@@ -1625,6 +1637,46 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         }
         finally { _cloud.StatusChanged -= OnStatus; }
     }
+
+    // ----- Conflicto de partidas en la nube (superposición) -----
+
+    private CloudConflictViewModel? _cloudConflict;
+
+    /// <summary>Diálogo de conflicto abierto (null = cerrado).</summary>
+    public CloudConflictViewModel? CloudConflict
+    {
+        get => _cloudConflict;
+        private set
+        {
+            if (!SetProperty(ref _cloudConflict, value)) return;
+            Store.IsCovered = value is not null || _installDialog is not null;
+        }
+    }
+
+    /// <summary>La ventana debe verse (diálogo de conflicto con Purgine minimizado o en la bandeja).</summary>
+    public event EventHandler? AttentionRequested;
+
+    /// <summary>Muestra el diálogo de conflicto y espera la elección (se llama desde cualquier hilo).</summary>
+    private Task<CloudConflictChoice> AskCloudConflictAsync(CloudConflictInfo info) =>
+        Application.Current.Dispatcher.InvokeAsync(async () =>
+        {
+            while (_cloudConflict is not null) await _cloudConflict.Result; // uno a la vez
+            var dialog = new CloudConflictViewModel(info)
+            {
+                Banner = Games.FirstOrDefault(g => g.Entry.Id == info.Game.Id)?.Cover,
+            };
+            if (info.Game.Platform == GamePlatform.Steam)
+                _ = Task.Run(async () =>
+                {
+                    var header = await _art.LoadHeaderAsync(info.Game.AppId, 240);
+                    if (header is not null) OnUi(() => dialog.Banner = header);
+                });
+            CloudConflict = dialog;
+            AttentionRequested?.Invoke(this, EventArgs.Empty);
+            Notify("Conflicto de partidas", $"{info.Game.Name}: elige qué partida conservar.");
+            try { return await dialog.Result; }
+            finally { CloudConflict = null; }
+        }).Task.Unwrap();
 
     private void OnOrchestratorStatus(OrchestratorStatus s)
     {

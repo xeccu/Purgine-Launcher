@@ -106,6 +106,12 @@
             <views:InstallDialogView DataContext="{Binding InstallDialog}" />
         </Grid>
 
+        <!-- ===== Conflicto de partidas en la nube (superposición) ===== -->
+        <Grid Grid.Row="0" Grid.RowSpan="4" Panel.ZIndex="101"
+              Visibility="{Binding CloudConflict, Converter={StaticResource NullToVis}}">
+            <views:CloudConflictView DataContext="{Binding CloudConflict}" />
+        </Grid>
+
         <!-- ===== Barra de estado ===== -->
         <Border Grid.Row="3" Padding="20,8" Background="{DynamicResource ChromeBrush}"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0">

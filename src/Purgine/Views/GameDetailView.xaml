@@ -131,6 +131,9 @@
                                                 <DataTrigger Binding="{Binding IsCloudError}" Value="True">
                                                     <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
                                                 </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsCloudWarning}" Value="True">
+                                                    <Setter Property="Foreground" Value="#E0A040" />
+                                                </DataTrigger>
                                                 <DataTrigger Binding="{Binding IsCloudBusy}" Value="True">
                                                     <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
                                                     <DataTrigger.EnterActions>

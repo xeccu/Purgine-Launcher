@@ -15,9 +15,10 @@ public sealed partial class GameDetailViewModel
     private void InitCloud(CloudSaveManager? cloud)
     {
         _cloud = cloud;
-        ChooseSaveFolderCommand = new RelayCommand(_ => ChooseSaveFolder(), _ => _cloud is not null);
+        // En Steam la carpeta la decide Steam Cloud: no se elige a mano.
+        ChooseSaveFolderCommand = new RelayCommand(_ => ChooseSaveFolder(), _ => _cloud is not null && !Card.IsSteam);
         ResetSaveFolderCommand = new RelayCommand(_ => ResetSaveFolder(),
-            _ => _cloud?.Paths.GetManual(Card.Entry.Id) is not null);
+            _ => !Card.IsSteam && _cloud?.Paths.GetManual(Card.Entry.Id) is not null);
         OpenSaveFolderCommand = new RelayCommand(_ => OpenFolder(_cloudStatus.SavePath),
             _ => _cloudStatus.SavePath is { } p && Directory.Exists(p));
         OpenSaveBackupsCommand = new RelayCommand(_ => OpenFolder(_cloud?.BackupFolderFor(Card.Entry)),
@@ -51,22 +52,25 @@ public sealed partial class GameDetailViewModel
         OnPropertyChanged(nameof(IsCloudBusy));
         OnPropertyChanged(nameof(IsCloudOk));
         OnPropertyChanged(nameof(IsCloudError));
+        OnPropertyChanged(nameof(IsCloudWarning));
         CommandManager.InvalidateRequerySuggested();
     }
 
     private Task LoadCloudAsync(CancellationToken ct) =>
         ShowCloud ? Task.Run(() => _cloud!.RefreshStatusAsync(Card.Entry, ct), ct) : Task.CompletedTask;
 
-    /// <summary>Indicador visible: juegos de Epic instalados (la nube de Steam la gestiona Steam).</summary>
-    public bool ShowCloud => _cloud is not null && Card.IsEpic && !Card.IsNotInstalled;
+    /// <summary>Indicador visible: juegos de Epic y de Steam instalados.</summary>
+    public bool ShowCloud => _cloud is not null && (Card.IsEpic || Card.HasValidAppId) && !Card.IsNotInstalled;
 
     /// <summary>«Nube sincronizada», «Sincronizando…», «Guardado local»…</summary>
     public string CloudTitle => _cloudStatus.State switch
     {
         CloudSaveState.Checking => "Comprobando…",
         CloudSaveState.Downloading or CloudSaveState.Uploading => "Sincronizando…",
-        CloudSaveState.Synced => "Nube sincronizada",
-        CloudSaveState.LocalOnly => "Guardado local",
+        CloudSaveState.Synced => Card.IsSteam ? "Steam Cloud al día" : "Nube sincronizada",
+        CloudSaveState.LocalOnly => Card.IsSteam ? "Cambios sin subir" : "Guardado local",
+        CloudSaveState.RemoteNewer => "Nube más reciente",
+        CloudSaveState.Conflict => "Conflicto",
         CloudSaveState.NotManaged => "Lo gestiona el juego",
         CloudSaveState.Error => "Sin conexión",
         _ => "—",
@@ -80,13 +84,15 @@ public sealed partial class GameDetailViewModel
         CloudSaveState.Checking or CloudSaveState.Downloading or CloudSaveState.Uploading => "",
         CloudSaveState.Synced => "",
         CloudSaveState.LocalOnly => "",
-        CloudSaveState.Error => "",
+        CloudSaveState.Error or CloudSaveState.Conflict => "",
+        CloudSaveState.RemoteNewer => "",
         _ => "",
     };
 
     public bool IsCloudBusy => _cloudStatus.State is CloudSaveState.Checking or CloudSaveState.Downloading or CloudSaveState.Uploading;
     public bool IsCloudOk => _cloudStatus.State == CloudSaveState.Synced;
     public bool IsCloudError => _cloudStatus.State == CloudSaveState.Error;
+    public bool IsCloudWarning => _cloudStatus.State is CloudSaveState.Conflict or CloudSaveState.RemoteNewer;
 
     public string CloudTooltip
     {
@@ -95,7 +101,7 @@ public sealed partial class GameDetailViewModel
             var text = _cloudStatus.Text;
             if (_cloudStatus.SavePath is { } path)
             {
-                var source = _cloudStatus.Source switch
+                var source = Card.IsSteam ? "según Steam Cloud" : _cloudStatus.Source switch
                 {
                     SavePathSource.Manual => "elegida por ti",
                     SavePathSource.EpicCatalog => "según Epic",

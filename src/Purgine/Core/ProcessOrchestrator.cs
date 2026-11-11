@@ -325,7 +325,10 @@ public sealed class ProcessOrchestrator
     /// Se vigila su proceso y se registra el tiempo jugado.
     /// </summary>
     /// <summary>Antes de lanzar un juego de Epic (partidas en la nube). No debe lanzar excepciones.</summary>
-    public Func<GameEntry, CancellationToken, Task>? EpicPreLaunch { get; set; }
+    public Func<GameEntry, CancellationToken, Task<bool>>? EpicPreLaunch { get; set; }
+
+    /// <summary>Mensaje cuando el usuario cancela el lanzamiento (p. ej. en el diálogo de conflicto de la nube).</summary>
+    public const string LaunchCanceledMessage = "Lanzamiento cancelado.";
 
     public async Task<LaunchResult> LaunchEpicGameAsync(GameEntry game, CancellationToken ct = default)
     {
@@ -360,7 +363,11 @@ public sealed class ProcessOrchestrator
             {
                 // Partidas en la nube: si la nube tiene una más nueva, se baja antes de arrancar el juego.
                 Report(LaunchPhase.LaunchingGame, $"Comprobando tus partidas en la nube de Epic…", game);
-                await preLaunch(game, ct).ConfigureAwait(false);
+                if (!await preLaunch(game, ct).ConfigureAwait(false))
+                {
+                    Report(LaunchPhase.Cancelled, LaunchCanceledMessage, game);
+                    return new LaunchResult(false, LaunchCanceledMessage);
+                }
             }
 
             Report(LaunchPhase.LaunchingGame, $"Lanzando {game.Name}…", game);
