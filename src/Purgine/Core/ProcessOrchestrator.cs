@@ -161,6 +161,9 @@ public sealed class ProcessOrchestrator
             runCleanup = true;
 
             Report(LaunchPhase.LaunchingGame, $"Lanzando {game.Name}…", game);
+            // Diálogos previos al juego (contrato de licencia, opciones de inicio, requisitos, conflicto de la nube):
+            // se muestran flotando y al frente, con el cliente de Steam oculto.
+            SteamWindowGuard.WatchLaunch(TimeSpan.FromSeconds(Math.Max(120, _settings.GameStartTimeoutSeconds)));
             ProcessUtils.Start(steamExe, $"-- \"steam://run/{game.AppId}\"");
             Log.Info($"steam://run/{game.AppId} enviado ({game.Name}).");
 
@@ -169,9 +172,8 @@ public sealed class ProcessOrchestrator
                 TimeSpan.FromSeconds(_settings.RelaunchGraceSeconds));
             Report(LaunchPhase.WaitingForGame, $"Esperando a que arranque {game.Name}…", game);
 
-            var started = await watcher
-                .WaitForStartAsync(TimeSpan.FromSeconds(_settings.GameStartTimeoutSeconds), ct)
-                .ConfigureAwait(false);
+            var started = await WaitForSteamGameStartAsync(watcher, game, ct).ConfigureAwait(false);
+            SteamWindowGuard.StopSurfacing();
             if (!started)
                 return Fail(game, $"{game.Name} no arrancó en {_settings.GameStartTimeoutSeconds} s.");
 
@@ -470,6 +472,35 @@ public sealed class ProcessOrchestrator
         catch (Exception ex)
         {
             Log.Warn($"No se pudo limitar Steam: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Espera a que arranque el juego. Mientras haya un diálogo de Steam esperando al usuario (contrato de licencia,
+    /// opciones de inicio…), el plazo se alarga: leer y aceptar no debe dar «no arrancó».
+    /// </summary>
+    private async Task<bool> WaitForSteamGameStartAsync(GameProcessWatcher watcher, GameEntry game, CancellationToken ct)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(_settings.GameStartTimeoutSeconds);
+        var waitingNotified = false;
+        while (true)
+        {
+            var slice = deadline - DateTime.UtcNow;
+            if (slice > TimeSpan.FromSeconds(3)) slice = TimeSpan.FromSeconds(3);
+            if (slice > TimeSpan.Zero && await watcher.WaitForStartAsync(slice, ct).ConfigureAwait(false)) return true;
+            if (SteamWindowGuard.IsUserDialogOpen)
+            {
+                if (!waitingNotified)
+                {
+                    waitingNotified = true;
+                    Report(LaunchPhase.WaitingForGame, $"Steam necesita que confirmes algo para {game.Name} (contrato o opciones de inicio)…", game);
+                }
+                var extended = DateTime.UtcNow + TimeSpan.FromSeconds(60);
+                if (extended > deadline) deadline = extended;
+                SteamWindowGuard.WatchLaunch(TimeSpan.FromSeconds(90));
+                continue;
+            }
+            if (DateTime.UtcNow >= deadline) return false;
         }
     }
 

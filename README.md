@@ -105,7 +105,11 @@ La **única** función de `steam.exe`:
 
 1. Si Steam está cerrado, se abre en modo ligero (`-silent -nofriendsui -nochatui -minimized …`) y se oculta
    su ventana principal si aparece.
-2. `steam://run/{appId}` (Steam valida la licencia y lanza el juego).
+2. `steam://run/{appId}` (Steam valida la licencia y lanza el juego). Los **diálogos previos al juego**
+   (contrato de licencia / EULA, acuerdos, opciones de inicio DirectX / Vulkan / modo seguro, instalación de
+   requisitos, conflicto de Steam Cloud…) nunca se ocultan: si Steam los deja escondidos porque pertenecen a su
+   ventana principal minimizada, Purgine los muestra flotando y los trae al frente para aceptar sin abrir el
+   cliente; el resto de Steam sigue oculto. Mientras haya uno abierto, el plazo de arranque del juego se alarga.
 3. Vigilancia del proceso del juego (carpeta de instalación + registro de Steam), cronómetro de la sesión y,
    durante la partida, `steamwebhelper` en prioridad baja y recorte de la RAM de Steam.
 4. Al salir: cuenta atrás para que Steam suba las partidas a la nube, `steam.exe -shutdown` y cierre de
