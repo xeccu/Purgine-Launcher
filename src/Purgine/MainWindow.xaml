@@ -106,6 +106,12 @@
             <views:InstallDialogView DataContext="{Binding InstallDialog}" />
         </Grid>
 
+        <!-- ===== Contrato de licencia de Steam (superposición) ===== -->
+        <Grid Grid.Row="0" Grid.RowSpan="4" Panel.ZIndex="102"
+              Visibility="{Binding EulaDialog, Converter={StaticResource NullToVis}}">
+            <views:EulaDialogView DataContext="{Binding EulaDialog}" />
+        </Grid>
+
         <!-- ===== Conflicto de partidas en la nube (superposición) ===== -->
         <Grid Grid.Row="0" Grid.RowSpan="4" Panel.ZIndex="101"
               Visibility="{Binding CloudConflict, Converter={StaticResource NullToVis}}">

@@ -592,7 +592,7 @@ public sealed class ProcessOrchestrator
     /// </summary>
     public Task<bool> CloseSteamAsync() => CloseSteamAsync("Reiniciando Steam para que reconozca el juego recién instalado…");
 
-    private async Task<bool> CloseSteamAsync(string reason)
+    public async Task<bool> CloseSteamAsync(string reason)
     {
         var steamExe = _steam.SteamExe;
         if (steamExe is null || !SteamLocator.IsClientRunning()) return true;

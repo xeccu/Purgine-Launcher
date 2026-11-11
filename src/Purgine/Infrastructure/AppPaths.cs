@@ -34,6 +34,8 @@ public static class AppPaths
     /// <summary>Copias comprimidas de las partidas (antes de bajar de la nube y al cerrar cada juego).</summary>
     /// <summary>Estado de la última sincronización con la nube de Epic de cada juego (para detectar conflictos).</summary>
     public static string CloudSyncFile => Path.Combine(DataDir, "cloud-sync.json");
+    /// <summary>Copias de localconfig.vdf de Steam antes de anotar un contrato aceptado.</summary>
+    public static string SteamConfigBackupDir => Path.Combine(DataDir, "steam-config-backups");
     public static string SaveBackupsDir => Path.Combine(DataDir, "save-backups");
     public static string EpicOwnershipDir => Path.Combine(DataDir, "epic-ovt");
     /// <summary>Notas y reseñas personales por juego (solo locales).</summary>

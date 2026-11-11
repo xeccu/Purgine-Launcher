@@ -103,6 +103,13 @@ progreso, la velocidad y el tiempo restante son los **bytes reales recibidos de 
 
 La **única** función de `steam.exe`:
 
+0. **Contrato de licencia (EULA)**: antes de abrir nada, Purgine mira los contratos del juego (PICS,
+   `common/eulas`: id, nombre, enlace y versión) y los que ya aceptaste (Steam los anota en
+   `userdata\<cuenta>\config\localconfig.vdf` → `apps/<appid>` como `"<appid>_eula_<n>" "<versión>"`). Si falta
+   alguno, lo enseña en su propio aviso con enlace para leerlo y **«Aceptar licencia y jugar»**. Con tu clic, y con
+   Steam cerrado (si estaba abierto se cierra un momento), lo anota en `localconfig.vdf` igual que el cliente, con
+   copia previa del archivo en `steam-config-backups`; Steam ya no muestra su ventana de contrato y el juego
+   arranca. Nunca se acepta un contrato sin que lo pulses tú.
 1. Si Steam está cerrado, se abre solo con sus argumentos nativos `-silent -nochatui`: la interfaz se queda en
    la bandeja de forma nativa. Purgine **no oculta ni modifica ninguna ventana de Steam** (sin `SW_HIDE`, sin
    cambiar estilos). Sin `-minimized`: con la ventana principal minimizada, Windows escondía los diálogos que
@@ -309,6 +316,7 @@ Todo en `%LocalAppData%\Purgine\` (botón «Abrir carpeta de datos» en Ajustes)
 | `epic-installs.json` · `epic-download-queue.json` · `epic-builds.json` | Juegos de Epic instalados por Purgine, su cola de descargas y la caché de builds/tamaños |
 | `save-paths.json` · `save-backups\` | Carpetas de partidas elegidas a mano y copias comprimidas de las partidas |
 | `cloud-sync.json` | Última sincronización con la nube de Epic de cada juego (para detectar conflictos como Steam) |
+| `steam-config-backups\` | Copias de `localconfig.vdf` de Steam hechas antes de anotar un contrato aceptado (las 10 últimas) |
 | `game-notes.json` | Notas y reseñas personales por juego (solo locales) |
 | `art\` | Iconos, imágenes panorámicas, logos e iconos de logros que no estaban en la caché de Steam |
 | `webview\` | Perfil del navegador de la Tienda (cookies y sesión web de Steam, caché) |

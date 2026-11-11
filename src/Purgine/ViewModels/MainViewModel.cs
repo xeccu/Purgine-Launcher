@@ -68,6 +68,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     private readonly EpicNet.EpicAccountService _epic;
     private readonly EpicNet.EpicDownloadManager _epicDownloads;
     private readonly CloudSaveManager? _cloud;
+    private readonly SteamEulaService _eulas;
 
     /// <summary>Peticiones de metadatos de red en curso (la recarga forzada las cancela y empieza de cero).</summary>
     private CancellationTokenSource _metadataCts = new();
@@ -117,6 +118,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         CloudSaveManager? cloud = null)
     {
         _cloud = cloud;
+        _eulas = new SteamEulaService(session, () => steam.SteamPath, AppPaths.SteamConfigBackupDir);
         if (_cloud is not null) _cloud.ResolveConflict = AskCloudConflictAsync;
         _scanner = scanner;
         _orchestrator = orchestrator;
@@ -1548,6 +1550,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     {
         if (IsSessionActive || _orchestrator.IsBusy) return;
         if (card.IsEpic && !await EnsureEpicAccountAsync()) return;
+        if (card.IsSteam && !await EnsureSteamEulasAsync(card)) return;
         if (card.IsSteam && _cloud is not null)
         {
             // Steam Cloud: como el cliente de Steam, se mira si cambiaron la partida local y la de la nube.
@@ -1636,6 +1639,76 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             }
         }
         finally { _cloud.StatusChanged -= OnStatus; }
+    }
+
+    // ----- Contratos de licencia de Steam (superposición) -----
+
+    private EulaDialogViewModel? _eulaDialog;
+
+    /// <summary>Diálogo de contrato abierto (null = cerrado).</summary>
+    public EulaDialogViewModel? EulaDialog
+    {
+        get => _eulaDialog;
+        private set
+        {
+            if (!SetProperty(ref _eulaDialog, value)) return;
+            Store.IsCovered = value is not null || _installDialog is not null || _cloudConflict is not null;
+        }
+    }
+
+    /// <summary>
+    /// Antes de jugar a un juego de Steam: si tiene contratos sin aceptar, se enseñan en Purgine y, con el «Aceptar»
+    /// del usuario, se anotan en Steam (con Steam cerrado) para que el juego arranque sin su ventana de contrato.
+    /// Devuelve false si el usuario cancela o no se pudo anotar.
+    /// </summary>
+    private async Task<bool> EnsureSteamEulasAsync(GameCardViewModel card)
+    {
+        if (!uint.TryParse(card.Entry.AppId, out var appId) || !_session.HasSavedSession) return true;
+        IReadOnlyList<SteamEula> pending;
+        try
+        {
+            StatusText = $"Comprobando el contrato de licencia de {card.Name}…";
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+            pending = await Task.Run(() => _eulas.GetPendingAsync(appId, timeout.Token));
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Contratos de {card.Name}: no se pudieron consultar ({ex.Message}); decide Steam.");
+            return true;
+        }
+        if (pending.Count == 0) return true;
+
+        var steamOpen = SteamLocator.IsClientRunning();
+        var dialog = new EulaDialogViewModel(card.Name, pending, steamOpen) { Banner = card.Cover };
+        _ = Task.Run(async () =>
+        {
+            var header = await _art.LoadHeaderAsync(card.Entry.AppId, 240);
+            if (header is not null) OnUi(() => dialog.Banner = header);
+        });
+        EulaDialog = dialog;
+        bool accepted;
+        try { accepted = await dialog.Result; }
+        finally { EulaDialog = null; }
+        if (!accepted)
+        {
+            StatusText = $"{card.Name}: no se ha lanzado (contrato sin aceptar).";
+            return false;
+        }
+
+        if (SteamLocator.IsClientRunning())
+        {
+            StatusText = "Cerrando Steam un momento para registrar el contrato…";
+            await Task.Run(() => _orchestrator.CloseSteamAsync("Cerrando Steam para registrar el contrato de licencia…"));
+        }
+        var error = await Task.Run(() => _eulas.Accept(appId, pending));
+        if (error is not null)
+        {
+            StatusText = $"{card.Name}: {error}";
+            Notify("Contrato de licencia", $"{card.Name}: {error}");
+            return false;
+        }
+        StatusText = $"Contrato de {card.Name} aceptado. Lanzando…";
+        return true;
     }
 
     // ----- Conflicto de partidas en la nube (superposición) -----
