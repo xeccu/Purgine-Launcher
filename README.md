@@ -190,14 +190,23 @@ Organizada como la biblioteca de un cliente de escritorio:
   (productos activados o el error de Steam). En Steam hay que marcar tú el **Acuerdo de Suscriptor de Steam**;
   sin marcarlo, la clave solo se rellena. En Epic, si la página pide confirmar el producto, se termina en ella.
 
-### 7. Calidad gráfica (`Infrastructure/GraphicsTheme.cs`, `Infrastructure/Fx.cs`)
+### 7. Apariencia (`Infrastructure/GraphicsTheme.cs`, `Infrastructure/Fx.cs`)
 
-Dos perfiles en Ajustes → «Calidad gráfica», aplicados al instante (recursos dinámicos, sin reiniciar):
+Ajustes → «Apariencia»: **4 estilos** con miniatura, aplicados al instante (sin reiniciar). Combinan un estilo
+visual con un perfil de rendimiento; solo cambia el aspecto, la lógica (biblioteca, logros, cromos, nube,
+descargas, canje de claves, contratos, lanzamiento) es la misma en los cuatro.
+
+| Estilo | Distribución y colores |
+|---|---|
+| **Steam** | Cabecera con pestañas arriba, lista lateral de juegos, azul marino y azul Steam. |
+| **Epic Games** | Inspirado en la tienda de Epic: barra lateral izquierda con la navegación, **Inicio rápido** (los últimos juegos jugados, un clic para lanzar) y Descargas abajo; sin cabecera; negro neutro (`#101014`), paneles gris carbón, texto blanco y acento cian (`#26BBFF`); tarjetas redondeadas y panel **Filtros** (búsqueda, Todos/Listos, tipo, launcher, orden) a la derecha de la cuadrícula. Sin logotipos de Epic. |
+
+Los colores se cambian sobre los mismos pinceles que usan todas las vistas, así que todo se repinta en el acto.
 
 | Perfil | Qué incluye |
 |---|---|
-| **Rendimiento** | Plano y minimalista: cero animaciones, cero sombras y cero transparencias. |
-| **Ultra-moderno** (por defecto) | Material acrílico de Windows 11 detrás de la ventana con paneles flotantes translúcidos (`#141721`), bordes que se iluminan al pasar el cursor, esquinas redondeadas, sombras en portadas, barra de acción flotante con **brillo del color dominante del juego** seleccionado, botón JUGAR/INSTALAR con degradado (`#1A9FFF` → `#1072BA`) y brillo, portadas que se amplían con curva `CubicEase`, fundido cruzado de la imagen panorámica al cambiar de juego y transiciones de entrada entre vistas. En Windows 10 los paneles quedan sobre fondo opaco. |
+| **Optimizada** (Rendimiento) | Plano y minimalista: cero animaciones, cero sombras y cero transparencias. |
+| **Moderna** (Ultra-moderno, por defecto) | En Steam, material acrílico de Windows 11 detrás de la ventana con paneles flotantes translúcidos (`#141721`), bordes que se iluminan al pasar el cursor, esquinas redondeadas, sombras en portadas, barra de acción flotante con **brillo del color dominante del juego** seleccionado, botón JUGAR/INSTALAR con degradado (`#1A9FFF` → `#1072BA`) y brillo, portadas que se amplían con curva `CubicEase`, fundido cruzado de la imagen panorámica al cambiar de juego y transiciones de entrada entre vistas. En Windows 10 los paneles quedan sobre fondo opaco. En Epic los paneles son opacos (como su tienda) con el resto de efectos. |
 
 Las animaciones solo se crean en Ultra-moderno y se retiran al terminar; con Purgine en la bandeja no se
 dibuja nada en ningún perfil. Quien tuviera guardado el antiguo perfil «Medio» pasa a Ultra-moderno.

@@ -49,24 +49,140 @@
                 </StackPanel>
             </Border>
 
-            <!-- ===== Calidad gráfica ===== -->
+            <!-- ===== Apariencia: 4 estilos (Steam / Epic Games × Moderna / Optimizada) ===== -->
             <Border Style="{StaticResource Panel}">
                 <StackPanel>
-                    <TextBlock Text="Calidad gráfica" Style="{StaticResource SectionTitle}" />
-                    <RadioButton GroupName="Graphics" IsChecked="{Binding GraphicsLow, Mode=TwoWay}">
-                        <StackPanel>
-                            <TextBlock Text="Rendimiento" />
-                            <TextBlock Style="{StaticResource MutedText}" Text="Estilo plano y minimalista: cero animaciones, cero sombras y cero transparencias. El menor uso de CPU, GPU y memoria." />
-                        </StackPanel>
-                    </RadioButton>
-                    <RadioButton GroupName="Graphics" IsChecked="{Binding GraphicsHigh, Mode=TwoWay}">
-                        <StackPanel>
-                            <TextBlock Text="Ultra-moderno" />
-                            <TextBlock Style="{StaticResource MutedText}" Text="Paneles flotantes translúcidos con desenfoque acrílico, bordes que se iluminan, brillo con el color del juego seleccionado, portadas que se amplían al pasar el cursor y transiciones suaves." />
-                        </StackPanel>
-                    </RadioButton>
-                    <TextBlock Style="{StaticResource MutedText}" Margin="0,8,0,0"
-                               Text="Se aplica al instante. Con Purgine en la bandeja ninguno de los dos consume recursos de dibujo." />
+                    <TextBlock Text="Apariencia" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Style="{StaticResource MutedText}" Margin="0,0,0,12"
+                               Text="Solo cambia el aspecto: biblioteca, logros, cromos, nube, descargas, canje de claves y contratos funcionan igual en los cuatro. Se aplica al instante." />
+                    <UniformGrid Columns="2">
+                        <UniformGrid.Resources>
+                            <!-- Tarjeta seleccionable con miniatura -->
+                            <Style TargetType="RadioButton">
+                                <Setter Property="GroupName" Value="Appearance" />
+                                <Setter Property="Cursor" Value="Hand" />
+                                <Setter Property="Margin" Value="0,0,10,10" />
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="RadioButton">
+                                            <Border x:Name="Bd" CornerRadius="10" Padding="12" BorderThickness="2"
+                                                    BorderBrush="{StaticResource BorderBrush}" Background="{StaticResource CardBrush}">
+                                                <ContentPresenter />
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource MutedBrush}" />
+                                                </Trigger>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </UniformGrid.Resources>
+
+                        <!-- Steam moderna -->
+                        <RadioButton IsChecked="{Binding AppearanceSteamModern, Mode=TwoWay}">
+                            <StackPanel>
+                                <Border Height="84" CornerRadius="6" Background="#0E1014" ClipToBounds="True">
+                                    <Grid>
+                                        <Border Height="14" VerticalAlignment="Top" Background="#99151820" />
+                                        <StackPanel Orientation="Horizontal" Margin="8,22,0,0" VerticalAlignment="Top">
+                                            <Border Width="26" Height="38" CornerRadius="4" Background="#2A3550" Margin="0,0,6,0" />
+                                            <Border Width="26" Height="38" CornerRadius="4" Background="#2A3550" Margin="0,0,6,0" />
+                                            <Border Width="26" Height="38" CornerRadius="4" Background="#2A3550" Margin="0,0,6,0" />
+                                        </StackPanel>
+                                        <Border Width="46" Height="12" CornerRadius="3" Margin="0,0,8,8" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                    <GradientStop Color="#1A9FFF" Offset="0" />
+                                                    <GradientStop Color="#1072BA" Offset="1" />
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                                <TextBlock Text="Steam · Moderna" FontWeight="SemiBold" Margin="0,10,0,2" />
+                                <TextBlock Style="{StaticResource MutedText}" Text="Cabecera con pestañas, acrílico translúcido, sombras, brillos y animaciones." />
+                            </StackPanel>
+                        </RadioButton>
+
+                        <!-- Steam optimizada -->
+                        <RadioButton IsChecked="{Binding AppearanceSteamLight, Mode=TwoWay}">
+                            <StackPanel>
+                                <Border Height="84" Background="#0E1014" ClipToBounds="True">
+                                    <Grid>
+                                        <Border Height="14" VerticalAlignment="Top" Background="#151820" />
+                                        <StackPanel Orientation="Horizontal" Margin="8,22,0,0" VerticalAlignment="Top">
+                                            <Border Width="26" Height="38" Background="#1C2029" Margin="0,0,6,0" />
+                                            <Border Width="26" Height="38" Background="#1C2029" Margin="0,0,6,0" />
+                                            <Border Width="26" Height="38" Background="#1C2029" Margin="0,0,6,0" />
+                                        </StackPanel>
+                                        <Border Width="46" Height="12" Margin="0,0,8,8" HorizontalAlignment="Right" VerticalAlignment="Bottom" Background="#1A9FFF" />
+                                    </Grid>
+                                </Border>
+                                <TextBlock Text="Steam · Optimizada" FontWeight="SemiBold" Margin="0,10,0,2" />
+                                <TextBlock Style="{StaticResource MutedText}" Text="Plana: sin animaciones, sombras ni transparencias. El menor consumo." />
+                            </StackPanel>
+                        </RadioButton>
+
+                        <!-- Epic moderna -->
+                        <RadioButton IsChecked="{Binding AppearanceEpicModern, Mode=TwoWay}">
+                            <StackPanel>
+                                <Border Height="84" CornerRadius="6" Background="#101014" ClipToBounds="True">
+                                    <Grid>
+                                        <Border Width="34" HorizontalAlignment="Left" Background="#121216" BorderBrush="#2C2C30" BorderThickness="0,0,1,0">
+                                            <StackPanel Margin="5,10,5,0">
+                                                <Border Height="7" CornerRadius="3" Background="#2A2A2F" Margin="0,0,0,4" />
+                                                <Border Height="7" CornerRadius="3" Background="#1C1C20" Margin="0,0,0,4" />
+                                                <Border Height="7" CornerRadius="3" Background="#1C1C20" />
+                                            </StackPanel>
+                                        </Border>
+                                        <StackPanel Orientation="Horizontal" Margin="42,10,0,0" VerticalAlignment="Top">
+                                            <Border Width="24" Height="36" CornerRadius="5" Background="#202024" Margin="0,0,5,0" />
+                                            <Border Width="24" Height="36" CornerRadius="5" Background="#202024" Margin="0,0,5,0" />
+                                            <Border Width="24" Height="36" CornerRadius="5" Background="#202024" Margin="0,0,5,0" />
+                                        </StackPanel>
+                                        <Border Width="30" Height="52" CornerRadius="5" Margin="0,10,6,0" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                Background="#18181C" BorderBrush="#2C2C30" BorderThickness="1" />
+                                        <Border Width="40" Height="10" CornerRadius="5" Margin="42,0,0,10" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                                                Background="#26BBFF" />
+                                    </Grid>
+                                </Border>
+                                <TextBlock Text="Epic Games · Moderna" FontWeight="SemiBold" Margin="0,10,0,2" />
+                                <TextBlock Style="{StaticResource MutedText}" Text="Barra lateral con inicio rápido, negro neutro, tarjetas redondeadas, filtros a la derecha, sombras y animaciones." />
+                            </StackPanel>
+                        </RadioButton>
+
+                        <!-- Epic optimizada -->
+                        <RadioButton IsChecked="{Binding AppearanceEpicLight, Mode=TwoWay}">
+                            <StackPanel>
+                                <Border Height="84" CornerRadius="6" Background="#101014" ClipToBounds="True">
+                                    <Grid>
+                                        <Border Width="34" HorizontalAlignment="Left" Background="#121216" BorderBrush="#2C2C30" BorderThickness="0,0,1,0">
+                                            <StackPanel Margin="5,10,5,0">
+                                                <Border Height="7" CornerRadius="3" Background="#2A2A2F" Margin="0,0,0,4" />
+                                                <Border Height="7" CornerRadius="3" Background="#1C1C20" Margin="0,0,0,4" />
+                                                <Border Height="7" CornerRadius="3" Background="#1C1C20" />
+                                            </StackPanel>
+                                        </Border>
+                                        <StackPanel Orientation="Horizontal" Margin="42,10,0,0" VerticalAlignment="Top">
+                                            <Border Width="24" Height="36" CornerRadius="3" Background="#202024" Margin="0,0,5,0" />
+                                            <Border Width="24" Height="36" CornerRadius="3" Background="#202024" Margin="0,0,5,0" />
+                                            <Border Width="24" Height="36" CornerRadius="3" Background="#202024" Margin="0,0,5,0" />
+                                        </StackPanel>
+                                        <Border Width="30" Height="52" CornerRadius="3" Margin="0,10,6,0" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                Background="#18181C" />
+                                    </Grid>
+                                </Border>
+                                <TextBlock Text="Epic Games · Optimizada" FontWeight="SemiBold" Margin="0,10,0,2" />
+                                <TextBlock Style="{StaticResource MutedText}" Text="La misma distribución de Epic, sin sombras, brillos ni animaciones. Para equipos modestos." />
+                            </StackPanel>
+                        </RadioButton>
+                    </UniformGrid>
                 </StackPanel>
             </Border>
 

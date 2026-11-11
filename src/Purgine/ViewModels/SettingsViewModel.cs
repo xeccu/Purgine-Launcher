@@ -99,13 +99,31 @@ public sealed class SettingsViewModel : ObservableObject
     public bool GraphicsHigh { get => _s.GraphicsPreset != GraphicsPreset.Low; set { if (value) SetGraphics(GraphicsPreset.High); } }
 
     /// <summary>Aplica el perfil al instante (recursos dinámicos) y lo guarda.</summary>
-    private void SetGraphics(GraphicsPreset preset)
+    private void SetGraphics(GraphicsPreset preset) => SetAppearance(_s.Skin, preset);
+
+    // ===================== Apariencia: 4 estilos (Steam / Epic × Moderna / Optimizada) =====================
+
+    public bool AppearanceSteamModern { get => Is(UiSkin.Steam, false); set { if (value) SetAppearance(UiSkin.Steam, GraphicsPreset.High); } }
+    public bool AppearanceSteamLight { get => Is(UiSkin.Steam, true); set { if (value) SetAppearance(UiSkin.Steam, GraphicsPreset.Low); } }
+    public bool AppearanceEpicModern { get => Is(UiSkin.Epic, false); set { if (value) SetAppearance(UiSkin.Epic, GraphicsPreset.High); } }
+    public bool AppearanceEpicLight { get => Is(UiSkin.Epic, true); set { if (value) SetAppearance(UiSkin.Epic, GraphicsPreset.Low); } }
+
+    private bool Is(UiSkin skin, bool light) => _s.Skin == skin && (_s.GraphicsPreset == GraphicsPreset.Low) == light;
+
+    /// <summary>Cambia el estilo y el perfil al instante (en caliente, sin reiniciar) y lo guarda.</summary>
+    private void SetAppearance(UiSkin skin, GraphicsPreset preset)
     {
-        if (_s.GraphicsPreset == preset) return;
+        if (_s.Skin == skin && _s.GraphicsPreset == preset) return;
+        _s.Skin = skin;
         _s.GraphicsPreset = preset;
         Infrastructure.GraphicsTheme.Apply(preset);
+        Infrastructure.GraphicsTheme.ApplySkin(skin);
         OnPropertyChanged(nameof(GraphicsLow));
         OnPropertyChanged(nameof(GraphicsHigh));
+        OnPropertyChanged(nameof(AppearanceSteamModern));
+        OnPropertyChanged(nameof(AppearanceSteamLight));
+        OnPropertyChanged(nameof(AppearanceEpicModern));
+        OnPropertyChanged(nameof(AppearanceEpicLight));
         Saved();
     }
 
@@ -234,11 +252,7 @@ public sealed class SettingsViewModel : ObservableObject
         var d = new LauncherSettings();
         _s.SteamClientArguments = d.SteamClientArguments;
         _s.SteamCleanupPolicy = d.SteamCleanupPolicy;
-        if (_s.GraphicsPreset != d.GraphicsPreset)
-        {
-            _s.GraphicsPreset = d.GraphicsPreset;
-            Infrastructure.GraphicsTheme.Apply(d.GraphicsPreset);
-        }
+        if (_s.GraphicsPreset != d.GraphicsPreset || _s.Skin != d.Skin) SetAppearance(d.Skin, d.GraphicsPreset);
         _s.CloudSyncGraceSeconds = d.CloudSyncGraceSeconds;
         _s.SteamShutdownTimeoutSeconds = d.SteamShutdownTimeoutSeconds;
         _s.GameStartTimeoutSeconds = d.GameStartTimeoutSeconds;

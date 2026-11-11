@@ -27,6 +27,15 @@ public enum LibraryViewMode
 }
 
 /// <summary>Perfil gráfico de la interfaz (ver <c>Infrastructure/GraphicsTheme</c>).</summary>
+/// <summary>Estilo visual (solo apariencia: la lógica es la misma en todos).</summary>
+public enum UiSkin
+{
+    /// <summary>Inspirado en el cliente de Steam: cabecera con pestañas, azul marino y azul Steam.</summary>
+    Steam,
+    /// <summary>Inspirado en Epic Games Store: barra lateral, negro neutro, tarjetas redondeadas y cian.</summary>
+    Epic,
+}
+
 public enum GraphicsPreset
 {
     /// <summary>Rendimiento: plano, sin animaciones, sombras ni transparencias.</summary>
@@ -139,6 +148,9 @@ public sealed class LauncherSettings
 
     /// <summary>Perfil gráfico (Bajo / Medio / Alto). Se aplica al instante.</summary>
     public GraphicsPreset GraphicsPreset { get; set; } = GraphicsPreset.High;
+
+    /// <summary>Estilo visual: Steam o Epic Games (se combina con <see cref="GraphicsPreset"/>: Moderna / Optimizada).</summary>
+    public UiSkin Skin { get; set; } = UiSkin.Steam;
 
     /// <summary>Render por software: evita cargar el pipeline D3D en el proceso. Requiere reiniciar.</summary>
     public bool UseSoftwareRendering { get; set; }

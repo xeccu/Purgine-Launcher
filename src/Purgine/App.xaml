@@ -201,6 +201,35 @@
             </Setter>
         </Style>
 
+        <!-- Elemento de la barra lateral del estilo Epic: píldora redondeada, gris al estar seleccionado -->
+        <Style x:Key="SideNavItem" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="10" Padding="14,11">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}" />
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SidebarSelectedBrush}" />
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Conmutador de icono (cuadrícula / lista) -->
         <Style x:Key="IconToggle" TargetType="RadioButton">
             <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
@@ -414,6 +443,8 @@
         <SolidColorBrush x:Key="SteamBlueHoverBrush" Color="#47B2FF" />
         <SolidColorBrush x:Key="SteamBluePressedBrush" Color="#1488D8" />
         <SolidColorBrush x:Key="SidebarSelectedBrush" Color="#2A3550" />
+        <!-- Barra lateral del estilo Epic (la cambia GraphicsTheme) -->
+        <SolidColorBrush x:Key="SidebarBrush" Color="#151820" />
 
         <!-- Botón principal de la ficha (JUGAR / INSTALAR / ACTUALIZAR) -->
         <Style x:Key="SteamPlayButton" TargetType="Button">

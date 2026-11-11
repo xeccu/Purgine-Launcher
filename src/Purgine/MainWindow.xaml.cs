@@ -77,7 +77,7 @@ public partial class MainWindow : Window, IDialogService
 
     /// <summary>Ultra-moderno: material acrílico detrás de los paneles translúcidos.</summary>
     private void ApplyBackdrop(Settings.GraphicsPreset preset) =>
-        WindowTheming.SetAcrylic(this, preset != Settings.GraphicsPreset.Low, (Brush)FindResource("BgBrush"));
+        WindowTheming.SetAcrylic(this, GraphicsTheme.UseAcrylic, (Brush)FindResource("BgBrush"));
 
     // =====================================================================================
     // Bandeja del sistema

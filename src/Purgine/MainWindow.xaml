@@ -15,6 +15,106 @@
         SnapsToDevicePixels="True">
 
     <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- ===== Estilo Epic: barra lateral (navegación + inicio rápido) ===== -->
+        <Border Grid.Column="0" Width="224" Background="{DynamicResource SidebarBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0"
+                Visibility="{Binding IsEpicSkin, Converter={StaticResource BoolToVis}}">
+            <DockPanel Margin="12,18,12,12">
+                <!-- Marca -->
+                <StackPanel DockPanel.Dock="Top" Margin="8,0,0,22">
+                    <StackPanel Orientation="Horizontal">
+                        <Image Source="/Assets/app.ico" Width="30" Height="30" Margin="0,0,10,0" />
+                        <TextBlock Text="Purgine" FontSize="19" FontWeight="Bold" VerticalAlignment="Center" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Descargas abajo, como el icono de descargas de la tienda -->
+                <RadioButton DockPanel.Dock="Bottom" Style="{StaticResource SideNavItem}" GroupName="SideNav"
+                             IsChecked="{Binding IsDownloadsView, Mode=TwoWay}" Margin="0,8,0,0">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Left" Text="&#xE896;" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                   VerticalAlignment="Center" Margin="0,0,12,0" />
+                        <Border DockPanel.Dock="Right" CornerRadius="9" MinWidth="18" Height="18" Padding="5,0" VerticalAlignment="Center"
+                                Background="{StaticResource AccentBrush}"
+                                Visibility="{Binding Downloads.HasBadge, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="{Binding Downloads.BadgeCount}" FontSize="11" FontWeight="Bold" Foreground="Black"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <TextBlock Text="Descargas" VerticalAlignment="Center" />
+                    </DockPanel>
+                </RadioButton>
+
+                <StackPanel>
+                    <RadioButton Style="{StaticResource SideNavItem}" GroupName="SideNav" IsChecked="{Binding IsStoreView, Mode=TwoWay}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE719;" FontFamily="{StaticResource IconFont}" FontSize="15" VerticalAlignment="Center" Margin="0,0,12,0" />
+                            <TextBlock Text="Tienda" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton Style="{StaticResource SideNavItem}" GroupName="SideNav" IsChecked="{Binding IsLibraryView, Mode=TwoWay}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE8F1;" FontFamily="{StaticResource IconFont}" FontSize="15" VerticalAlignment="Center" Margin="0,0,12,0" />
+                            <TextBlock Text="Biblioteca" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton Style="{StaticResource SideNavItem}" GroupName="SideNav" IsChecked="{Binding IsRedeemView, Mode=TwoWay}"
+                                 ToolTip="Canjear una clave de producto de Steam o de Epic Games">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE8D7;" FontFamily="{StaticResource IconFont}" FontSize="15" VerticalAlignment="Center" Margin="0,0,12,0" />
+                            <TextBlock Text="Canjear" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton Style="{StaticResource SideNavItem}" GroupName="SideNav" IsChecked="{Binding IsSettingsView, Mode=TwoWay}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE713;" FontFamily="{StaticResource IconFont}" FontSize="15" VerticalAlignment="Center" Margin="0,0,12,0" />
+                            <TextBlock Text="Ajustes" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </RadioButton>
+
+                    <!-- Inicio rápido: los últimos juegos listos para jugar -->
+                    <TextBlock Text="INICIO RÁPIDO" FontSize="11" FontWeight="Bold" Foreground="{StaticResource MutedBrush}" Margin="10,26,0,8" />
+                    <ItemsControl ItemsSource="{Binding QuickLaunchGames}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Command="{Binding PrimaryActionCommand}" ToolTip="{Binding Name}" Cursor="Hand" Margin="0,0,0,4"
+                                        Foreground="{StaticResource TextBrush}">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="Bd" Background="Transparent" CornerRadius="10" Padding="8,6">
+                                                <DockPanel>
+                                                    <Border DockPanel.Dock="Left" Width="36" Height="36" CornerRadius="6" ClipToBounds="True"
+                                                            Background="{StaticResource CardBrush}" Margin="0,0,10,0">
+                                                        <Image Source="{Binding SmallIcon}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality" />
+                                                    </Border>
+                                                    <StackPanel VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock x:Name="Hint" Text="&#x25B6; Iniciar" FontSize="11" Foreground="{StaticResource MutedBrush}"
+                                                                   Visibility="Collapsed" />
+                                                    </StackPanel>
+                                                </DockPanel>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}" />
+                                                    <Setter TargetName="Hint" Property="Visibility" Value="Visible" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+    <Grid Grid.Column="1">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -24,7 +124,8 @@
 
         <!-- ===== Cabecera + navegación ===== -->
         <Border Grid.Row="0" Padding="24,12" Background="{DynamicResource ChromeBrush}"
-                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1"
+                Visibility="{Binding IsEpicSkin, Converter={StaticResource InverseBoolToVis}}">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
                     <Image Source="/Assets/app.ico" Width="28" Height="28" Margin="0,0,12,0" />
@@ -107,24 +208,6 @@
             </Grid>
         </Grid>
 
-        <!-- ===== Diálogo de instalar (superposición, sin ventanas externas) ===== -->
-        <Grid Grid.Row="0" Grid.RowSpan="4" Panel.ZIndex="100"
-              Visibility="{Binding InstallDialog, Converter={StaticResource NullToVis}}">
-            <views:InstallDialogView DataContext="{Binding InstallDialog}" />
-        </Grid>
-
-        <!-- ===== Contrato de licencia de Steam (superposición) ===== -->
-        <Grid Grid.Row="0" Grid.RowSpan="4" Panel.ZIndex="102"
-              Visibility="{Binding EulaDialog, Converter={StaticResource NullToVis}}">
-            <views:EulaDialogView DataContext="{Binding EulaDialog}" />
-        </Grid>
-
-        <!-- ===== Conflicto de partidas en la nube (superposición) ===== -->
-        <Grid Grid.Row="0" Grid.RowSpan="4" Panel.ZIndex="101"
-              Visibility="{Binding CloudConflict, Converter={StaticResource NullToVis}}">
-            <views:CloudConflictView DataContext="{Binding CloudConflict}" />
-        </Grid>
-
         <!-- ===== Barra de estado ===== -->
         <Border Grid.Row="3" Padding="20,8" Background="{DynamicResource ChromeBrush}"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0">
@@ -159,5 +242,25 @@
                            Foreground="{StaticResource MutedBrush}" />
             </DockPanel>
         </Border>
+    </Grid>
+
+        <!-- ===== Diálogo de instalar (superposición, sin ventanas externas) ===== -->
+        <Grid Grid.ColumnSpan="2" Panel.ZIndex="100"
+              Visibility="{Binding InstallDialog, Converter={StaticResource NullToVis}}">
+            <views:InstallDialogView DataContext="{Binding InstallDialog}" />
+        </Grid>
+
+        <!-- ===== Contrato de licencia de Steam (superposición) ===== -->
+        <Grid Grid.ColumnSpan="2" Panel.ZIndex="102"
+              Visibility="{Binding EulaDialog, Converter={StaticResource NullToVis}}">
+            <views:EulaDialogView DataContext="{Binding EulaDialog}" />
+        </Grid>
+
+        <!-- ===== Conflicto de partidas en la nube (superposición) ===== -->
+        <Grid Grid.ColumnSpan="2" Panel.ZIndex="101"
+              Visibility="{Binding CloudConflict, Converter={StaticResource NullToVis}}">
+            <views:CloudConflictView DataContext="{Binding CloudConflict}" />
+        </Grid>
+
     </Grid>
 </Window>

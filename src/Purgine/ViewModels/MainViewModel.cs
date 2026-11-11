@@ -182,6 +182,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         SyncDownloads();
         UpdateAccountText();
         UpdateEpicAccountText();
+        GraphicsTheme.Changed += _ => OnUi(() => OnPropertyChanged(nameof(IsEpicSkin)));
     }
 
     // =====================================================================================
@@ -991,8 +992,18 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         }
     }
 
+    // ----- Estilo visual -----
+
+    /// <summary>Estilo Epic: barra lateral con navegación e «Inicio rápido», sin cabecera de pestañas.</summary>
+    public bool IsEpicSkin => GraphicsTheme.IsEpic;
+
+    /// <summary>«Inicio rápido» de la barra lateral: los juegos listos para jugar más recientes.</summary>
+    public IReadOnlyList<GameCardViewModel> QuickLaunchGames =>
+        Games.Where(g => g.IsReadyToPlay && g.LastPlayedTicks > 0).OrderByDescending(g => g.LastPlayedTicks).Take(5).ToList();
+
     private void RaiseLibraryTexts()
     {
+        OnPropertyChanged(nameof(QuickLaunchGames));
         OnPropertyChanged(nameof(SummaryText));
         OnPropertyChanged(nameof(EmptyStateText));
         OnPropertyChanged(nameof(InstalledCount));

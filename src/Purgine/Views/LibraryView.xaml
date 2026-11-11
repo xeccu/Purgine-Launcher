@@ -299,6 +299,16 @@
     </UserControl.Resources>
 
     <Grid>
+        <Grid.Style>
+            <Style TargetType="Grid">
+                <Style.Triggers>
+                    <!-- Estilo Epic: la columna de búsqueda y filtros pasa a la derecha, como el panel «Filtros» de su biblioteca -->
+                    <DataTrigger Binding="{Binding IsEpicSkin}" Value="True">
+                        <Setter Property="FlowDirection" Value="RightToLeft" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Grid.Style>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="280" MinWidth="200" MaxWidth="460" />
             <ColumnDefinition Width="Auto" />
@@ -308,9 +318,27 @@
         <!-- =================================================================================== -->
         <!-- Lista lateral                                                                       -->
         <!-- =================================================================================== -->
-        <Border Grid.Column="0" Background="{DynamicResource ChromeBrush}">
+        <Border Grid.Column="0" FlowDirection="LeftToRight">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Background" Value="{DynamicResource ChromeBrush}" />
+                    <Style.Triggers>
+                        <!-- Estilo Epic: panel «Filtros» redondeado arriba a la derecha -->
+                        <DataTrigger Binding="{Binding IsEpicSkin}" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}" />
+                            <Setter Property="BorderThickness" Value="1" />
+                            <Setter Property="CornerRadius" Value="{DynamicResource PanelCornerRadius}" />
+                            <Setter Property="Margin" Value="4,16,16,16" />
+                            <Setter Property="VerticalAlignment" Value="Top" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
             <DockPanel>
                 <StackPanel DockPanel.Dock="Top" Margin="12,12,12,6">
+                    <TextBlock Text="Filtros" FontSize="16" FontWeight="SemiBold" Margin="4,2,0,10"
+                               Visibility="{Binding IsEpicSkin, Converter={StaticResource BoolToVis}}" />
                     <!-- Inicio -->
                     <Button Command="{Binding ShowHomeCommand}" HorizontalContentAlignment="Left" Padding="10,7">
                         <Button.Style>
@@ -463,6 +491,7 @@
                 </StackPanel>
 
                 <ListBox x:Name="GameList" Style="{StaticResource SidebarList}" Margin="0,4,0,8"
+                         Visibility="{Binding IsEpicSkin, Converter={StaticResource InverseBoolToVis}}"
                          ItemsSource="{Binding GamesView}" ItemTemplate="{StaticResource SidebarItemTemplate}"
                          SelectedItem="{Binding SelectedGame, Mode=TwoWay}"
                          SelectionChanged="OnSidebarSelectionChanged" MouseDoubleClick="OnSidebarDoubleClick" />
@@ -470,12 +499,13 @@
         </Border>
 
         <GridSplitter Grid.Column="1" Width="1" Background="{StaticResource BorderBrush}" HorizontalAlignment="Stretch"
-                      ResizeBehavior="PreviousAndNext" ResizeDirection="Columns" Cursor="SizeWE" />
+                      ResizeBehavior="PreviousAndNext" ResizeDirection="Columns" Cursor="SizeWE" FlowDirection="LeftToRight"
+                      Visibility="{Binding IsEpicSkin, Converter={StaticResource InverseBoolToVis}}" />
 
         <!-- =================================================================================== -->
         <!-- Inicio: cuadrícula / lista                                                          -->
         <!-- =================================================================================== -->
-        <Grid Grid.Column="2" Background="{DynamicResource ContentBrush}" infra:Fx.FadeIn="True"
+        <Grid Grid.Column="2" Background="{DynamicResource ContentBrush}" infra:Fx.FadeIn="True" FlowDirection="LeftToRight"
               Visibility="{Binding IsHomeVisible, Converter={StaticResource BoolToVis}}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -602,7 +632,7 @@
         <!-- =================================================================================== -->
         <!-- Ficha del juego                                                                     -->
         <!-- =================================================================================== -->
-        <Grid Grid.Column="2" Visibility="{Binding Detail, Converter={StaticResource NullToVis}}" infra:Fx.FadeIn="True">
+        <Grid Grid.Column="2" Visibility="{Binding Detail, Converter={StaticResource NullToVis}}" infra:Fx.FadeIn="True" FlowDirection="LeftToRight">
             <views:GameDetailView DataContext="{Binding Detail}" />
         </Grid>
     </Grid>

@@ -70,6 +70,7 @@ public partial class App : Application
             RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
 
         GraphicsTheme.Apply(settings.GraphicsPreset);
+        GraphicsTheme.ApplySkin(settings.Skin);
 
         // Composición manual: pocos servicios no justifican un contenedor de DI.
         var locator = new SteamLocator();
