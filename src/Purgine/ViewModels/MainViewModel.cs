@@ -67,6 +67,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     private readonly SteamLocator _steam;
     private readonly EpicNet.EpicAccountService _epic;
     private readonly EpicNet.EpicDownloadManager _epicDownloads;
+    private readonly CloudSaveManager? _cloud;
 
     /// <summary>Peticiones de metadatos de red en curso (la recarga forzada las cancela y empieza de cero).</summary>
     private CancellationTokenSource _metadataCts = new();
@@ -112,8 +113,10 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         SteamSession session,
         SteamOwnershipService ownership,
         SteamDownloadManager downloads,
-        Action saveSettings)
+        Action saveSettings,
+        CloudSaveManager? cloud = null)
     {
+        _cloud = cloud;
         _scanner = scanner;
         _orchestrator = orchestrator;
         _tracker = tracker;
@@ -240,7 +243,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             _detail?.Close();
             _detail = value is null ? null
                 : new GameDetailViewModel(value, _art, _session, OpenInStoreTab, ShowHomeCommand, _downloads.InstallTarget,
-                    _community, _notes, _steam.SteamPath, _epic);
+                    _community, _notes, _steam.SteamPath, _epic, _cloud);
             OnPropertyChanged();
             OnPropertyChanged(nameof(Detail));
             OnPropertyChanged(nameof(IsHomeVisible));
@@ -1588,7 +1591,39 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         }
 
         if (card.IsSteam) await ReloadSteamPlaytimeAsync();
+        if (card.IsEpic) _ = UploadSavesAfterExitAsync(card.Entry);
         SessionFinished?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// El juego de Epic se ha cerrado: copia de las partidas y, si son más nuevas que la nube, subida, en segundo
+    /// plano (la interfaz sigue libre). Aviso discreto al empezar y al terminar.
+    /// </summary>
+    private async Task UploadSavesAfterExitAsync(GameEntry game)
+    {
+        if (_cloud is null) return;
+        void OnStatus(string id, CloudSaveStatus st)
+        {
+            if (id == game.Id && st.State == CloudSaveState.Uploading)
+                OnUi(() => StatusText = $"{game.Name}: subiendo partidas a la nube…");
+        }
+        _cloud.StatusChanged += OnStatus;
+        try
+        {
+            var uploaded = await Task.Run(() => _cloud.PostExitAsync(game, CancellationToken.None));
+            var status = _cloud.GetStatus(game.Id);
+            if (uploaded)
+            {
+                StatusText = $"\u2714 {game.Name}: partidas guardadas en la nube de Epic.";
+                Notify("Partidas en la nube", $"{game.Name}: progreso guardado en la nube de Epic.");
+            }
+            else if (status.State == CloudSaveState.Error)
+            {
+                StatusText = $"{game.Name}: {status.Text}";
+                Notify("Partidas en la nube", $"{game.Name}: {status.Text}");
+            }
+        }
+        finally { _cloud.StatusChanged -= OnStatus; }
     }
 
     private void OnOrchestratorStatus(OrchestratorStatus s)

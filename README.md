@@ -229,6 +229,18 @@ marcan y no se pueden elegir.
   se pueden instalar.
 - **Logros**: la sección LOGROS de la ficha muestra tu progreso en Epic y los desbloqueados más raros, con la
   misma plantilla que Steam (definiciones y estado del jugador desde la cuenta vinculada).
+- **Partidas en la nube sin su launcher**: los juegos que usan la nube de Epic Games Launcher (atributo
+  `CloudSaveFolder` del catálogo) se sincronizan con esa misma nube. Antes de jugar, si la nube tiene una partida
+  más nueva (más de 60 s), se copia lo local y se descarga encima. Al cerrar el juego, en segundo plano, si lo local
+  es más nuevo se empaqueta en el formato de Epic (manifiesto y fragmentos) y se sube como partida nueva; las
+  anteriores siguen en la nube. Aviso discreto al subir y una marca al terminar.
+- **Carpeta de partidas**: se obtiene de la plantilla de Epic (`{AppData}`, `{UserDir}`, `{UserSavedGames}`,
+  `{InstallDir}`, `{EpicID}`…), se elige a mano en la ficha o se deduce buscando el nombre del juego en las rutas
+  habituales (Saved Games, Documentos, AppData, LocalLow). Cada descarga y cada cierre guardan una copia
+  comprimida en `save-backups` (las 10 últimas por juego).
+- **Indicador NUBE** en la ficha: «Nube sincronizada», «Sincronizando…», «Guardado local», «Lo gestiona el
+  juego» (los que guardan en sus propios servidores o con EOS) o «Sin conexión». Con un clic: elegir, abrir o
+  restablecer la carpeta de partidas y abrir las copias de seguridad.
 
 ### Otras funciones
 
@@ -276,6 +288,7 @@ Todo en `%LocalAppData%\Purgine\` (botón «Abrir carpeta de datos» en Ajustes)
 | `settings.json` · `library.json` · `playtime.json` | Ajustes, etiquetas/ejecutables locales, tiempo jugado |
 | `epic-session.bin` | Refresh token de Epic Games cifrado con DPAPI (nunca la contraseña) |
 | `epic-installs.json` · `epic-download-queue.json` · `epic-builds.json` | Juegos de Epic instalados por Purgine, su cola de descargas y la caché de builds/tamaños |
+| `save-paths.json` · `save-backups\` | Carpetas de partidas elegidas a mano y copias comprimidas de las partidas |
 | `game-notes.json` | Notas y reseñas personales por juego (solo locales) |
 | `art\` | Iconos, imágenes panorámicas, logos e iconos de logros que no estaban en la caché de Steam |
 | `webview\` | Perfil del navegador de la Tienda (cookies y sesión web de Steam, caché) |

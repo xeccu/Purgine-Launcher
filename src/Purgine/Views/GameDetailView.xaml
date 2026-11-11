@@ -101,6 +101,58 @@
                         <TextBlock Text="TIEMPO DE JUEGO" Style="{StaticResource StatLabel}" />
                         <TextBlock Text="{Binding Card.TotalPlaytimeText}" Style="{StaticResource StatValue}" />
                     </StackPanel>
+                    <!-- Partidas en la nube (juegos de Epic): estado y menú de la carpeta de partidas -->
+                    <Button DockPanel.Dock="Left" Margin="28,0,0,0" VerticalAlignment="Center" Padding="4,2"
+                            Style="{StaticResource GhostButton}" ToolTip="{Binding CloudTooltip}" Click="OnCloudClick"
+                            Visibility="{Binding ShowCloud, Converter={StaticResource BoolToVis}}">
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Elegir carpeta de partidas…" Command="{Binding ChooseSaveFolderCommand}" />
+                                <MenuItem Header="Usar la carpeta automática" Command="{Binding ResetSaveFolderCommand}" />
+                                <MenuItem Header="Abrir carpeta de partidas" Command="{Binding OpenSaveFolderCommand}" />
+                                <MenuItem Header="Abrir copias de seguridad" Command="{Binding OpenSaveBackupsCommand}" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                        <StackPanel HorizontalAlignment="Left">
+                            <TextBlock Text="NUBE" Style="{StaticResource StatLabel}" HorizontalAlignment="Left" />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding CloudGlyph}" FontFamily="{StaticResource IconFont}" FontSize="13"
+                                           VerticalAlignment="Center" Margin="0,0,6,0" RenderTransformOrigin="0.5,0.5">
+                                    <TextBlock.RenderTransform>
+                                        <RotateTransform />
+                                    </TextBlock.RenderTransform>
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsCloudOk}" Value="True">
+                                                    <Setter Property="Foreground" Value="#5BC47E" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsCloudError}" Value="True">
+                                                    <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsCloudBusy}" Value="True">
+                                                    <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                                    <DataTrigger.EnterActions>
+                                                        <BeginStoryboard x:Name="CloudSpin">
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                                 From="0" To="360" Duration="0:0:1" RepeatBehavior="Forever" />
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </DataTrigger.EnterActions>
+                                                    <DataTrigger.ExitActions>
+                                                        <StopStoryboard BeginStoryboardName="CloudSpin" />
+                                                    </DataTrigger.ExitActions>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Text="{Binding CloudTitle}" Style="{StaticResource StatValue}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Button>
                     <StackPanel DockPanel.Dock="Left" Margin="32,0,0,0" VerticalAlignment="Center" MinWidth="200"
                                 Visibility="{Binding Card.ShowInstallProgress, Converter={StaticResource BoolToVis}}">
                         <TextBlock Text="DESCARGA" Style="{StaticResource StatLabel}" />

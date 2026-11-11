@@ -142,4 +142,14 @@ public partial class GameDetailView : UserControl
         menu.DataContext = OptionsButton.DataContext;
         menu.IsOpen = true;
     }
+
+    /// <summary>La nube abre su menú con un clic normal (no solo con el derecho).</summary>
+    private void OnCloudClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { ContextMenu: { } menu } element) return;
+        menu.DataContext = element.DataContext;
+        menu.PlacementTarget = element;
+        menu.Placement = PlacementMode.Bottom;
+        menu.IsOpen = true;
+    }
 }

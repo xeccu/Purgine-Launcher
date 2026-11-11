@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Net.Http.Json;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
@@ -18,7 +19,15 @@ public sealed class SavedEpicSession
 
 /// <summary>Arte y datos de un artículo del catálogo de Epic.</summary>
 public sealed record EpicCatalogInfo(string Title, string? CoverUrl, string? HeroUrl, string? LogoUrl, bool RequiresOwnershipToken,
-    bool IsGame = true, bool IsApplication = false, bool IsAddOn = false);
+    bool IsGame = true, bool IsApplication = false, bool IsAddOn = false,
+    string? CloudSaveFolder = null, string? CloudIncludeList = null, string? CloudExcludeList = null)
+{
+    /// <summary>El juego usa las partidas en la nube de Epic Games Launcher (no las de EOS, que gestiona el juego).</summary>
+    public bool SupportsCloudSaves => !string.IsNullOrWhiteSpace(CloudSaveFolder);
+}
+
+/// <summary>Un archivo de la nube de partidas de Epic (clave relativa a la carpeta del juego).</summary>
+public sealed record EpicCloudFile(string Key, string? ReadLink, DateTimeOffset? LastModified, string FullKey);
 
 /// <summary>Un artículo de la biblioteca de la cuenta de Epic.</summary>
 public sealed record EpicLibraryItem(string Namespace, string CatalogItemId, string AppName);
@@ -298,9 +307,11 @@ public sealed class EpicAccountService : IDisposable
                             if (img.GetProperty("type").GetString() == type) return img.GetProperty("url").GetString();
                     return null;
                 }
-                var ovt = item.TryGetProperty("customAttributes", out var attrs) &&
-                          attrs.TryGetProperty("OwnershipToken", out var o) &&
-                          o.TryGetProperty("value", out var v) && v.GetString() == "true";
+                var hasAttrs = item.TryGetProperty("customAttributes", out var attrs) && attrs.ValueKind == JsonValueKind.Object;
+                string? Attr(string name) =>
+                    hasAttrs && attrs.TryGetProperty(name, out var a) && a.TryGetProperty("value", out var av) &&
+                    av.ValueKind == JsonValueKind.String && av.GetString() is { Length: > 0 } sv ? sv : null;
+                var ovt = Attr("OwnershipToken") == "true";
                 var categories = item.TryGetProperty("categories", out var cats)
                     ? cats.EnumerateArray().Select(c => c.TryGetProperty("path", out var p) ? p.GetString() ?? "" : "").ToHashSet()
                     : [];
@@ -314,7 +325,10 @@ public sealed class EpicAccountService : IDisposable
                     ovt,
                     IsGame: categories.Contains("games"),
                     IsApplication: categories.Contains("applications"),
-                    IsAddOn: isAddOn);
+                    IsAddOn: isAddOn,
+                    CloudSaveFolder: Attr("CloudSaveFolder"),
+                    CloudIncludeList: Attr("CloudIncludeList"),
+                    CloudExcludeList: Attr("CloudExcludeList"));
             }
         }
         catch (EpicApiException ex)
@@ -499,6 +513,93 @@ public sealed class EpicAccountService : IDisposable
     }
 
     // =====================================================================================
+
+    // =====================================================================================
+    // Partidas en la nube (savesync, el almacenamiento que usa Epic Games Launcher)
+    // =====================================================================================
+
+    private const string DataStorageHost = "https://datastorage-public-service-liveegs.live.use1a.on.epicgames.com";
+
+    /// <summary>
+    /// Archivos de la nube de partidas de un juego (manifiestos y fragmentos), con claves relativas a su carpeta
+    /// («manifests/2026.11.11-10.20.30.manifest», «ChunksV4/07/…chunk»). Null sin sesión.
+    /// </summary>
+    public async Task<List<EpicCloudFile>?> GetCloudSaveFilesAsync(string appName, CancellationToken ct)
+    {
+        var token = await AccessTokenAsync(ct).ConfigureAwait(false);
+        if (token is null || AccountId is null) return null;
+        using var req = new HttpRequestMessage(HttpMethod.Get,
+            $"{DataStorageHost}/api/v1/access/egstore/savesync/{AccountId}/{Uri.EscapeDataString(appName)}/");
+        req.Headers.Authorization = new AuthenticationHeaderValue("bearer", token);
+        var json = await SendJsonAsync(req, ct).ConfigureAwait(false);
+        var prefix = $"{AccountId}/{appName}/";
+        var list = new List<EpicCloudFile>();
+        if (!json.TryGetProperty("files", out var files) || files.ValueKind != JsonValueKind.Object) return list;
+        foreach (var f in files.EnumerateObject())
+        {
+            var key = f.Name;
+            var at = key.IndexOf(prefix, StringComparison.Ordinal);
+            if (at >= 0) key = key[(at + prefix.Length)..];
+            var read = f.Value.TryGetProperty("readLink", out var r) ? r.GetString() : null;
+            DateTimeOffset? modified = f.Value.TryGetProperty("lastModified", out var m) && DateTimeOffset.TryParse(m.GetString(),
+                System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var dt) ? dt : null;
+            list.Add(new EpicCloudFile(key, read, modified, f.Name));
+        }
+        return list;
+    }
+
+    /// <summary>Pide enlaces de escritura para subir estos archivos (claves relativas a la carpeta del juego).</summary>
+    public async Task<Dictionary<string, string>> CreateCloudSaveFilesAsync(string appName, IReadOnlyCollection<string> keys, CancellationToken ct)
+    {
+        var token = await AccessTokenAsync(ct).ConfigureAwait(false)
+                    ?? throw new EpicApiException("Vincula tu cuenta de Epic Games para usar la nube.", true);
+        using var req = new HttpRequestMessage(HttpMethod.Post,
+            $"{DataStorageHost}/api/v1/access/egstore/savesync/{AccountId}/{Uri.EscapeDataString(appName)}/")
+        {
+            Content = JsonContent.Create(new { files = keys }),
+        };
+        req.Headers.Authorization = new AuthenticationHeaderValue("bearer", token);
+        var json = await SendJsonAsync(req, ct).ConfigureAwait(false);
+        var links = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (json.TryGetProperty("files", out var files) && files.ValueKind == JsonValueKind.Object)
+            foreach (var f in files.EnumerateObject())
+                if (f.Value.TryGetProperty("writeLink", out var w) && w.GetString() is { } link)
+                {
+                    var key = f.Name;
+                    var prefix = $"{AccountId}/{appName}/";
+                    var at = key.IndexOf(prefix, StringComparison.Ordinal);
+                    links[at >= 0 ? key[(at + prefix.Length)..] : key] = link;
+                }
+        return links;
+    }
+
+    /// <summary>Borra un archivo de la nube de partidas (clave completa, tal como la devuelve el listado).</summary>
+    public async Task DeleteCloudSaveFileAsync(string fullKey, CancellationToken ct)
+    {
+        var token = await AccessTokenAsync(ct).ConfigureAwait(false)
+                    ?? throw new EpicApiException("Vincula tu cuenta de Epic Games para usar la nube.", true);
+        var path = string.Join('/', fullKey.Split('/').Select(Uri.EscapeDataString));
+        using var req = new HttpRequestMessage(HttpMethod.Delete, $"{DataStorageHost}/api/v1/data/egstore/{path}");
+        req.Headers.Authorization = new AuthenticationHeaderValue("bearer", token);
+        using var resp = await _http.Value.SendAsync(req, ct).ConfigureAwait(false);
+        if (!resp.IsSuccessStatusCode) throw new EpicApiException($"La nube de Epic no borró {fullKey} ({(int)resp.StatusCode}).", false);
+    }
+
+    /// <summary>Descarga de un enlace firmado de la nube (sin token: el enlace ya lleva la autorización).</summary>
+    public async Task<byte[]> DownloadSignedAsync(string url, CancellationToken ct)
+    {
+        try { return await _http.Value.GetByteArrayAsync(url, ct).ConfigureAwait(false); }
+        catch (HttpRequestException ex) { throw new EpicApiException($"No se pudo descargar de la nube de Epic: {ex.Message}", false); }
+    }
+
+    /// <summary>Subida a un enlace firmado de la nube.</summary>
+    public async Task UploadSignedAsync(string url, byte[] data, CancellationToken ct)
+    {
+        using var content = new ByteArrayContent(data);
+        using var resp = await _http.Value.PutAsync(url, content, ct).ConfigureAwait(false);
+        if (!resp.IsSuccessStatusCode)
+            throw new EpicApiException($"La nube de Epic rechazó la subida ({(int)resp.StatusCode}).", false);
+    }
 
     private async Task<JsonElement> SendJsonAsync(HttpRequestMessage req, CancellationToken ct)
     {

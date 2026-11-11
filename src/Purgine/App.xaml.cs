@@ -86,13 +86,16 @@ public partial class App : Application
         _epic = new EpicNet.EpicAccountService(AppPaths.EpicSessionFile, AppPaths.EpicOwnershipDir);
         var epic = _epic;
         orchestrator.EpicAuthProvider = (game, ct) => epic.GetLaunchAuthAsync(game.EpicNamespace, game.EpicCatalogItemId, ct);
+        // Partidas en la nube de Epic (la misma que usa su launcher) y copias locales de las partidas.
+        var cloud = new CloudSaveManager(epic, new SavePathResolver(AppPaths.SavePathsFile), AppPaths.SaveBackupsDir);
+        orchestrator.EpicPreLaunch = cloud.PreLaunchAsync;
         _notes = new GameNotesStore(AppPaths.GameNotesFile);
         var downloads = new SteamDownloadManager(_steamSession, ownership, locator, scanner, AppPaths.DownloadQueueFile);
 
         var viewModel = new MainViewModel(
             scanner, orchestrator, tracker, library, settings, _art, _community, _notes, _epic, new LibraryWatcher(), locator,
             _steamSession, ownership, downloads,
-            saveSettings: () => JsonFileStore.Save(AppPaths.SettingsFile, settings));
+            saveSettings: () => JsonFileStore.Save(AppPaths.SettingsFile, settings), cloud: cloud);
         downloads.TryRegisterPending();
 
         var window = new MainWindow(viewModel, settings, library, _steamSession, _epic);

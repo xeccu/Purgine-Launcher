@@ -29,6 +29,10 @@ public static class AppPaths
     public static string EpicQueueFile => Path.Combine(DataDir, "epic-download-queue.json");
     /// <summary>Caché de builds y tamaños de Epic (para no bajar manifiestos en cada arranque).</summary>
     public static string EpicBuildsFile => Path.Combine(DataDir, "epic-builds.json");
+    /// <summary>Carpetas de partidas elegidas a mano en la ficha (id de juego → ruta).</summary>
+    public static string SavePathsFile => Path.Combine(DataDir, "save-paths.json");
+    /// <summary>Copias comprimidas de las partidas (antes de bajar de la nube y al cerrar cada juego).</summary>
+    public static string SaveBackupsDir => Path.Combine(DataDir, "save-backups");
     public static string EpicOwnershipDir => Path.Combine(DataDir, "epic-ovt");
     /// <summary>Notas y reseñas personales por juego (solo locales).</summary>
     public static string GameNotesFile => Path.Combine(DataDir, "game-notes.json");

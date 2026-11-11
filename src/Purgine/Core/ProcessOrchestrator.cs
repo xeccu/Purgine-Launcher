@@ -324,6 +324,9 @@ public sealed class ProcessOrchestrator
     /// juego lo exige), de modo que arranca con la sesión de Epic iniciada y sin ningún proceso del launcher.
     /// Se vigila su proceso y se registra el tiempo jugado.
     /// </summary>
+    /// <summary>Antes de lanzar un juego de Epic (partidas en la nube). No debe lanzar excepciones.</summary>
+    public Func<GameEntry, CancellationToken, Task>? EpicPreLaunch { get; set; }
+
     public async Task<LaunchResult> LaunchEpicGameAsync(GameEntry game, CancellationToken ct = default)
     {
         if (!await _sessionGate.WaitAsync(0, CancellationToken.None).ConfigureAwait(false))
@@ -352,6 +355,13 @@ public sealed class ProcessOrchestrator
                 .Append("-epiclocale=es-ES");
             if (game.EpicNamespace is { } ns) args.Append(" -epicsandboxid=").Append(ns);
             if (auth.OwnershipTokenPath is { } ovt) args.Append(" -epicovt=\"").Append(ovt).Append('"');
+
+            if (EpicPreLaunch is { } preLaunch)
+            {
+                // Partidas en la nube: si la nube tiene una más nueva, se baja antes de arrancar el juego.
+                Report(LaunchPhase.LaunchingGame, $"Comprobando tus partidas en la nube de Epic…", game);
+                await preLaunch(game, ct).ConfigureAwait(false);
+            }
 
             Report(LaunchPhase.LaunchingGame, $"Lanzando {game.Name}…", game);
             int? rootPid;

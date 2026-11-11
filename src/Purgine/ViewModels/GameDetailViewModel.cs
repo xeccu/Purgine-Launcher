@@ -63,7 +63,8 @@ public sealed partial class GameDetailViewModel : ObservableObject
 
     public GameDetailViewModel(GameCardViewModel card, SteamArtService art, SteamSession session,
         Action<string> openWeb, ICommand backCommand, Func<(string Library, long FreeBytes)?> installTarget,
-        SteamCommunityService community, GameNotesStore notes, string? steamPath, EpicNet.EpicAccountService? epic = null)
+        SteamCommunityService community, GameNotesStore notes, string? steamPath, EpicNet.EpicAccountService? epic = null,
+        Core.CloudSaveManager? cloud = null)
     {
         _epic = epic;
         Card = card;
@@ -102,6 +103,7 @@ public sealed partial class GameDetailViewModel : ObservableObject
                 : $"https://steamcommunity.com/stats/{id}/achievements/?l=spanish"),
             _ => card.IsSteam);
         InitExtras(community, notes, steamPath);
+        InitCloud(cloud);
     }
 
     public GameCardViewModel Card { get; }
@@ -193,6 +195,7 @@ public sealed partial class GameDetailViewModel : ObservableObject
         if (!_achievementsLoaded && Card.IsSteam) tasks.Add(LoadAchievementsAsync(ct));
         else if (!_achievementsLoaded && Card.IsEpic) tasks.Add(LoadEpicAchievementsAsync(ct));
         tasks.AddRange(LoadExtrasTasks(ct));
+        tasks.Add(LoadCloudAsync(ct));
         try { await Task.WhenAll(tasks); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { /* se cambió de juego o se recarga */ }
         catch (Exception ex)
@@ -410,6 +413,7 @@ public sealed partial class GameDetailViewModel : ObservableObject
     {
         IsClosing = true;
         GraphicsTheme.Changed -= OnGraphicsChanged;
+        CloseCloud();
         CloseExtras();
         _cts.Cancel();
         Hero = null;
