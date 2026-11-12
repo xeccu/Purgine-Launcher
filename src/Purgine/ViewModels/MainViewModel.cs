@@ -1845,6 +1845,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             finally { ItchBuildDialog = null; }
         }
         if (pick is null) { StatusText = $"Instalación de {entry.Name} cancelada."; return; }
+        var library = await AskItchLibraryAsync(entry.Name, pick.Size, entry.Id);
+        if (library is null) { StatusText = $"Instalación de {entry.Name} cancelada."; return; }
         string? direct = null;
         if (web is not null)
         {
@@ -1864,6 +1866,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             DirectUrl = direct,
             FileName = pick.FileName,
             Size = pick.Size,
+            LibraryRoot = library,
         });
         StatusText = $"{entry.Name} en la cola de descargas (itch.io, sin su cliente).";
         SyncDownloads();
@@ -1871,7 +1874,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     }
 
     /// <summary>Descarga capturada en la tienda de itch.io: la hace Purgine.</summary>
-    public void DownloadFromItch(ItchCapturedDownload d) => OnUi(() =>
+    public void DownloadFromItch(ItchCapturedDownload d) => OnUi(async () =>
     {
         var key = ItchKeyFromUrl(d.PageUrl, d.Title ?? d.FileName ?? "juego");
         // Nunca «itch.io»: el título real, o el slug legible, o el nombre del archivo.
@@ -1881,8 +1884,12 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         var page = Uri.TryCreate(d.PageUrl, UriKind.Absolute, out var u) && u.Host.EndsWith(".itch.io", StringComparison.OrdinalIgnoreCase)
             ? $"{u.Scheme}://{u.Host}/{key.Split('/').Last()}" : d.PageUrl;
         var owned = _itchOwned.FirstOrDefault(g => g.AppId == key);
+        // Dónde instalarlo (como al instalar desde la biblioteca).
+        var library = await AskItchLibraryAsync(owned?.Name ?? title, d.Size, GameEntry.MakeItchId(key));
+        if (library is null) { StatusText = $"Descarga de {title} cancelada."; return; }
         _itchDownloads.Enqueue(new ItchDownloadRequest
         {
+            LibraryRoot = library,
             Key = key,
             Title = owned?.Name ?? title,
             Url = page,
@@ -1907,6 +1914,60 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         var by = title.LastIndexOf(" by ", StringComparison.OrdinalIgnoreCase);
         if (by > 0) title = title[..by];
         return title.Trim();
+    }
+
+    /// <summary>
+    /// Dónde instalar un juego de itch.io: el mismo diálogo que Steam y Epic, con cada unidad y su espacio libre
+    /// (en la del sistema, la carpeta de Purgine en AppData; en las demás, <c>X:\Purgine\ItchLibrary</c>), la última
+    /// carpeta elegida marcada y «Examinar…» para cualquier otra. La elección se recuerda y la carpeta se crea.
+    /// </summary>
+    private async Task<string?> AskItchLibraryAsync(string name, long size, string gameId)
+    {
+        if (_installDialog is not null) return null; // ya hay uno abierto
+        var remembered = _settings.ItchLibraryPath is { Length: > 0 } saved ? saved : AppPaths.ItchLibraryDir;
+        var systemRoot = Path.GetPathRoot(AppPaths.ItchLibraryDir);
+        var drives = new List<DriveOptionViewModel>();
+        foreach (var drive in DriveInfo.GetDrives())
+        {
+            try
+            {
+                if (drive.DriveType != DriveType.Fixed || !drive.IsReady) continue;
+                var root = drive.RootDirectory.FullName;
+                var library = string.Equals(Path.GetPathRoot(remembered), root, StringComparison.OrdinalIgnoreCase) ? remembered
+                    : string.Equals(root, systemRoot, StringComparison.OrdinalIgnoreCase) ? AppPaths.ItchLibraryDir
+                    : Path.Combine(root, "Purgine", "ItchLibrary");
+                var label = string.IsNullOrWhiteSpace(drive.VolumeLabel) ? "Unidad local" : drive.VolumeLabel;
+                drives.Add(new DriveOptionViewModel(root, $"{label} ({root.TrimEnd('\\')}) · {library}", drive.AvailableFreeSpace, library,
+                    string.Equals(library, remembered, StringComparison.OrdinalIgnoreCase), !Directory.Exists(library), (ulong)Math.Max(0, size)));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* unidad que no responde */ }
+        }
+
+        static string? BrowseFolder()
+        {
+            var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "Carpeta para los juegos de itch.io" };
+            return dialog.ShowDialog() == true ? dialog.FolderName : null;
+        }
+
+        var dialog = new InstallDialogViewModel(name, (ulong)Math.Max(0, size), drives, BrowseFolder, showShortcuts: false)
+        {
+            Banner = Games.FirstOrDefault(g => g.Entry.Id == gameId)?.Cover,
+        };
+        InstallDialog = dialog;
+        InstallChoice? choice;
+        try { choice = await dialog.Result; }
+        finally { InstallDialog = null; }
+        if (choice is null) return null;
+
+        try { Directory.CreateDirectory(choice.LibraryPath); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            StatusText = $"No se pudo crear la carpeta {choice.LibraryPath}: {ex.Message}";
+            return null;
+        }
+        _settings.ItchLibraryPath = choice.LibraryPath;
+        _saveSettings.Request();
+        return choice.LibraryPath;
     }
 
     // ----- Selector de versiones (superposición) -----
@@ -2113,8 +2174,10 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
 
     public void OpenInstallFolder(GameCardViewModel card)
     {
-        if (card.Entry.InstallDir is { } dir && Directory.Exists(dir)) OpenPath(dir);
-        else StatusText = "La carpeta de instalación no existe.";
+        // La carpeta de instalación; si no se conoce (ejecutables locales), la del ejecutable.
+        var dir = card.Entry.InstallDir is { Length: > 0 } d && Directory.Exists(d) ? d
+            : card.Entry.ExecutablePath is { Length: > 0 } exe ? Path.GetDirectoryName(exe) : null;
+        if (ShellOpen.Folder(dir) is { } error) StatusText = error;
     }
 
     public void ViewInStore(GameCardViewModel card)
@@ -2248,15 +2311,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
 
     private void OpenPath(string path)
     {
-        try
-        {
-            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })?.Dispose();
-        }
-        catch (Exception ex)
-        {
-            Log.Warn($"No se pudo abrir {path}: {ex.Message}");
-            StatusText = $"No se pudo abrir: {ex.Message}";
-        }
+        if (ShellOpen.Folder(path) is { } error) StatusText = error;
     }
 
     private static void OnUi(Action action)

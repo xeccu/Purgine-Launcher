@@ -138,8 +138,6 @@ public sealed partial class GameDetailViewModel
 
     private static void OpenFolder(string? path)
     {
-        if (path is null || !Directory.Exists(path)) return;
-        try { Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true })?.Dispose(); }
-        catch (Exception ex) { Infrastructure.Log.Warn($"No se pudo abrir {path}: {ex.Message}"); }
+        Infrastructure.ShellOpen.Folder(path);
     }
 }

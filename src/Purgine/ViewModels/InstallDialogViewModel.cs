@@ -52,8 +52,12 @@ public sealed class InstallDialogViewModel : ObservableObject
     private bool _createDesktopShortcut = true;
     private bool _createStartMenuShortcut = true;
 
-    public InstallDialogViewModel(string name, ulong sizeBytes, IEnumerable<DriveOptionViewModel> drives)
+    public InstallDialogViewModel(string name, ulong sizeBytes, IEnumerable<DriveOptionViewModel> drives,
+        Func<string?>? browse = null, bool showShortcuts = true)
     {
+        _browse = browse;
+        ShowShortcuts = showShortcuts;
+        BrowseCommand = new RelayCommand(_ => Browse(), _ => _browse is not null);
         Name = name;
         SizeBytes = sizeBytes;
         Drives = new ObservableCollection<DriveOptionViewModel>(drives);
@@ -63,6 +67,32 @@ public sealed class InstallDialogViewModel : ObservableObject
         InstallCommand = new RelayCommand(_ => Close(new InstallChoice(_selectedDrive!.LibraryPath, _createDesktopShortcut, _createStartMenuShortcut)),
             _ => _selectedDrive is { HasEnoughSpace: true });
         CancelCommand = new RelayCommand(_ => Close(null));
+    }
+
+    private readonly Func<string?>? _browse;
+
+    /// <summary>Hay botón «Examinar…» para elegir cualquier carpeta (itch.io).</summary>
+    public bool CanBrowse => _browse is not null;
+
+    /// <summary>Casillas de accesos directos (no para itch.io).</summary>
+    public bool ShowShortcuts { get; }
+
+    public ICommand BrowseCommand { get; }
+
+    /// <summary>Carpeta elegida a mano: se añade a la lista (con el espacio libre de su unidad) y queda seleccionada.</summary>
+    private void Browse()
+    {
+        if (_browse?.Invoke() is not { Length: > 0 } folder) return;
+        var existing = Drives.FirstOrDefault(d => string.Equals(d.LibraryPath, folder, StringComparison.OrdinalIgnoreCase));
+        if (existing is null)
+        {
+            var root = Path.GetPathRoot(folder) ?? folder;
+            long free = 0;
+            try { free = new DriveInfo(root).AvailableFreeSpace; } catch (Exception) { /* unidad de red o sin acceso */ }
+            existing = new DriveOptionViewModel(root, folder, free, folder, isDefault: false, isNewLibrary: !Directory.Exists(folder), SizeBytes);
+            Drives.Add(existing);
+        }
+        SelectedDrive = existing;
     }
 
     public string Name { get; }

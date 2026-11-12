@@ -363,10 +363,13 @@ public sealed partial class GameDetailViewModel
     private static string CacheName(string prefix, string url) =>
         $"{prefix}_{Convert.ToHexStringLower(SHA1.HashData(Encoding.UTF8.GetBytes(url)))[..20]}.jpg";
 
+    /// <summary>Carpeta → Explorador (blindado); archivo (captura) → su visor predeterminado.</summary>
     private static void OpenPath(string? path)
     {
-        if (string.IsNullOrEmpty(path) || !(Directory.Exists(path) || File.Exists(path))) return;
+        if (string.IsNullOrEmpty(path)) return;
+        if (Directory.Exists(path)) { ShellOpen.Folder(path); return; }
+        if (!File.Exists(path)) return;
         try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })?.Dispose(); }
-        catch (Exception ex) { Log.Warn($"No se pudo abrir {path}: {ex.Message}"); }
+        catch (Exception ex) { Log.Warn($"No se pudo abrir {path}: {ex.Message}"); ShellOpen.Folder(path); }
     }
 }

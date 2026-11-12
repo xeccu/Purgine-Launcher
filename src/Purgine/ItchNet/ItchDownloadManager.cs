@@ -18,6 +18,8 @@ public sealed class ItchDownloadRequest
     public string? DirectUrl { get; set; }            // descarga capturada en la web (enlace firmado de la CDN)
     public string? FileName { get; set; }
     public long Size { get; set; }
+    /// <summary>Carpeta de biblioteca elegida en el diálogo (null = la predeterminada).</summary>
+    public string? LibraryRoot { get; set; }
 }
 
 /// <summary>
@@ -127,8 +129,11 @@ public sealed class ItchDownloadManager : IDisposable
         if (Find(key) is not null) return "Hay una descarga de este juego en curso: cancélala primero.";
         try
         {
-            if (installDir is not null && Directory.Exists(installDir) &&
-                Path.GetFullPath(installDir).StartsWith(Path.GetFullPath(_libraryRoot), StringComparison.OrdinalIgnoreCase))
+            // Solo la carpeta registrada de ese juego (puede estar en cualquier unidad) y nunca una raíz de unidad.
+            var registered = ItchRegistry.Load().FirstOrDefault(r => r.Key == key)?.InstallDir;
+            if (installDir is not null && Directory.Exists(installDir) && registered is not null &&
+                string.Equals(Path.GetFullPath(installDir).TrimEnd('\\'), Path.GetFullPath(registered).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) &&
+                Directory.GetParent(Path.GetFullPath(installDir).TrimEnd('\\')) is { Parent: not null })
             {
                 // Muchos .zip traen archivos de solo lectura, y un .exe recién descargado puede estar unos segundos
                 // bloqueado por el antivirus: se quita el atributo y se reintenta.
@@ -184,7 +189,9 @@ public sealed class ItchDownloadManager : IDisposable
             var file = await DownloadAsync(job, req, cts.Token).ConfigureAwait(false);
 
             job.SetState(DownloadJobState.Preparing, ItchInstaller.IsArchive(file) ? "Descomprimiendo…" : "Instalando…");
-            var dir = ItchInstaller.FolderFor(_libraryRoot, req.Title);
+            var root = req.LibraryRoot ?? _libraryRoot;
+            Directory.CreateDirectory(root); // la carpeta elegida se crea si no existe
+            var dir = ItchInstaller.FolderFor(root, req.Title);
             var exe = await Task.Run(() => ItchInstaller.Install(file, dir, req.Title), cts.Token).ConfigureAwait(false);
             ItchRegistry.Upsert(new ItchInstallRecord
             {
@@ -279,7 +286,7 @@ public sealed class ItchDownloadManager : IDisposable
     }
 
     private string PartialPath(ItchDownloadRequest req) =>
-        Path.Combine(_libraryRoot, ".descargas", SafeFileName(req.Key.Replace('/', '_')) + ".part");
+        Path.Combine(req.LibraryRoot ?? _libraryRoot, ".descargas", SafeFileName(req.Key.Replace('/', '_')) + ".part");
 
     private static string SafeFileName(string name)
     {

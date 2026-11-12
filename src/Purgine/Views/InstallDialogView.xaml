@@ -70,7 +70,7 @@
                     <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,10,0,12" />
 
                     <!-- Accesos directos -->
-                    <WrapPanel>
+                    <WrapPanel Visibility="{Binding ShowShortcuts, Converter={StaticResource BoolToVis}}">
                         <CheckBox Content="Crear acceso directo en el escritorio" IsChecked="{Binding CreateDesktopShortcut}" Margin="0,0,24,6" />
                         <CheckBox Content="Crear acceso directo en el menú Inicio" IsChecked="{Binding CreateStartMenuShortcut}" Margin="0,0,0,6" />
                     </WrapPanel>
@@ -96,6 +96,14 @@
                     </ListBox>
                     <TextBlock Text="{Binding WarningText}" Foreground="{StaticResource DangerBrush}" TextWrapping="Wrap" Margin="0,4,0,0"
                                Visibility="{Binding WarningText, Converter={StaticResource NullToVis}}" />
+                    <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Margin="0,8,0,0" Command="{Binding BrowseCommand}"
+                            Visibility="{Binding CanBrowse, Converter={StaticResource BoolToVis}}"
+                            ToolTip="Elegir cualquier carpeta (se crea si no existe)">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE838;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <TextBlock Text="Examinar otra carpeta…" />
+                        </StackPanel>
+                    </Button>
 
                     <!-- Acciones -->
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,26,0,0">

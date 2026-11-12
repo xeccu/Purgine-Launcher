@@ -152,6 +152,9 @@ public sealed class LauncherSettings
     /// <summary>Estilo visual: Steam o Epic Games (se combina con <see cref="GraphicsPreset"/>: Moderna / Optimizada).</summary>
     public UiSkin Skin { get; set; } = UiSkin.Steam;
 
+    /// <summary>Última carpeta elegida para instalar juegos de itch.io (null = la de Purgine en AppData).</summary>
+    public string? ItchLibraryPath { get; set; }
+
     /// <summary>Render por software: evita cargar el pipeline D3D en el proceso. Requiere reiniciar.</summary>
     public bool UseSoftwareRendering { get; set; }
 

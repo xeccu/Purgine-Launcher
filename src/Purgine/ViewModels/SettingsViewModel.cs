@@ -327,7 +327,7 @@ public sealed class SettingsViewModel : ObservableObject
         try
         {
             Directory.CreateDirectory(path);
-            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })?.Dispose();
+            Infrastructure.ShellOpen.Folder(path);
         }
         catch (Exception ex)
         {
