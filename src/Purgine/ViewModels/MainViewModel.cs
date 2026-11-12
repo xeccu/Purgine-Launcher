@@ -623,33 +623,51 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         StatusText = "Escaneando bibliotecas…";
         try
         {
-            var snapshot = await Task.Run(_scanner.ScanFull);
+            // 1) Todo el escaneo en segundo plano, sin tocar la lista que se ve (Steam, Epic, itch.io).
+            var (snapshot, epicInstalled, itchInstalled) = await Task.Run(() =>
+                (_scanner.ScanFull(), EpicLibraryScanner.Scan(), ItchRegistry.ScanInstalled()));
             _tracker.SetSteamPlaytime(snapshot.Usage); // antes de crear las tarjetas
             _appInfo = snapshot.AppInfo;
 
-            var running = Games.Where(g => g.IsRunning).Select(g => g.Entry.Id).ToHashSet();
-            var selectedId = _selectedGame?.Entry.Id;
-            SelectedGame = null;
-            Games.Clear();
-            foreach (var e in snapshot.Installed) Games.Add(CreateCard(e));
-
+            // 2) La biblioteca nueva completa, en una lista aparte.
+            var entries = new List<GameEntry>();
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            void Add(GameEntry e) { if (ids.Add(e.Id)) entries.Add(e); }
+            foreach (var e in snapshot.Installed) Add(e);
             if (_session.HasSavedSession && _ownership.HasData)
             {
                 // Con sesión: biblioteca completa según los servidores de Steam (última consulta; se refresca abajo).
-                AddOwnedFromNetwork(snapshot.Installed);
+                foreach (var e in SteamOwnedNotInstalled(snapshot.Installed)) Add(e);
             }
             else
             {
                 // Sin sesión: solo lo instalado en los discos (manifiestos locales).
                 _owned = snapshot.Installed.Select(e => e.AppId).ToHashSet();
             }
+            foreach (var e in epicInstalled) Add(e);
+            foreach (var e in _epicOwned) Add(e);
+            foreach (var e in itchInstalled) Add(e);
+            foreach (var e in _itchOwned.Where(o => itchInstalled.All(i => i.Id != o.Id))) Add(e);
+            foreach (var local in _library.LocalGames) Add(local.ToEntry());
 
-            // Epic Games: juegos instalados según sus manifiestos locales (sin red).
-            foreach (var epic in await Task.Run(EpicLibraryScanner.Scan)) Games.Add(CreateCard(epic));
-            AddEpicOwned();
-            AddItchCards();
-            foreach (var local in _library.LocalGames) Games.Add(CreateCard(local.ToEntry()));
-            foreach (var g in Games) g.IsRunning = running.Contains(g.Entry.Id);
+            // Un escaneo que no encuentra nada teniendo ya biblioteca (disco aún no montado, carpeta inaccesible…)
+            // no la vacía: se conserva la que había.
+            if (entries.Count == 0 && Games.Count > 0)
+            {
+                Log.Warn("Escaneo sin juegos: se conserva la biblioteca anterior.");
+                StatusText = "No se encontraron juegos en este escaneo; se mantiene la biblioteca actual.";
+                return;
+            }
+
+            // 3) Sustitución de golpe: las tarjetas ya están creadas y el cambio se hace en un único paso síncrono del
+            //    hilo de la interfaz, así que la ventana no llega a pintar la lista a medias ni vacía.
+            var running = Games.Where(g => g.IsRunning).Select(g => g.Entry.Id).ToHashSet();
+            var selectedId = _selectedGame?.Entry.Id;
+            var cards = entries.Select(CreateCard).ToList();
+            foreach (var c in cards) c.IsRunning = running.Contains(c.Entry.Id);
+            SelectedGame = null;
+            Games.Clear();
+            foreach (var c in cards) Games.Add(c);
             ApplyRemoteUpdates();
             SyncDownloads();
             if (selectedId is not null) SelectedGame = Games.FirstOrDefault(g => g.Entry.Id == selectedId);
@@ -716,16 +734,26 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     /// <summary>Añade como «no instalados» los juegos de la cuenta (según la red) que no están en disco.</summary>
     private void AddOwnedFromNetwork(IEnumerable<GameEntry> installed)
     {
+        var present = Games.Where(g => g.IsSteam).Select(g => g.Entry.Id).ToHashSet();
+        foreach (var e in SteamOwnedNotInstalled(installed))
+            if (present.Add(e.Id)) Games.Add(CreateCard(e));
+    }
+
+    /// <summary>Juegos de la cuenta de Steam (según la red) que no están en disco; actualiza <c>_owned</c>.</summary>
+    private List<GameEntry> SteamOwnedNotInstalled(IEnumerable<GameEntry> installed)
+    {
         var installedIds = installed.Select(e => e.AppId).ToHashSet();
         var owned = new HashSet<string>(installedIds);
+        var list = new List<GameEntry>();
         foreach (var app in _ownership.Cache.Apps)
         {
             var id = app.AppId.ToString();
             owned.Add(id);
-            if (!IsLibraryType(app.Type) || installedIds.Contains(id) || Games.Any(g => g.Entry.Id == GameEntry.MakeSteamId(id))) continue;
-            Games.Add(CreateCard(_scanner.CreateNotInstalledEntry(id, app.Name, app.InstallDir)));
+            if (!IsLibraryType(app.Type) || installedIds.Contains(id)) continue;
+            list.Add(_scanner.CreateNotInstalledEntry(id, app.Name, app.InstallDir));
         }
         _owned = owned;
+        return list;
     }
 
     /// <summary>
@@ -770,9 +798,11 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             var cache = await Task.Run(() => _ownership.RefreshAsync(MetadataToken));
             if (cache is null) { UpdateAccountText(); return; }
 
-            // Quitar las aproximaciones locales que la red no confirma (y no estén instaladas).
+            // Quitar las aproximaciones locales de Steam que la red no confirma (y no estén instaladas). Solo juegos de
+            // Steam: los no instalados de Epic e itch.io vienen de sus cuentas y no figuran en las licencias de Steam
+            // (antes se borraban aquí, unos segundos después de cada carga).
             var ownedIds = cache.Apps.Select(a => a.AppId.ToString()).ToHashSet();
-            foreach (var card in Games.Where(g => g.IsNotInstalled && !ownedIds.Contains(g.Entry.AppId) && !g.HasActiveJob).ToList())
+            foreach (var card in Games.Where(g => g.IsSteam && g.IsNotInstalled && !ownedIds.Contains(g.Entry.AppId) && !g.HasActiveJob).ToList())
             {
                 if (ReferenceEquals(card, _selectedGame)) SelectedGame = null;
                 Games.Remove(card);
