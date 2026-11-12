@@ -29,6 +29,28 @@
                 </StackPanel>
             </Border>
 
+            <!-- ===== Cuenta de itch.io (clave de API) ===== -->
+            <Border Style="{StaticResource Panel}">
+                <StackPanel>
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Content="Desvincular" Command="{Binding ItchClearCommand}"
+                                VerticalAlignment="Center" Visibility="{Binding IsItchLinked, Converter={StaticResource BoolToVis}}" />
+                        <StackPanel>
+                            <TextBlock Text="Cuenta de itch.io" Style="{StaticResource SectionTitle}" Margin="0,0,0,4" />
+                            <TextBlock Text="{Binding ItchAccountText}" Style="{StaticResource MutedText}" FontSize="13" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </DockPanel>
+                    <DockPanel Margin="0,10,0,0" Visibility="{Binding IsItchLinked, Converter={StaticResource InverseBoolToVis}}">
+                        <Button DockPanel.Dock="Right" Style="{StaticResource PrimaryButton}" Content="Vincular" Command="{Binding ItchSaveKeyCommand}" Margin="8,0,0,0" />
+                        <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Content="Crear clave en itch.io" Command="{Binding OpenItchKeysCommand}" Margin="8,0,0,0" />
+                        <TextBox Style="{StaticResource SearchBox}" Text="{Binding ItchKeyInput, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="itch.io → Ajustes → API keys → Generate new API key. Se guarda cifrada en este equipo." />
+                    </DockPanel>
+                    <TextBlock Style="{StaticResource MutedText}" Margin="0,10,0,0" TextWrapping="Wrap"
+                               Text="Con la clave de API (itch.io → Ajustes → Claves de API), tus juegos comprados o reclamados aparecen en la biblioteca y se instalan eligiendo la versión. Purgine no ve tu contraseña: solo guarda la clave, cifrada con Windows (DPAPI). La tienda de itch.io (Tienda → itch.io) funciona sin clave: lo que descargues allí lo instala Purgine." />
+                </StackPanel>
+            </Border>
+
             <!-- ===== Cuenta de Steam ===== -->
             <Border Style="{StaticResource Panel}">
                 <StackPanel>

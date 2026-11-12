@@ -75,6 +75,55 @@ public sealed class SettingsViewModel : ObservableObject
     public string EpicAccountText { get => _epicAccountText; private set => SetProperty(ref _epicAccountText, value); }
     public bool IsEpicLinked { get => _isEpicLinked; private set => SetProperty(ref _isEpicLinked, value); }
     public ICommand EpicLoginCommand { get; }
+
+    // ===================== Cuenta de itch.io (clave de API) =====================
+
+    private Func<string, Task<string?>>? _saveItchKey;
+    private Action? _clearItchKey;
+    private string _itchKeyInput = string.Empty;
+    private string _itchAccountText = string.Empty;
+    private bool _isItchLinked;
+
+    /// <summary>La ventana principal da las acciones (comprobar y guardar la clave, desvincular).</summary>
+    public void ConfigureItch(Func<string, Task<string?>> saveKey, Action clearKey)
+    {
+        _saveItchKey = saveKey;
+        _clearItchKey = clearKey;
+        ItchSaveKeyCommand = new RelayCommand(async _ =>
+        {
+            ItchAccountText = "Comprobando la clave…";
+            var error = await _saveItchKey(ItchKeyInput);
+            if (error is null) ItchKeyInput = string.Empty;
+            else ItchAccountText = error;
+        }, _ => ItchKeyInput.Trim().Length >= 20);
+        ItchClearCommand = new RelayCommand(_ => _clearItchKey(), _ => IsItchLinked);
+        OnPropertyChanged(nameof(ItchSaveKeyCommand));
+        OnPropertyChanged(nameof(ItchClearCommand));
+    }
+
+    public ICommand ItchSaveKeyCommand { get; private set; } = new RelayCommand(_ => { }, _ => false);
+    public ICommand ItchClearCommand { get; private set; } = new RelayCommand(_ => { }, _ => false);
+    public ICommand OpenItchKeysCommand { get; } = new RelayCommand(_ =>
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://itch.io/user/settings/api-keys") { UseShellExecute = true })?.Dispose(); }
+        catch (Exception ex) { Infrastructure.Log.Warn($"No se pudo abrir itch.io: {ex.Message}"); }
+    });
+
+    public string ItchKeyInput
+    {
+        get => _itchKeyInput;
+        set { if (SetProperty(ref _itchKeyInput, value ?? string.Empty)) System.Windows.Input.CommandManager.InvalidateRequerySuggested(); }
+    }
+
+    public string ItchAccountText { get => _itchAccountText; private set => SetProperty(ref _itchAccountText, value); }
+    public bool IsItchLinked { get => _isItchLinked; private set => SetProperty(ref _isItchLinked, value); }
+
+    public void SetItchAccountState(string text, bool linked)
+    {
+        ItchAccountText = text;
+        IsItchLinked = linked;
+        System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+    }
     public ICommand EpicLogoutCommand { get; }
 
     public void SetEpicAccountState(string text, bool linked)

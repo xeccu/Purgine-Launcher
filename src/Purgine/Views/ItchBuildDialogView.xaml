@@ -1,0 +1,100 @@
+<UserControl x:Class="Purgine.Views.ItchBuildDialogView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:infra="clr-namespace:Purgine.Infrastructure">
+    <UserControl.Resources>
+        <Style x:Key="BuildItem" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="#343A48" CornerRadius="{DynamicResource PlayButtonCornerRadius}" Padding="16,12"
+                                BorderThickness="1" BorderBrush="Transparent">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#3E4556" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource SteamBlueBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Background="#B3050608">
+        <Border Width="600" HorizontalAlignment="Center" VerticalAlignment="Center" infra:Fx.FadeIn="True"
+                Background="#FF1E222C" CornerRadius="{DynamicResource PanelCornerRadius}"
+                BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="{DynamicResource PanelBorderThickness}"
+                Effect="{DynamicResource ActionBarEffect}">
+            <Grid>
+                <Border Height="2" VerticalAlignment="Top" Background="#FA5C5C" CornerRadius="{DynamicResource PanelCornerRadius}" />
+                <StackPanel Margin="24,18,24,22">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE711;" FontSize="11" Padding="7"
+                                BorderBrush="Transparent" VerticalAlignment="Top" Command="{Binding CancelCommand}" ToolTip="Cancelar" />
+                        <TextBlock Text="Elegir versión" FontSize="22" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </DockPanel>
+                    <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,14,0,12" />
+                    <DockPanel Margin="0,0,0,14">
+                        <Border DockPanel.Dock="Left" Width="120" Height="56" CornerRadius="3" Background="{StaticResource CardBrush}" ClipToBounds="True">
+                            <Image Source="{Binding Banner}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality" />
+                        </Border>
+                        <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="Este juego tiene varios archivos en itch.io. Elige cuál instalar." Style="{StaticResource MutedText}" />
+                        </StackPanel>
+                    </DockPanel>
+
+                    <ListBox ItemsSource="{Binding Options}" SelectedItem="{Binding Selected, Mode=TwoWay}" ItemContainerStyle="{StaticResource BuildItem}"
+                             Background="Transparent" BorderThickness="0" MaxHeight="320" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Right" Text="{Binding SizeText}" FontWeight="Bold" VerticalAlignment="Center" Margin="12,0,0,0" />
+                                    <TextBlock DockPanel.Dock="Left" FontFamily="{StaticResource IconFont}" FontSize="18" VerticalAlignment="Center" Margin="0,0,14,0">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Text" Value="&#xE7B8;" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsWindows}" Value="True">
+                                                        <Setter Property="Text" Value="&#xE7F8;" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock FontSize="12" Opacity="0.75" TextTrimming="CharacterEllipsis">
+                                            <Run Text="{Binding PlatformsText, Mode=OneWay}" />
+                                            <Run Text="·" />
+                                            <Run Text="{Binding FileName, Mode=OneWay}" />
+                                        </TextBlock>
+                                    </StackPanel>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <UniformGrid Columns="2" Margin="0,12,0,0">
+                        <Button Style="{StaticResource GhostButton}" Command="{Binding CancelCommand}" Margin="0,0,6,0" Padding="12,10">
+                            <TextBlock Text="Cancelar" FontWeight="SemiBold" />
+                        </Button>
+                        <Button Style="{StaticResource PrimaryButton}" Command="{Binding InstallCommand}" Margin="6,0,0,0" Padding="12,10">
+                            <TextBlock Text="Descargar e instalar" FontWeight="SemiBold" />
+                        </Button>
+                    </UniformGrid>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

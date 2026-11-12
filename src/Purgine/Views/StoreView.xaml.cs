@@ -177,6 +177,7 @@ public partial class StoreView : UserControl
             core.NewWindowRequested += OnNewWindowRequested;
             core.LaunchingExternalUriScheme += OnLaunchingExternalUriScheme;
             core.ProcessFailed += OnProcessFailed;
+            core.DownloadStarting += OnDownloadStarting;
 
             core.Navigate(_vm.TakePendingUrl() ?? _resumeUrl ?? _vm.CurrentHomeUrl);
             _resumeUrl = null;
@@ -241,6 +242,47 @@ public partial class StoreView : UserControl
     // =====================================================================================
     // Eventos del navegador
     // =====================================================================================
+
+    // =====================================================================================
+    // itch.io: las descargas de la web pasan a la cola de Purgine (no al gestor de descargas del navegador)
+    // =====================================================================================
+
+    private static bool IsItchHost(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var u) &&
+        (u.Host.EndsWith("itch.io", StringComparison.OrdinalIgnoreCase) ||
+         u.Host.EndsWith("itch.zone", StringComparison.OrdinalIgnoreCase) ||
+         u.Host.EndsWith("hwcdn.net", StringComparison.OrdinalIgnoreCase));
+
+    private async void OnDownloadStarting(object? sender, CoreWebView2DownloadStartingEventArgs e)
+    {
+        var page = _web?.CoreWebView2?.Source;
+        var uri = e.DownloadOperation.Uri;
+        if (!IsItchHost(uri) && !IsItchHost(page)) return; // el resto, como siempre
+        e.Cancel = true;   // nada de gestor de descargas del navegador: lo descarga Purgine
+        e.Handled = true;
+        var size = (long)(e.DownloadOperation.TotalBytesToReceive ?? 0);
+        var fileName = Path.GetFileName(e.ResultFilePath);
+        string? title = null, image = null;
+        try
+        {
+            var raw = await _web!.CoreWebView2.ExecuteScriptAsync("""
+                (() => {
+                  const meta = p => document.querySelector(`meta[property="${p}"]`)?.content || '';
+                  const h = document.querySelector('.game_title, h1')?.innerText || '';
+                  return JSON.stringify({ title: meta('og:title') || h || document.title, image: meta('og:image') });
+                })()
+                """);
+            var json = System.Text.Json.JsonSerializer.Deserialize<string>(raw);
+            if (json is not null)
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                title = doc.RootElement.GetProperty("title").GetString();
+                image = doc.RootElement.GetProperty("image").GetString();
+            }
+        }
+        catch (Exception ex) { Log.Warn($"itch.io: datos de la página no disponibles ({ex.Message})."); }
+        _vm?.CaptureItchDownload(new ItchCapturedDownload(uri, fileName, page ?? uri, title, image, size));
+    }
 
     private static bool IsSteamLink(string? uri) => uri?.StartsWith("steam:", StringComparison.OrdinalIgnoreCase) == true;
 

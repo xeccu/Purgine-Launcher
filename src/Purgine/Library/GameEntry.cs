@@ -9,6 +9,8 @@ public enum GamePlatform
     Local,
     /// <summary>Juego instalado con Epic Games Launcher (detectado por sus manifiestos .item).</summary>
     Epic,
+    /// <summary>Juego de itch.io (cuenta por API o descargado desde la tienda integrada), instalado por Purgine.</summary>
+    Itch,
 }
 
 /// <summary>Un juego de la biblioteca, independiente de su origen.</summary>
@@ -88,8 +90,15 @@ public sealed record GameEntry
     /// <summary>Instalado por Purgine (sin Epic Games Launcher): se puede desinstalar desde Purgine.</summary>
     public bool EpicManagedByPurgine { get; init; }
 
+    // ----- itch.io -----
+    public long? ItchGameId { get; init; }
+    public long? ItchDownloadKeyId { get; init; }
+    public string? ItchUrl { get; init; }
+    public string? ItchCoverUrl { get; init; }
+
 
     public static string MakeSteamId(string appId) => $"steam:{appId}";
     public static string MakeEpicId(string appName) => $"epic:{appName}";
     public static string MakeLocalId(string guid) => $"local:{guid}";
+    public static string MakeItchId(string key) => $"itch:{key}";
 }

@@ -59,8 +59,13 @@ public sealed class DownloadJob
     public string? EpicCatalogItemId { get; init; }
     public bool IsEpic => EpicAppName is not null;
 
-    /// <summary>Id del juego en la biblioteca («steam:730», «epic:Sugar»).</summary>
-    public string GameKey => EpicAppName is { } app ? Library.GameEntry.MakeEpicId(app) : Library.GameEntry.MakeSteamId(AppId.ToString());
+    // ----- itch.io (null en los demás) -----
+    public string? ItchKey { get; init; }
+    public bool IsItch => ItchKey is not null;
+
+    /// <summary>Id del juego en la biblioteca («steam:730», «epic:Sugar», «itch:autor/juego»).</summary>
+    public string GameKey => ItchKey is { } itch ? Library.GameEntry.MakeItchId(itch)
+        : EpicAppName is { } app ? Library.GameEntry.MakeEpicId(app) : Library.GameEntry.MakeSteamId(AppId.ToString());
 
     public uint AppId { get; }
     public string Name { get; }

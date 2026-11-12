@@ -79,7 +79,7 @@ public sealed class GameCardViewModel : ObservableObject
         UpdateCommand = new RelayCommand(_ => _host.Update(this), _ => ShowUpdateButton);
         NewTagCommand = new RelayCommand(_ => _host.CreateTagFor(this));
         OpenFolderCommand = new RelayCommand(_ => _host.OpenInstallFolder(this), _ => Entry.InstallDir is not null);
-        ViewInStoreCommand = new RelayCommand(_ => _host.ViewInStore(this), _ => IsSteam || IsEpic);
+        ViewInStoreCommand = new RelayCommand(_ => _host.ViewInStore(this), _ => IsSteam || IsEpic || (IsItch && Entry.ItchUrl is { Length: > 0 }));
         EditCommand = new RelayCommand(_ => _host.EditLocal(this), _ => IsLocal);
         RemoveCommand = new RelayCommand(_ => _host.RemoveLocal(this), _ => IsLocal && !IsRunning);
 
@@ -126,7 +126,7 @@ public sealed class GameCardViewModel : ObservableObject
     {
         try
         {
-            _installPresent = IsLocal
+            _installPresent = IsLocal || IsItch
                 ? Entry.ExecutablePath is { } exe && File.Exists(exe)
                 : Entry.InstallDir is { } dir && Directory.Exists(dir);
         }
@@ -140,6 +140,7 @@ public sealed class GameCardViewModel : ObservableObject
     public bool IsLocal => Entry.Platform == GamePlatform.Local;
     public bool IsSteam => Entry.Platform == GamePlatform.Steam;
     public bool IsEpic => Entry.Platform == GamePlatform.Epic;
+    public bool IsItch => Entry.Platform == GamePlatform.Itch;
 
     /// <summary>Plataforma de origen (nombre, distintivo y color) según el registro de plataformas.</summary>
     public PlatformInfo Platform => PlatformRegistry.Get(Entry.Platform);
@@ -161,6 +162,7 @@ public sealed class GameCardViewModel : ObservableObject
     }
     public string PlatformLabel =>
         IsLocal ? "Local"
+        : IsItch ? (IsNotInstalled ? "No instalado" : "itch.io")
         : IsNotInstalled ? "No instalado"
         : IsEpic ? (HasUpdate ? "Actualización pendiente" : "Epic Games")
         : HasUpdate ? "Actualización pendiente"
@@ -284,7 +286,7 @@ public sealed class GameCardViewModel : ObservableObject
     /// <summary>«Descargando 45,2 % · 12,3 MB/s · 4 min» / «En cola» / «En pausa».</summary>
     public string DownloadText => _job is { } j ? JobText.Short(j) : string.Empty;
 
-    public bool CanUninstall => (IsSteam || (IsEpic && Entry.EpicManagedByPurgine)) && !IsNotInstalled && !IsRunning && !HasActiveJob;
+    public bool CanUninstall => (IsSteam || IsItch || (IsEpic && Entry.EpicManagedByPurgine)) && !IsNotInstalled && !IsRunning && !HasActiveJob;
 
     // ----- Espacio necesario (juegos no instalados) -----
 
@@ -452,7 +454,7 @@ public sealed class GameCardViewModel : ObservableObject
         }
 
         // Locales y Epic (sin portada local): el icono del ejecutable.
-        if ((IsLocal || IsEpic) && Entry.ExecutablePath is { } exe && File.Exists(exe))
+        if ((IsLocal || IsEpic || IsItch) && Entry.ExecutablePath is { } exe && File.Exists(exe))
             AppIcon = await Task.Run(() => ImageLoader.IconFromExecutable(exe));
     }
 
@@ -465,7 +467,7 @@ public sealed class GameCardViewModel : ObservableObject
         if (_iconRequested) return;
         _iconRequested = true;
 
-        if (IsLocal || IsEpic)
+        if (IsLocal || IsEpic || IsItch)
         {
             if (AppIcon is null && Entry.ExecutablePath is { } exe && File.Exists(exe))
                 AppIcon = await Task.Run(() => ImageLoader.IconFromExecutable(exe));

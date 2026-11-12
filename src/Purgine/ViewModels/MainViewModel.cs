@@ -6,6 +6,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using Purgine.Core;
+using Purgine.ItchNet;
 using Purgine.Infrastructure;
 using Purgine.Library;
 using Purgine.Settings;
@@ -71,6 +72,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     private readonly EpicNet.EpicDownloadManager _epicDownloads;
     private readonly CloudSaveManager? _cloud;
     private readonly SteamEulaService _eulas;
+    private readonly ItchApiClient _itch = new(AppPaths.ItchKeyFile);
+    private readonly ItchDownloadManager _itchDownloads;
 
     /// <summary>Peticiones de metadatos de red en curso (la recarga forzada las cancela y empieza de cero).</summary>
     private CancellationTokenSource _metadataCts = new();
@@ -137,6 +140,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         _steam = steam;
         _epic = epic;
         _epicDownloads = new EpicNet.EpicDownloadManager(epic, AppPaths.EpicQueueFile);
+        _itchDownloads = new ItchDownloadManager(_itch, AppPaths.ItchLibraryDir, AppPaths.ItchQueueFile);
         _saveSettings = new DebouncedAction(saveSettings, TimeSpan.FromMilliseconds(600));
 
         Store = new StoreViewModel(this);
@@ -176,6 +180,11 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         _epicDownloads.QueueChanged += () => OnUi(SyncDownloads);
         _epicDownloads.JobChanged += job => OnUi(() => OnJobChanged(job));
         _epicDownloads.JobFinished += job => OnUi(() => OnJobFinished(job));
+        _itchDownloads.QueueChanged += () => OnUi(SyncDownloads);
+        _itchDownloads.JobChanged += job => OnUi(() => OnJobChanged(job));
+        _itchDownloads.JobFinished += job => OnUi(() => OnJobFinished(job));
+        Settings.ConfigureItch(SaveItchKeyAsync, ClearItchKey);
+        UpdateItchAccountText();
         _session.StateChanged += (state, message) => OnUi(() => OnSessionState(state, message));
 
         RebuildTagFilters();
@@ -637,6 +646,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             // Epic Games: juegos instalados según sus manifiestos locales (sin red).
             foreach (var epic in await Task.Run(EpicLibraryScanner.Scan)) Games.Add(CreateCard(epic));
             AddEpicOwned();
+            AddItchCards();
             foreach (var local in _library.LocalGames) Games.Add(CreateCard(local.ToEntry()));
             foreach (var g in Games) g.IsRunning = running.Contains(g.Entry.Id);
             ApplyRemoteUpdates();
@@ -661,6 +671,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
 
         if (_session.HasSavedSession) _ = RefreshOwnershipAsync();
         if (_epic.HasSession) _ = SyncEpicAccountAsync();
+        _ = SyncItchAccountAsync();
 
         // Iconos de la lista lateral (pequeños, casi siempre ya en la caché del cliente) y después las
         // portadas, uno a uno, sin bloquear la UI ni disparar picos de memoria.
@@ -1243,13 +1254,13 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     // Descargas nativas (IDownloadActions)
     // =====================================================================================
 
-    private IReadOnlyList<DownloadJob> AllJobs => [.. _downloads.Jobs, .. _epicDownloads.Jobs];
+    private IReadOnlyList<DownloadJob> AllJobs => [.. _downloads.Jobs, .. _epicDownloads.Jobs, .. _itchDownloads.Jobs];
 
     private void SyncDownloads()
     {
         var jobs = AllJobs;
         Downloads.SyncJobs(jobs);
-        foreach (var g in Games.Where(g => g.IsSteam || g.IsEpic))
+        foreach (var g in Games.Where(g => g.IsSteam || g.IsEpic || g.IsItch))
             g.SetJob(jobs.FirstOrDefault(j => j.GameKey == g.Entry.Id));
         GamesView.Refresh();
     }
@@ -1272,7 +1283,16 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
                 StatusText = $"{job.Name}: {JobText.Phase(job).ToLowerInvariant()} y listo para jugar.";
                 Notify(job.Kind == DownloadJobKind.Update ? "Actualización completada" : "Instalación completada",
                     $"{job.Name} está listo para jugar.");
-                if (job.IsEpic)
+                if (job.IsItch)
+                {
+                    if (ItchRegistry.ScanInstalled().FirstOrDefault(e => e.AppId == job.ItchKey) is { } itchEntry)
+                    {
+                        _itchOwned.RemoveAll(e => e.AppId == itchEntry.AppId);
+                        UpsertGame(itchEntry);
+                        _ = SyncItchAccountAsync();
+                    }
+                }
+                else if (job.IsEpic)
                 {
                     if (EpicLibraryScanner.Scan().FirstOrDefault(e => e.AppId == job.EpicAppName) is { } epicEntry)
                     {
@@ -1298,12 +1318,12 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
 
     public void PauseDownload(DownloadJob job)
     {
-        if (job.IsEpic) _epicDownloads.Pause(job); else _downloads.Pause(job);
+        if (job.IsItch) _itchDownloads.Pause(job); else if (job.IsEpic) _epicDownloads.Pause(job); else _downloads.Pause(job);
     }
 
     public void ResumeDownload(DownloadJob job)
     {
-        if (job.IsEpic) _epicDownloads.Resume(job); else _downloads.Resume(job);
+        if (job.IsItch) _itchDownloads.Resume(job); else if (job.IsEpic) _epicDownloads.Resume(job); else _downloads.Resume(job);
     }
 
     public void CancelDownload(DownloadJob job)
@@ -1312,12 +1332,12 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             ? $"¿Cancelar la instalación de «{job.Name}»? Se borrará lo descargado."
             : $"¿Cancelar la actualización de «{job.Name}»? Los archivos quedarán a medio actualizar hasta que vuelvas a actualizar.";
         if (!(Dialogs?.Confirm("Cancelar descarga", message) ?? false)) return;
-        if (job.IsEpic) _epicDownloads.Cancel(job); else _downloads.Cancel(job);
+        if (job.IsItch) _itchDownloads.Cancel(job); else if (job.IsEpic) _epicDownloads.Cancel(job); else _downloads.Cancel(job);
     }
 
-    public void PauseAllDownloads() { _downloads.PauseAll(); _epicDownloads.PauseAll(); }
+    public void PauseAllDownloads() { _downloads.PauseAll(); _epicDownloads.PauseAll(); _itchDownloads.PauseAll(); }
 
-    public void ResumeAllDownloads() { _downloads.ResumeAll(); _epicDownloads.ResumeAll(); }
+    public void ResumeAllDownloads() { _downloads.ResumeAll(); _epicDownloads.ResumeAll(); _itchDownloads.ResumeAll(); }
 
     public void PlayDownloaded(string gameKey)
     {
@@ -1343,6 +1363,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     private async Task EnqueueAsync(GameEntry entry, DownloadJobKind kind)
     {
         if (entry.Platform == GamePlatform.Epic) { await EnqueueEpicAsync(entry, kind); return; }
+        if (entry.Platform == GamePlatform.Itch) { await InstallItchAsync(entry); return; }
         if (entry.Platform != GamePlatform.Steam) return;
         if (!await EnsureSteamAccountAsync()) return;
 
@@ -1547,8 +1568,9 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
                 "(no van a la papelera). Las partidas en la nube y el tiempo jugado se conservan.") ?? false))
             return;
 
-        var error = card.IsEpic ? _epicDownloads.Uninstall(card.Entry) : _downloads.Uninstall(card.Entry);
-        if (error is null && card.IsEpic) _ = RefreshAsync(); // vuelve a «No instalado» con los de la cuenta
+        var error = card.IsItch ? _itchDownloads.Uninstall(card.Entry.AppId, card.Entry.InstallDir)
+                  : card.IsEpic ? _epicDownloads.Uninstall(card.Entry) : _downloads.Uninstall(card.Entry);
+        if (error is null && (card.IsEpic || card.IsItch)) _ = RefreshAsync(); // vuelve a «No instalado» con los de la cuenta
         StatusText = error ?? $"{card.Name} desinstalado.";
         if (error is not null) Notify("No se pudo desinstalar", error);
     }
@@ -1659,6 +1681,199 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             }
         }
         finally { _cloud.StatusChanged -= OnStatus; }
+    }
+
+    // =====================================================================================
+    // itch.io: cuenta (API), biblioteca, instalación con selector de versiones y descargas de la tienda
+    // =====================================================================================
+
+    /// <summary>Juegos de la cuenta de itch.io que no están instalados (última consulta).</summary>
+    private List<GameEntry> _itchOwned = [];
+
+    /// <summary>«autor/juego» a partir de la página del juego (https://autor.itch.io/juego).</summary>
+    private static string ItchKeyFromUrl(string url, string fallback)
+    {
+        if (Uri.TryCreate(url, UriKind.Absolute, out var u) && u.Host.EndsWith(".itch.io", StringComparison.OrdinalIgnoreCase))
+        {
+            var author = u.Host[..^".itch.io".Length];
+            var slug = u.AbsolutePath.Trim('/').Split('/').FirstOrDefault();
+            if (!string.IsNullOrEmpty(slug)) return $"{author}/{slug}".ToLowerInvariant();
+        }
+        var clean = new string(fallback.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+        return $"itch/{(clean.Length == 0 ? "juego" : clean)}";
+    }
+
+    private void AddItchCards()
+    {
+        foreach (var e in ItchRegistry.ScanInstalled())
+            if (Games.All(g => g.Entry.Id != e.Id)) Games.Add(CreateCard(e));
+        foreach (var e in _itchOwned)
+            if (Games.All(g => g.Entry.Id != e.Id)) Games.Add(CreateCard(e));
+    }
+
+    /// <summary>Biblioteca de la cuenta de itch.io (API) y portadas.</summary>
+    private async Task SyncItchAccountAsync()
+    {
+        try
+        {
+            if (_itch.HasKey)
+            {
+                var owned = await Task.Run(() => _itch.GetOwnedGamesAsync(MetadataToken));
+                if (owned is not null)
+                {
+                    var installed = ItchRegistry.Load();
+                    _itchOwned = owned
+                        // Juegos y programas (no recursos gráficos, bandas sonoras, libros ni cómics).
+                        .Where(g => g.Classification is null or "game" or "tool")
+                        .Select(g => new GameEntry
+                        {
+                            Id = GameEntry.MakeItchId(ItchKeyFromUrl(g.Url, g.Title)),
+                            Platform = GamePlatform.Itch,
+                            AppId = ItchKeyFromUrl(g.Url, g.Title),
+                            Name = g.Title,
+                            IsInstalled = false,
+                            ItchGameId = g.GameId,
+                            ItchDownloadKeyId = g.DownloadKeyId,
+                            ItchUrl = g.Url,
+                            ItchCoverUrl = g.CoverUrl,
+                        })
+                        .Where(e => installed.All(r => r.Key != e.AppId))
+                        .ToList();
+                    var before = Games.Count;
+                    AddItchCards();
+                    if (Games.Count != before) { SyncDownloads(); RebuildTagFilters(); RaiseLibraryTexts(); }
+                }
+                UpdateItchAccountText();
+            }
+            foreach (var card in Games.Where(g => g.IsItch && g.Entry.ItchCoverUrl is not null && !g.HasCover).ToList())
+            {
+                var url = card.Entry.ItchCoverUrl!;
+                var ext = Path.GetExtension(new Uri(url).AbsolutePath) is { Length: > 1 and < 6 } x ? x : ".png";
+                card.SetCover(await _art.LoadRemoteAsync(url, $"itch_cover_{card.Entry.AppId.Replace('/', '_')}{ext}", 180));
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { Log.Warn($"itch.io: no se pudo leer la biblioteca: {ex.Message}"); }
+    }
+
+    private void UpdateItchAccountText() =>
+        Settings.SetItchAccountState(_itch.HasKey
+            ? $"Vinculada{(_itch.UserName is { } u ? $" como {u}" : string.Empty)}. Tus juegos de itch.io aparecen en la biblioteca y se instalan sin su cliente."
+            : "Sin vincular. Pega tu clave de API de itch.io para ver tus juegos comprados en la biblioteca. La tienda integrada funciona igualmente.",
+            _itch.HasKey);
+
+    private async Task<string?> SaveItchKeyAsync(string key)
+    {
+        var error = await _itch.SetKeyAsync(key, CancellationToken.None);
+        UpdateItchAccountText();
+        if (error is null) { StatusText = "Cuenta de itch.io vinculada."; _ = SyncItchAccountAsync(); }
+        return error;
+    }
+
+    private void ClearItchKey()
+    {
+        _itch.ClearKey();
+        _itchOwned = [];
+        UpdateItchAccountText();
+        _ = RefreshAsync();
+    }
+
+    /// <summary>Instalar un juego de la cuenta: selector de versiones si hay varias de Windows (o no hay ninguna clara).</summary>
+    private async Task InstallItchAsync(GameEntry entry)
+    {
+        if (_itchDownloads.Find(entry.AppId) is not null) { CurrentView = AppView.Downloads; return; }
+        if (entry.ItchGameId is not { } gameId)
+        {
+            // Descargado antes desde la tienda: se reinstala desde su página.
+            if (entry.ItchUrl is { Length: > 0 } page) { Store.ShowItch(page); CurrentView = AppView.Store; }
+            return;
+        }
+        StatusText = $"Consultando las versiones de {entry.Name} en itch.io…";
+        var uploads = await Task.Run(() => _itch.GetUploadsAsync(gameId, entry.ItchDownloadKeyId, CancellationToken.None));
+        if (uploads.Count == 0)
+        {
+            StatusText = $"{entry.Name}: itch.io no ofrece archivos descargables (o la clave no da acceso).";
+            return;
+        }
+        ItchUpload? pick;
+        var windows = uploads.Where(u => u.Windows).ToList();
+        if (uploads.Count == 1) pick = uploads[0];
+        else
+        {
+            var dialog = new ItchBuildDialogViewModel(entry.Name, windows.Count > 0 ? uploads : uploads)
+            {
+                Banner = Games.FirstOrDefault(g => g.Entry.Id == entry.Id)?.Cover,
+            };
+            ItchBuildDialog = dialog;
+            try { pick = await dialog.Result; }
+            finally { ItchBuildDialog = null; }
+        }
+        if (pick is null) { StatusText = $"Instalación de {entry.Name} cancelada."; return; }
+        _itchDownloads.Enqueue(new ItchDownloadRequest
+        {
+            Key = entry.AppId,
+            Title = entry.Name,
+            Url = entry.ItchUrl ?? string.Empty,
+            CoverUrl = entry.ItchCoverUrl,
+            GameId = gameId,
+            DownloadKeyId = entry.ItchDownloadKeyId,
+            UploadId = pick.Id,
+            FileName = pick.FileName,
+            Size = pick.Size,
+        });
+        StatusText = $"{entry.Name} en la cola de descargas (itch.io, sin su cliente).";
+        SyncDownloads();
+        CurrentView = AppView.Downloads;
+    }
+
+    /// <summary>Descarga capturada en la tienda de itch.io: la hace Purgine.</summary>
+    public void DownloadFromItch(ItchCapturedDownload d) => OnUi(() =>
+    {
+        var title = CleanItchTitle(d.Title) ?? Path.GetFileNameWithoutExtension(d.FileName) ?? "Juego de itch.io";
+        var key = ItchKeyFromUrl(d.PageUrl, title);
+        var page = Uri.TryCreate(d.PageUrl, UriKind.Absolute, out var u) && u.Host.EndsWith(".itch.io", StringComparison.OrdinalIgnoreCase)
+            ? $"{u.Scheme}://{u.Host}/{key.Split('/').Last()}" : d.PageUrl;
+        var owned = _itchOwned.FirstOrDefault(g => g.AppId == key);
+        _itchDownloads.Enqueue(new ItchDownloadRequest
+        {
+            Key = key,
+            Title = owned?.Name ?? title,
+            Url = page,
+            CoverUrl = owned?.ItchCoverUrl ?? d.CoverUrl,
+            GameId = owned?.ItchGameId,
+            DownloadKeyId = owned?.ItchDownloadKeyId,
+            DirectUrl = d.Url,
+            FileName = d.FileName,
+            Size = d.Size,
+        });
+        StatusText = $"Descargando {title} con Purgine (itch.io). Lo verás en Descargas y en la biblioteca al terminar.";
+        Notify("itch.io", $"Descargando {title}…");
+        SyncDownloads();
+    });
+
+    /// <summary>«Juego by Autor» / «Download Juego by Autor» → «Juego».</summary>
+    private static string? CleanItchTitle(string? title)
+    {
+        if (string.IsNullOrWhiteSpace(title)) return null;
+        title = title.Trim();
+        if (title.StartsWith("Download ", StringComparison.OrdinalIgnoreCase)) title = title[9..];
+        var by = title.LastIndexOf(" by ", StringComparison.OrdinalIgnoreCase);
+        if (by > 0) title = title[..by];
+        return title.Trim();
+    }
+
+    // ----- Selector de versiones (superposición) -----
+
+    private ItchBuildDialogViewModel? _itchBuildDialog;
+
+    public ItchBuildDialogViewModel? ItchBuildDialog
+    {
+        get => _itchBuildDialog;
+        private set
+        {
+            if (!SetProperty(ref _itchBuildDialog, value)) return;
+            Store.IsCovered = value is not null || _installDialog is not null;
+        }
     }
 
     // ----- Contratos de licencia de Steam (superposición) -----
@@ -1857,7 +2072,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
 
     public void ViewInStore(GameCardViewModel card)
     {
-        if (card.IsEpic) Store.Navigate(StoreViewModel.EpicSearchUrl(card.Name));
+        if (card.IsItch && card.Entry.ItchUrl is { Length: > 0 } itchUrl) Store.ShowItch(itchUrl);
+        else if (card.IsEpic) Store.Navigate(StoreViewModel.EpicSearchUrl(card.Name));
         else Store.ShowApp(card.Entry.AppId);
         CurrentView = AppView.Store;
     }
@@ -1974,6 +2190,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         _detail?.Close();
         _downloads.Dispose();
         _epicDownloads.Dispose();
+        _itchDownloads.Dispose();
+        _itch.Dispose();
         _saveSettings.Flush();
         _saveSettings.Dispose();
         _watcher.Dispose();

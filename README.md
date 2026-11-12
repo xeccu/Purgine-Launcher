@@ -283,6 +283,25 @@ marcan y no se pueden elegir.
   «Nube más reciente», «Conflicto», «Lo gestiona el juego» (los que guardan en sus propios servidores o con EOS)
   o «Sin conexión». Con un clic: elegir, abrir o restablecer la carpeta de partidas y abrir las copias.
 
+### 10. itch.io (`ItchNet/`)
+
+Sin el cliente de itch, con la misma filosofía que Steam y Epic:
+
+- **Tienda**: «itch.io» es la tercera tienda del selector de la pestaña Tienda (el mismo navegador y su sesión, que se
+  inicia una sola vez). Las descargas que empiezas en la web (gratuitas o compradas) se capturan con
+  `CoreWebView2.DownloadStarting` desde `*.itch.io` / `*.itch.zone` / `*.hwcdn.net`: se cancela la del navegador
+  (no aparece el gestor de descargas) y la hace Purgine.
+- **Biblioteca**: con tu **clave de API** (Ajustes → «Cuenta de itch.io»; se crea en itch.io → Ajustes → Claves de API
+  y se guarda cifrada con DPAPI) aparecen tus juegos comprados o reclamados (`api.itch.io/profile/owned-keys`) con
+  el distintivo **ITCH**, su portada e **INSTALAR**. El filtro «Launcher» incluye itch.io automáticamente.
+- **Selector de versiones**: si el juego tiene varios archivos (`/games/{id}/uploads`: Windows 64 / 32 bits,
+  portable, Linux…), se elige cuál; las de Windows primero.
+- **Instalación**: cola en Descargas con progreso, pausar/reanudar (continúa con `Range`) y cancelar. Cada juego va a
+  su carpeta en `ItchLibrary\`; los `.zip` se descomprimen con .NET y los `.7z` / `.rar` / `.tar.*` con 7-Zip (si
+  está instalado) o con el `tar.exe` de Windows; el comprimido se borra y se busca el ejecutable principal
+  (descartando desinstaladores, crash handlers, redistribuibles e instaladores de requisitos). El juego queda
+  **Instalado y listo para jugar**, con su tiempo de juego, y se puede desinstalar desde Purgine.
+
 ### Otras funciones
 
 - **Tiempo jugado**: histórico de Steam (`localconfig.vdf`) más las sesiones locales que Steam aún no ha
@@ -330,6 +349,7 @@ Todo en `%LocalAppData%\Purgine\` (botón «Abrir carpeta de datos» en Ajustes)
 | `epic-session.bin` | Refresh token de Epic Games cifrado con DPAPI (nunca la contraseña) |
 | `epic-installs.json` · `epic-download-queue.json` · `epic-builds.json` | Juegos de Epic instalados por Purgine, su cola de descargas y la caché de builds/tamaños |
 | `save-paths.json` · `save-backups\` | Carpetas de partidas elegidas a mano y copias comprimidas de las partidas |
+| `itch-key.bin` · `itch-installs.json` · `itch-download-queue.json` · `ItchLibrary\` | Clave de API de itch.io (DPAPI), juegos instalados, cola de descargas y carpeta de los juegos de itch.io |
 | `cloud-sync.json` | Última sincronización con la nube de Epic de cada juego (para detectar conflictos como Steam) |
 | `steam-config-backups\` | Copias de `localconfig.vdf` de Steam hechas antes de anotar un contrato aceptado (las 10 últimas) |
 | `game-notes.json` | Notas y reseñas personales por juego (solo locales) |

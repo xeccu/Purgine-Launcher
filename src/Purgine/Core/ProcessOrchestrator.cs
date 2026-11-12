@@ -121,7 +121,7 @@ public sealed class ProcessOrchestrator
     public Task<LaunchResult> LaunchAsync(GameEntry game, CancellationToken ct = default) => game.Platform switch
     {
         GamePlatform.Steam => LaunchSteamGameAsync(game, ct),
-        GamePlatform.Local => LaunchLocalGameAsync(game, ct),
+        GamePlatform.Local or GamePlatform.Itch => LaunchLocalGameAsync(game, ct),
         GamePlatform.Epic => LaunchEpicGameAsync(game, ct),
         _ => Task.FromResult(new LaunchResult(false, $"Plataforma no soportada: {game.Platform}")),
     };

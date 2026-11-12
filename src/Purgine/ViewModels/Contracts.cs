@@ -37,6 +37,9 @@ public interface IStoreActions
     /// </summary>
     void PlayOrInstallFromStore(string appId, string? name, bool installOnly);
 
+    /// <summary>Descarga de itch.io capturada en la tienda integrada: la hace Purgine (cola, descompresión, biblioteca).</summary>
+    void DownloadFromItch(ItchCapturedDownload download);
+
     void ReportStatus(string text);
 }
 
@@ -53,3 +56,6 @@ public interface IDialogService
     void ShowGameProperties(GamePropertiesViewModel properties);
     bool Confirm(string title, string message);
 }
+
+/// <summary>Descarga de itch.io capturada en el navegador: enlace firmado, archivo, página del juego, título, portada y tamaño.</summary>
+public sealed record ItchCapturedDownload(string Url, string? FileName, string PageUrl, string? Title, string? CoverUrl, long Size);

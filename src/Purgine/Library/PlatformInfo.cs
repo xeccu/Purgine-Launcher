@@ -15,6 +15,7 @@ public static class PlatformRegistry
     {
         [GamePlatform.Steam] = new(GamePlatform.Steam, "Steam", "STEAM", Frozen("#CC10263F")),
         [GamePlatform.Epic] = new(GamePlatform.Epic, "Epic Games", "EPIC", Frozen("#E6202020")),
+        [GamePlatform.Itch] = new(GamePlatform.Itch, "itch.io", "ITCH", Frozen("#E6FA5C5C")),
         [GamePlatform.Local] = new(GamePlatform.Local, "Local", "LOCAL", Frozen("#CC0E1014")),
     };
 

@@ -22,6 +22,9 @@
                                          FontSize="12" Content="Steam" IsChecked="{Binding IsSteamStore, Mode=TwoWay}" />
                             <RadioButton Style="{StaticResource IconToggle}" GroupName="StoreKind" FontFamily="Segoe UI Variable Text, Segoe UI"
                                          FontSize="12" Content="Epic Games" IsChecked="{Binding IsEpicStore, Mode=TwoWay}" />
+                            <RadioButton Style="{StaticResource IconToggle}" GroupName="StoreKind" FontFamily="Segoe UI Variable Text, Segoe UI"
+                                         FontSize="12" Content="itch.io" IsChecked="{Binding IsItchStore, Mode=TwoWay}"
+                                         ToolTip="itch.io: lo que descargues aquí lo instala Purgine (sin el cliente de itch)" />
                         </StackPanel>
                     </Border>
                     <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">

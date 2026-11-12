@@ -250,6 +250,12 @@
             <views:InstallDialogView DataContext="{Binding InstallDialog}" />
         </Grid>
 
+        <!-- ===== Selector de versiones de itch.io (superposición) ===== -->
+        <Grid Grid.ColumnSpan="2" Panel.ZIndex="100"
+              Visibility="{Binding ItchBuildDialog, Converter={StaticResource NullToVis}}">
+            <views:ItchBuildDialogView DataContext="{Binding ItchBuildDialog}" />
+        </Grid>
+
         <!-- ===== Contrato de licencia de Steam (superposición) ===== -->
         <Grid Grid.ColumnSpan="2" Panel.ZIndex="102"
               Visibility="{Binding EulaDialog, Converter={StaticResource NullToVis}}">

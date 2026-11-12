@@ -17,41 +17,65 @@ public sealed class StoreViewModel : ObservableObject
 {
     public const string HomeUrl = "https://store.steampowered.com/?l=spanish";
     public const string EpicHomeUrl = "https://store.epicgames.com/es-ES/";
+    public const string ItchHomeUrl = "https://itch.io/";
 
     /// <summary>Búsqueda en Epic Games Store (Epic no ofrece un catálogo público para enlazar la ficha exacta).</summary>
     public static string EpicSearchUrl(string name) => $"https://store.epicgames.com/es-ES/browse?q={Uri.EscapeDataString(name)}";
 
-    private bool _isEpicStore;
+    /// <summary>Tienda mostrada: Steam, Epic Games Store o itch.io (el mismo navegador, para no duplicar procesos).</summary>
+    public enum StoreKind { Steam, Epic, Itch }
 
-    /// <summary>Tienda mostrada: Steam o Epic Games Store (el mismo navegador, para no duplicar procesos).</summary>
-    public bool IsEpicStore
+    private StoreKind _kind;
+
+    public StoreKind Kind
     {
-        get => _isEpicStore;
+        get => _kind;
         set
         {
-            if (!SetProperty(ref _isEpicStore, value)) return;
-            OnPropertyChanged(nameof(IsSteamStore));
+            if (!SetProperty(ref _kind, value)) return;
+            RaiseKind();
             Navigate(CurrentHomeUrl);
         }
     }
 
-    public bool IsSteamStore { get => !_isEpicStore; set => IsEpicStore = !value; }
+    private void RaiseKind()
+    {
+        OnPropertyChanged(nameof(IsSteamStore));
+        OnPropertyChanged(nameof(IsEpicStore));
+        OnPropertyChanged(nameof(IsItchStore));
+    }
 
-    public string CurrentHomeUrl => _isEpicStore ? EpicHomeUrl : HomeUrl;
+    public bool IsSteamStore { get => _kind == StoreKind.Steam; set { if (value) Kind = StoreKind.Steam; } }
+    public bool IsEpicStore { get => _kind == StoreKind.Epic; set { if (value) Kind = StoreKind.Epic; } }
+    public bool IsItchStore { get => _kind == StoreKind.Itch; set { if (value) Kind = StoreKind.Itch; } }
 
-    /// <summary>La página actual pertenece a Epic: el selector se ajusta sin recargar.</summary>
+    public string CurrentHomeUrl => _kind switch { StoreKind.Epic => EpicHomeUrl, StoreKind.Itch => ItchHomeUrl, _ => HomeUrl };
+
+    /// <summary>La página actual pertenece a otra tienda: el selector se ajusta sin recargar.</summary>
     public void SyncStoreFromUrl(string? url)
     {
-        if (url is null || !url.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return;
-        var epic = url.Contains("epicgames.com", StringComparison.OrdinalIgnoreCase);
-        var steam = url.Contains("steampowered.com", StringComparison.OrdinalIgnoreCase) || url.Contains("steamcommunity.com", StringComparison.OrdinalIgnoreCase);
-        if ((epic && !_isEpicStore) || (steam && _isEpicStore))
+        if (url is null || !Uri.TryCreate(url, UriKind.Absolute, out var u) || !u.Scheme.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return;
+        StoreKind? kind = u.Host.EndsWith("epicgames.com", StringComparison.OrdinalIgnoreCase) ? StoreKind.Epic
+            : u.Host.EndsWith("itch.io", StringComparison.OrdinalIgnoreCase) ? StoreKind.Itch
+            : u.Host.EndsWith("steampowered.com", StringComparison.OrdinalIgnoreCase) || u.Host.EndsWith("steamcommunity.com", StringComparison.OrdinalIgnoreCase) ? StoreKind.Steam
+            : null;
+        if (kind is { } k && k != _kind)
         {
-            _isEpicStore = epic;
-            OnPropertyChanged(nameof(IsEpicStore));
-            OnPropertyChanged(nameof(IsSteamStore));
+            _kind = k;
+            RaiseKind();
         }
     }
+
+    /// <summary>Abre una página de itch.io en la tienda.</summary>
+    public void ShowItch(string url)
+    {
+        _kind = StoreKind.Itch;
+        RaiseKind();
+        Navigate(url);
+    }
+
+    /// <summary>La vista capturó una descarga de itch.io.</summary>
+    public void CaptureItchDownload(ItchCapturedDownload download) => _actions.DownloadFromItch(download);
 
     private readonly IStoreActions _actions;
     private bool _isActive;

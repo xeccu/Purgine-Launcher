@@ -36,6 +36,12 @@ public static class AppPaths
     public static string CloudSyncFile => Path.Combine(DataDir, "cloud-sync.json");
     /// <summary>Copias de localconfig.vdf de Steam antes de anotar un contrato aceptado.</summary>
     public static string SteamConfigBackupDir => Path.Combine(DataDir, "steam-config-backups");
+    /// <summary>Juegos de itch.io (cada uno en su carpeta) y descargas parciales.</summary>
+    public static string ItchLibraryDir => Path.Combine(DataDir, "ItchLibrary");
+    public static string ItchInstallsFile => Path.Combine(DataDir, "itch-installs.json");
+    public static string ItchQueueFile => Path.Combine(DataDir, "itch-download-queue.json");
+    /// <summary>Clave de API de itch.io cifrada con DPAPI.</summary>
+    public static string ItchKeyFile => Path.Combine(DataDir, "itch-key.bin");
     public static string SaveBackupsDir => Path.Combine(DataDir, "save-backups");
     public static string EpicOwnershipDir => Path.Combine(DataDir, "epic-ovt");
     /// <summary>Notas y reseñas personales por juego (solo locales).</summary>
