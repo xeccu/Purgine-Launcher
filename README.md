@@ -301,6 +301,9 @@ Sin el cliente de itch, con la misma filosofía que Steam y Epic:
   portable, Linux…), se elige cuál; las de Windows primero.
   Si la API no da sus archivos (sin clave, o juegos gratis / «paga lo que quieras»), se leen de su página de descargas
   (`/download_url` → `/download/<token>`, `data-upload_id`) y se pide el enlace firmado como el botón de la web.
+- **Dónde instalar**: al instalar (desde la biblioteca o desde la tienda) aparece el mismo diálogo que en Steam y Epic, con
+  cada unidad y su espacio libre (`%LocalAppData%\Purgine\ItchLibrary` en la del sistema, `X:\Purgine\ItchLibrary` en
+  las demás) y «Examinar otra carpeta…». La elección se recuerda y la carpeta se crea si no existe.
 - **Instalación**: cola en Descargas con progreso, pausar/reanudar (continúa con `Range`) y cancelar. Cada juego va a
   su carpeta en `ItchLibrary\`; los `.zip` se descomprimen con .NET y los `.7z` / `.rar` / `.tar.*` con 7-Zip (si
   está instalado) o con el `tar.exe` de Windows; el comprimido se borra y se busca el ejecutable principal
