@@ -48,6 +48,35 @@ public static class ShortcutWriter
         }
     }
 
+    /// <summary>Acceso directo al propio launcher (menú Inicio / Escritorio) con el icono del .exe.</summary>
+    public static bool CreateAppShortcut(string lnkPath, string exe, string description)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(lnkPath)!);
+            var link = (IShellLinkW)new ShellLink();
+            try
+            {
+                link.SetPath(exe);
+                link.SetWorkingDirectory(Path.GetDirectoryName(exe)!);
+                link.SetDescription(description);
+                link.SetIconLocation(exe, 0);
+                ((IPersistFile)link).Save(lnkPath, true);
+            }
+            finally
+            {
+                Marshal.FinalReleaseComObject(link);
+            }
+            Log.Info($"Acceso directo creado: {lnkPath}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"No se pudo crear el acceso directo {lnkPath}: {ex.Message}");
+            return false;
+        }
+    }
+
     private static string SafeFileName(string name)
     {
         foreach (var c in Path.GetInvalidFileNameChars()) name = name.Replace(c, ' ');

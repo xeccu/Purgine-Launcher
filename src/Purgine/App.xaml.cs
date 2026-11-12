@@ -29,6 +29,13 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // El mismo .exe es el instalador (Purgine-Setup-*.exe), el actualizador (--update) y el desinstalador.
+        if (Updates.SetupRequest.FromArgs(e.Args) is { } setup)
+        {
+            RunSetup(setup);
+            return;
+        }
+
         var runAppId = ParseRunArgument(e.Args);
         WaitForPreviousInstance(e.Args);
         _singleInstance = new Mutex(initiallyOwned: true, MutexName, out var isFirst);
@@ -58,7 +65,7 @@ public partial class App : Application
 
         AppPaths.EnsureCreated();
         Log.Init(AppPaths.LogFile);
-        Log.Info($"Purgine {typeof(App).Assembly.GetName().Version} iniciado. Datos: {AppPaths.DataDir}");
+        Log.Info($"Purgine {AppVersion.Display} iniciado. Datos: {AppPaths.DataDir}");
         HookGlobalErrorHandlers();
 
         var settings = JsonFileStore.LoadOrCreate<LauncherSettings>(AppPaths.SettingsFile);
@@ -133,6 +140,38 @@ public partial class App : Application
             catch (ArgumentException) { /* ya terminó */ }
             catch (InvalidOperationException) { }
         }
+    }
+
+    /// <summary>Modo instalador / actualizador / desinstalador: solo su ventana, sin instancia única ni servicios.</summary>
+    private async void RunSetup(Updates.SetupRequest setup)
+    {
+        Log.Init(Path.Combine(Path.GetTempPath(), "purgine-setup.log"));
+        Log.Info($"Instalador de Purgine {AppVersion.Display}: {setup}");
+        GraphicsTheme.Apply(GraphicsPreset.High);
+        GraphicsTheme.ApplySkin(UiSkin.Steam);
+        if (setup is { Mode: Updates.SetupMode.Install, Silent: true })
+        {
+            Shutdown(await Views.SetupWindow.RunSilentInstallAsync());
+            return;
+        }
+        var window = new Views.SetupWindow(setup);
+        window.Closed += (_, _) => Shutdown();
+        MainWindow = window;
+        window.Show();
+    }
+
+    /// <summary>
+    /// Auto-actualización: abre el instalador descargado en modo <c>--update</c>. Espera a que este proceso termine,
+    /// reemplaza el ejecutable y vuelve a abrir Purgine.
+    /// </summary>
+    public static void StartUpdater(string setupPath)
+    {
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(setupPath,
+            $"--update --wait-pid {Environment.ProcessId} --target \"{Environment.ProcessPath}\"")
+        {
+            UseShellExecute = false,
+            WorkingDirectory = Path.GetDirectoryName(setupPath)!,
+        })?.Dispose();
     }
 
     /// <summary>Reinicia Purgine con el perfil activo nuevo (lo llama la ventana tras guardar todo).</summary>

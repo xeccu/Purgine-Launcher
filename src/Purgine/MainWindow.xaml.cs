@@ -59,6 +59,18 @@ public partial class MainWindow : Window, IDialogService
         Deactivated += (_, _) => _idleTrim.Start();
         Activated += (_, _) => _idleTrim.Stop();
         Loaded += async (_, _) => await _vm.RefreshAsync();
+        Loaded += (_, _) => _ = _vm.Updates.CheckOnStartupAsync();
+        // Auto-actualización: se cierra Purgine guardando todo y el instalador descargado hace el resto.
+        _vm.Updates.InstallRequested += (_, setupPath) =>
+        {
+            _pendingUpdate = setupPath;
+            ExitApplication();
+            if (!_closed)
+            {
+                _pendingUpdate = null;
+                _vm.Updates.InstallCancelled();
+            }
+        };
         StateChanged += OnStateChanged;
 
         // Al lanzar un juego se minimiza a la barra de tareas (como el botón de minimizar).
@@ -162,6 +174,9 @@ public partial class MainWindow : Window, IDialogService
         timer.Start();
     }
 
+    private string? _pendingUpdate;
+    private bool _closed;
+
     private void ExitApplication()
     {
         _exitRequested = true;
@@ -196,9 +211,15 @@ public partial class MainWindow : Window, IDialogService
 
     protected override void OnClosed(EventArgs e)
     {
+        _closed = true;
         _vm.Shutdown();
         _tray?.Dispose();
         _tray = null;
+        if (_pendingUpdate is not null)
+        {
+            try { App.StartUpdater(_pendingUpdate); }
+            catch (Exception ex) { Log.Error("No se pudo abrir el instalador de la actualización", ex); }
+        }
         base.OnClosed(e);
         Application.Current.Shutdown();
     }

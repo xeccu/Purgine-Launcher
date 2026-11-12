@@ -105,6 +105,25 @@
             </Setter>
         </Style>
 
+        <!-- Botón con aspecto de enlace (acciones secundarias) -->
+        <Style x:Key="LinkButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <ContentPresenter Margin="0,2" RecognizesAccessKey="True" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- Botón de icono (glifo Segoe) -->
         <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
             <Setter Property="FontFamily" Value="{StaticResource IconFont}" />

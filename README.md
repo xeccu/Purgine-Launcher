@@ -1,22 +1,69 @@
-# Purgine
+<p align="center">
+  <img src="docs/logo.png" width="128" alt="Logotipo de Purgine" />
+</p>
 
-**Purgine Launcher** es un launcher de videojuegos ultraligero para Windows (código visible, todos los derechos reservados). Gestiona tu biblioteca de Steam
-—licencias, descargas, actualizaciones y desinstalaciones— **hablando directamente con los servidores de
-Steam**, sin abrir el cliente de escritorio. El cliente oficial solo se despierta para **jugar** y se cierra
-al terminar.
+<h1 align="center">Purgine</h1>
 
-> **No es un emulador de DRM ni un crack.** Los juegos se siguen ejecutando a través del cliente oficial
-> de Steam, que valida la licencia. Purgine solo decide *cuándo* está abierto y se ocupa del resto.
+<p align="center">
+  <b>Launcher de videojuegos ligero para Windows: Steam, Epic Games e itch.io en una sola biblioteca.</b><br/>
+  <a href="https://github.com/xeccu/Purgine-Launcher/releases/latest">Descargar para Windows</a> ·
+  <a href="https://xccstudios.es">xccstudios.es</a>
+</p>
 
-## Requisitos
+> **Estado: Alpha (v0.1.0-alpha).** Es la primera versión pública: funciona a diario, pero puede tener fallos.
+> Si encuentras uno, abre un *issue* en este repositorio.
+
+**Purgine Launcher** reúne tus juegos de **Steam**, **Epic Games** e **itch.io** en una biblioteca rápida y de bajo
+consumo (código visible, todos los derechos reservados). Gestiona licencias, descargas, actualizaciones y
+desinstalaciones **hablando directamente con los servidores de cada tienda**, sin tener abiertos sus clientes: el
+cliente oficial de Steam solo se despierta para **jugar** y se cierra al terminar.
+
+> **No es un emulador de DRM ni un crack.** Los juegos de Steam se siguen ejecutando a través del cliente oficial,
+> que valida la licencia; los de Epic usan los tokens oficiales de tu cuenta. Purgine solo decide *cuándo* está
+> abierto cada cliente y se ocupa del resto.
+
+## Funciones principales
+
+- **Tres tiendas, una biblioteca**: Steam (SteamKit2, sin cliente), Epic Games (descargas, actualizaciones, logros
+  y partidas en la nube) e itch.io (tienda, biblioteca, selector de versiones e instalación sin su cliente), más
+  ejecutables propios.
+- **4 estilos visuales**: Steam o Epic Games, cada uno en modo Moderno (efectos, desenfoques) u Optimizado
+  (plano y mínimo consumo).
+- **Perfiles locales** (hasta 5) con foto y nombre: cada uno con sus cuentas, ajustes, tiempo jugado y sesión del
+  navegador; los juegos instalados se comparten.
+- **Contratos de licencia (EULA) de Steam integrados**: se muestran y aceptan dentro de Purgine, sin abrir la
+  ventana de Steam.
+- **Canje de claves** de Steam y Epic Games desde la pestaña «Canjear».
+- **Nube como el cliente oficial**: sincronización de partidas de Steam y Epic con resolución de conflictos.
+- **Auto-actualizador**: al iniciar busca versiones nuevas en GitHub Releases y se actualiza solo con un clic.
+- **Bajo consumo**: ~10 MB en la bandeja del sistema y compactación de memoria en segundo plano.
+
+## Instalación en Windows
+
+1. Descarga **`Purgine-Setup-v0.1.0-alpha.exe`** desde la [última Release](https://github.com/xeccu/Purgine-Launcher/releases/latest).
+2. Ábrelo y pulsa **Instalar**. Se instala solo para tu usuario, **sin permisos de administrador**, en
+   `%LocalAppData%\Programs\Purgine`, con accesos directos en el menú Inicio y (opcional) el Escritorio.
+3. Purgine se abre al terminar. Las siguientes versiones se instalan solas desde el aviso «Nueva versión
+   disponible» → **Actualizar ahora** (o en Ajustes → Actualizaciones → Buscar actualizaciones).
+
+> Windows SmartScreen puede avisar de que el instalador es de un editor poco conocido (aún no está firmado
+> digitalmente): pulsa «Más información» → «Ejecutar de todas formas».
+
+- **No hace falta instalar .NET**: el ejecutable es autocontenido (incluye el runtime de .NET 10).
+- **Desinstalar**: Configuración de Windows → Aplicaciones → Aplicaciones instaladas → Purgine → Desinstalar. Puedes
+  conservar tus datos (`%LocalAppData%\Purgine`) o borrarlos; los juegos instalados no se tocan.
+- **Instalación desatendida** (scripts): `Purgine-Setup-v0.1.0-alpha.exe --install --silent`.
+
+### Requisitos
 
 - Windows 10/11 (x64)
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) para compilar (`winget install Microsoft.DotNet.SDK.10`)
-- Steam instalado (para jugar)
-- Microsoft Edge WebView2 Runtime para la pestaña Tienda (viene con Windows 11; en Windows 10 se instala gratis)
-- Una cuenta de Steam (para ver la biblioteca completa y descargar)
+- Steam instalado (para jugar a los juegos de Steam)
+- Microsoft Edge WebView2 Runtime para las tiendas (viene con Windows 11; en Windows 10 se instala gratis)
+- Cuentas de Steam / Epic Games / itch.io para ver tus bibliotecas completas y descargar
 
-## Compilar y ejecutar
+## Compilar desde el código
+
+Necesitas el [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (`winget install Microsoft.DotNet.SDK.10`).
 
 ```bash
 dotnet build
@@ -29,11 +76,35 @@ dotnet run --project src/Purgine
 El repositorio incluye un `nuget.config` con nuget.org, así que restaura los paquetes aunque el equipo no
 tenga orígenes de NuGet configurados.
 
-Ejecutable autocontenido de un solo archivo:
+### Versión de lanzamiento e instalador
 
 ```bash
-dotnet publish src/Purgine -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish
+powershell -ExecutionPolicy Bypass -File build/release.ps1
 ```
+
+Publica con el perfil `src/Purgine/Properties/PublishProfiles/win-x64.pubxml` (autocontenido, un solo archivo) y deja
+en `dist/` el instalador `Purgine-Setup-v<versión>.exe` y su `SHA256SUMS.txt`. La versión sale de
+`Directory.Build.props` (`VersionPrefix` + `VersionSuffix`).
+
+**Cómo funciona el instalador**: es el propio `Purgine.exe`. Si el archivo se llama `Purgine-Setup-*.exe` (o recibe
+`--install`), muestra el asistente de instalación; con `--update` hace la actualización desatendida y con
+`--uninstall`, la desinstalación (`Updates/AppInstaller.cs`, `Views/SetupWindow.xaml`). Así no hace falta ninguna
+herramienta externa (Inno Setup, MSI…) y lo que se instala es exactamente lo que se ha probado.
+
+**Cómo publicar una versión**: sube `VersionPrefix`/`VersionSuffix`, ejecuta `build/release.ps1` y crea una Release en
+GitHub con la etiqueta `v<versión>` (p. ej. `v0.1.1-alpha`) adjuntando `Purgine-Setup-v<versión>.exe`. Las copias
+instaladas la verán al iniciar.
+
+### Auto-actualizador (`Updates/UpdateService.cs`, `ViewModels/UpdateViewModel.cs`)
+
+- Al iniciar (si está activado en Ajustes) consulta en segundo plano las Releases de
+  `github.com/xeccu/Purgine-Launcher` y compara su etiqueta (versionado semántico, con alfas y betas) con la
+  versión del ejecutable.
+- Si hay una mayor, muestra el aviso con las novedades de la Release, «Actualizar ahora», «Más tarde» y «Omitir esta
+  versión».
+- «Actualizar ahora» descarga el instalador con barra de progreso y comprueba su tamaño y su SHA-256 (el que publica
+  GitHub). Después Purgine se cierra guardando todo, el instalador espera a que termine, reemplaza el ejecutable
+  y vuelve a abrir Purgine ya actualizado. Si algo falla, la versión anterior queda intacta.
 
 ## Arquitectura
 
@@ -350,10 +421,13 @@ Sin el cliente de itch, con la misma filosofía que Steam y Epic:
 Purgine.sln · nuget.config · Directory.Build.props
 src/Purgine/
 ├─ SteamNet/        Red de Steam (SteamKit2): sesión, propiedad, motor de depots, cola, registro en Steam
+├─ EpicNet/         Epic Games: cuenta, biblioteca, descargas por manifiesto, logros y nube
+├─ ItchNet/         itch.io: API, tienda, descargas e instalación
 ├─ Core/            Orquestador de partidas, vigilancia de procesos, limitador de Steam, ventana de Steam
 ├─ Library/         Escáner de manifiestos locales, VDF/appinfo, tiempo de Steam, arte, etiquetas, ejecutables locales
 ├─ Stats/           Tiempo jugado
 ├─ Settings/        Ajustes (settings.json)
+├─ Updates/         Auto-actualizador (GitHub Releases) e instalador / desinstalador
 ├─ Infrastructure/  Rutas, log, JSON atómico, P/Invoke, bandeja, imágenes
 ├─ ViewModels/ · Views/   Interfaz WPF (MVVM, sin dependencias externas)
 ```

@@ -1,0 +1,84 @@
+<UserControl x:Class="Purgine.Views.UpdateDialogView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:infra="clr-namespace:Purgine.Infrastructure">
+    <Grid Background="#B3050608">
+        <Border Width="520" HorizontalAlignment="Center" VerticalAlignment="Center" infra:Fx.FadeIn="True"
+                Background="#FF1E222C" CornerRadius="{DynamicResource PanelCornerRadius}"
+                BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="{DynamicResource PanelBorderThickness}"
+                Effect="{DynamicResource ActionBarEffect}">
+            <Grid>
+                <Border Height="2" VerticalAlignment="Top" Background="{DynamicResource PlayButtonBrush}" CornerRadius="{DynamicResource PanelCornerRadius}" />
+                <StackPanel Margin="24,20,24,22">
+                    <!-- Cabecera -->
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE711;" FontSize="11" Padding="7"
+                                BorderBrush="Transparent" VerticalAlignment="Top" Command="{Binding LaterCommand}" ToolTip="Más tarde" />
+                        <Image DockPanel.Dock="Left" Source="/Assets/logo-mark-light.png" Width="48" Height="48" Margin="0,0,14,0"
+                               RenderOptions.BitmapScalingMode="HighQuality" VerticalAlignment="Center" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="Nueva versión de Purgine disponible" FontSize="19" FontWeight="SemiBold" TextWrapping="Wrap" />
+                            <TextBlock Foreground="{StaticResource MutedBrush}" FontSize="12" Margin="0,3,0,0">
+                                <Run Text="{Binding NewVersion, Mode=OneWay, StringFormat=Versión {0}}" Foreground="{StaticResource TextBrush}" FontWeight="SemiBold" />
+                                <Run Text="{Binding CurrentVersion, Mode=OneWay, StringFormat=· tienes la {0}}" />
+                            </TextBlock>
+                        </StackPanel>
+                    </DockPanel>
+                    <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,16,0,14" />
+
+                    <!-- Novedades -->
+                    <DockPanel Margin="0,0,0,8">
+                        <TextBlock DockPanel.Dock="Right" Foreground="{StaticResource MutedBrush}" FontSize="11" VerticalAlignment="Center">
+                            <Run Text="{Binding PublishedText, Mode=OneWay}" />
+                            <Run Text="{Binding SizeText, Mode=OneWay, StringFormat=· {0}}" />
+                        </TextBlock>
+                        <TextBlock Text="NOVEDADES" FontSize="11" FontWeight="Bold" Foreground="{StaticResource MutedBrush}" />
+                    </DockPanel>
+                    <Border Background="#14FFFFFF" CornerRadius="8" Padding="14,10">
+                        <ScrollViewer MaxHeight="240" VerticalScrollBarVisibility="Auto">
+                            <Grid>
+                                <TextBlock Text="{Binding Notes}" TextWrapping="Wrap" LineHeight="20" FontSize="13"
+                                           Visibility="{Binding HasNotes, Converter={StaticResource BoolToVis}}" />
+                                <TextBlock Text="Esta versión no incluye notas de cambios." Foreground="{StaticResource MutedBrush}"
+                                           Visibility="{Binding HasNotes, Converter={StaticResource InverseBoolToVis}}" />
+                            </Grid>
+                        </ScrollViewer>
+                    </Border>
+                    <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Margin="0,8,0,0"
+                            Command="{Binding OpenReleasesCommand}" Content="Ver la versión en GitHub" />
+
+                    <!-- Descarga -->
+                    <StackPanel Margin="0,14,0,0" Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="{Binding ProgressText}" FontSize="12" Foreground="{StaticResource MutedBrush}" />
+                        <ProgressBar Style="{StaticResource SlimProgress}" Value="{Binding Progress, Mode=OneWay}" Margin="0,8,0,0" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding Error}" Foreground="{StaticResource DangerBrush}" TextWrapping="Wrap" Margin="0,12,0,0"
+                               Visibility="{Binding Error, Converter={StaticResource NullToVis}}" />
+
+                    <!-- Acciones -->
+                    <DockPanel Margin="0,20,0,0">
+                        <Button DockPanel.Dock="Left" Style="{StaticResource LinkButton}" VerticalAlignment="Center"
+                                Command="{Binding SkipCommand}" Content="Omitir esta versión"
+                                Visibility="{Binding IsDownloading, Converter={StaticResource InverseBoolToVis}}" />
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Style="{StaticResource GhostButton}" Command="{Binding LaterCommand}" Margin="0,0,8,0" Padding="16,10"
+                                    Visibility="{Binding IsDownloading, Converter={StaticResource InverseBoolToVis}}">
+                                <TextBlock Text="Más tarde" FontWeight="SemiBold" />
+                            </Button>
+                            <Button Style="{StaticResource GhostButton}" Command="{Binding CancelDownloadCommand}" Margin="0,0,8,0" Padding="16,10"
+                                    Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="Cancelar" FontWeight="SemiBold" />
+                            </Button>
+                            <Button Style="{StaticResource PrimaryButton}" Command="{Binding UpdateNowCommand}" Padding="18,10" IsDefault="True">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE896;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                    <TextBlock Text="Actualizar ahora" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </DockPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

@@ -9,6 +9,14 @@ namespace Purgine.Infrastructure;
 /// </summary>
 public static class ShellOpen
 {
+    /// <summary>Abre una dirección web https en el navegador predeterminado.</summary>
+    public static void Url(string url)
+    {
+        if (!url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return;
+        try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true })?.Dispose(); }
+        catch (Exception ex) { Log.Warn($"No se pudo abrir {url}: {ex.Message}"); }
+    }
+
     /// <summary>
     /// Abre una carpeta (o la que contiene un archivo, con el archivo seleccionado). Devuelve null si se abrió, o el
     /// motivo si no.

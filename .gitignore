@@ -4,6 +4,7 @@ obj/
 *_wpftmp.csproj
 publish/
 artifacts/
+dist/
 
 # IDE
 .vs/
@@ -15,6 +16,9 @@ artifacts/
 # Datos locales en modo portable
 data/
 portable.txt
+
+# Grafo de conocimiento local
+graphify-out/
 
 # Varios
 *.log

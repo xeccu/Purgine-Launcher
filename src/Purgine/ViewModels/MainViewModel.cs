@@ -147,8 +147,10 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         Store = new StoreViewModel(this);
         Profiles = new ProfilesViewModel(() => Dialogs);
         Downloads = new DownloadsViewModel(this);
+        Updates = new UpdateViewModel(settings, _saveSettings.Request);
         Settings = new SettingsViewModel(settings, library, steam, _saveSettings.Request, () => Dialogs,
             login: LoginAsync, logout: LogoutAsync, epicLogin: EpicLoginAsync, epicLogout: EpicLogoutAsync);
+        Settings.Updates = Updates;
 
         GamesView = CollectionViewSource.GetDefaultView(Games);
         ApplySort();
@@ -202,6 +204,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
 
     public StoreViewModel Store { get; }
     public SettingsViewModel Settings { get; }
+    /// <summary>Auto-actualizador (GitHub Releases): aviso de versión nueva y Ajustes → Actualizaciones.</summary>
+    public UpdateViewModel Updates { get; }
     public DownloadsViewModel Downloads { get; }
 
     /// <summary>Lo asigna la ventana tras construirse.</summary>
@@ -2300,6 +2304,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     public void Shutdown()
     {
         _notes.Flush();
+        Updates.Dispose();
         Store.Release();
         _detail?.Close();
         _downloads.Dispose();

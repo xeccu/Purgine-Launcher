@@ -155,6 +155,12 @@ public sealed class LauncherSettings
     /// <summary>Última carpeta elegida para instalar juegos de itch.io (null = la de Purgine en AppData).</summary>
     public string? ItchLibraryPath { get; set; }
 
+    /// <summary>Al iniciar, buscar en GitHub Releases si hay una versión nueva de Purgine.</summary>
+    public bool CheckForUpdates { get; set; } = true;
+
+    /// <summary>Versión que el usuario pidió omitir en el aviso de actualización (p. ej. «0.2.0-alpha»).</summary>
+    public string? SkippedUpdateVersion { get; set; }
+
     /// <summary>Render por software: evita cargar el pipeline D3D en el proceso. Requiere reiniciar.</summary>
     public bool UseSoftwareRendering { get; set; }
 

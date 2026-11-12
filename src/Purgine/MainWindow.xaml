@@ -123,7 +123,7 @@
                 Visibility="{Binding IsEpicSkin, Converter={StaticResource InverseBoolToVis}}">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Image Source="/Assets/app.ico" Width="28" Height="28" Margin="0,0,12,0" />
+                    <Image Source="/Assets/logo-mark-light.png" Width="30" Height="30" Margin="0,0,12,0" RenderOptions.BitmapScalingMode="HighQuality" />
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="Purgine" FontSize="18" FontWeight="SemiBold" />
                         <TextBlock Text="{Binding SummaryText}" Foreground="{StaticResource MutedBrush}" FontSize="12" />
@@ -246,6 +246,12 @@
         <Grid Grid.ColumnSpan="2" Panel.ZIndex="100"
               Visibility="{Binding InstallDialog, Converter={StaticResource NullToVis}}">
             <views:InstallDialogView DataContext="{Binding InstallDialog}" />
+        </Grid>
+
+        <!-- ===== Nueva versión disponible (superposición) ===== -->
+        <Grid Grid.ColumnSpan="2" Panel.ZIndex="104"
+              Visibility="{Binding Updates.IsOpen, Converter={StaticResource BoolToVis}}">
+            <views:UpdateDialogView DataContext="{Binding Updates}" />
         </Grid>
 
         <!-- ===== Crear / editar perfil (superposición) ===== -->

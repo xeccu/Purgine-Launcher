@@ -228,7 +228,7 @@ public sealed class SettingsViewModel : ObservableObject
 
     public string DataDir => AppPaths.DataDir;
     public string SteamPath => _steam.SteamPath ?? "No encontrado";
-    public string Version => $"Purgine {typeof(SettingsViewModel).Assembly.GetName().Version?.ToString(3)} · MIT";
+    public string Version => $"Purgine {AppVersion.Display}";
 
     public string SavedText
     {
@@ -244,7 +244,10 @@ public sealed class SettingsViewModel : ObservableObject
 
     public const string WebsiteUrl = "https://xccstudios.es";
     public ICommand OpenWebsiteCommand { get; }
-    public string VersionText => $"Versión {typeof(SettingsViewModel).Assembly.GetName().Version?.ToString(3)}";
+    /// <summary>Apartado «Actualizaciones» (lo asigna la ventana principal).</summary>
+    public UpdateViewModel? Updates { get; set; }
+
+    public string VersionText => $"Versión {AppVersion.Display}";
     public ICommand ResetCommand { get; }
 
     // ------------------------------------------------------------------------------------

@@ -370,6 +370,26 @@
                 </StackPanel>
             </Border>
 
+            <!-- ===== Actualizaciones ===== -->
+            <Border Style="{StaticResource Panel}" DataContext="{Binding Updates}">
+                <StackPanel>
+                    <TextBlock Text="Actualizaciones" Style="{StaticResource SectionTitle}" />
+                    <CheckBox IsChecked="{Binding CheckOnStartup, Mode=TwoWay}"
+                              Content="Buscar versiones nuevas de Purgine al iniciar (GitHub Releases)" />
+                    <TextBlock Style="{StaticResource MutedText}" Margin="0,4,0,0" TextWrapping="Wrap"
+                               Text="Si hay una versión nueva verás sus novedades y podrás instalarla con un clic: Purgine se cierra, se actualiza solo y se vuelve a abrir. Tus perfiles, cuentas y juegos se conservan." />
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Style="{StaticResource GhostButton}" Command="{Binding CheckNowCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE895;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBlock Text="Buscar actualizaciones" />
+                            </StackPanel>
+                        </Button>
+                        <TextBlock Text="{Binding StatusText}" Style="{StaticResource MutedText}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
             <!-- ===== Acerca de ===== -->
             <Border Style="{StaticResource Panel}">
                 <DockPanel>
