@@ -74,6 +74,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     private readonly SteamEulaService _eulas;
     private readonly ItchApiClient _itch = new(AppPaths.ItchKeyFile);
     private readonly ItchDownloadManager _itchDownloads;
+    private readonly ItchWebScraper _itchWeb = new();
 
     /// <summary>Peticiones de metadatos de red en curso (la recarga forzada las cancela y empieza de cero).</summary>
     private CancellationTokenSource _metadataCts = new();
@@ -1782,17 +1783,22 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     private async Task InstallItchAsync(GameEntry entry)
     {
         if (_itchDownloads.Find(entry.AppId) is not null) { CurrentView = AppView.Downloads; return; }
-        if (entry.ItchGameId is not { } gameId)
-        {
-            // Descargado antes desde la tienda: se reinstala desde su página.
-            if (entry.ItchUrl is { Length: > 0 } page) { Store.ShowItch(page); CurrentView = AppView.Store; }
-            return;
-        }
         StatusText = $"Consultando las versiones de {entry.Name} en itch.io…";
-        var uploads = await Task.Run(() => _itch.GetUploadsAsync(gameId, entry.ItchDownloadKeyId, CancellationToken.None));
+        var uploads = entry.ItchGameId is { } gameId && _itch.HasKey
+            ? await Task.Run(() => _itch.GetUploadsAsync(gameId, entry.ItchDownloadKeyId, CancellationToken.None))
+            : [];
+        // Sin archivos por la API (sin clave, o juegos gratis / «paga lo que quieras» con pantalla de donación):
+        // se leen de su página de descargas, como hace el botón «No thanks, just take me to the downloads».
+        ItchWebDownloads? web = null;
+        if (uploads.Count == 0 && entry.ItchUrl is { Length: > 0 } pageUrl)
+        {
+            web = await Task.Run(() => _itchWeb.GetDownloadsAsync(pageUrl, CancellationToken.None));
+            uploads = web?.Uploads.ToList() ?? [];
+        }
         if (uploads.Count == 0)
         {
-            StatusText = $"{entry.Name}: itch.io no ofrece archivos descargables (o la clave no da acceso).";
+            StatusText = $"{entry.Name}: no hay archivos descargables (puede ser un juego de pago sin clave de API, o solo para navegador).";
+            if (entry.ItchUrl is { Length: > 0 } page) { Store.ShowItch(page); CurrentView = AppView.Store; }
             return;
         }
         ItchUpload? pick;
@@ -1809,15 +1815,23 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
             finally { ItchBuildDialog = null; }
         }
         if (pick is null) { StatusText = $"Instalación de {entry.Name} cancelada."; return; }
+        string? direct = null;
+        if (web is not null)
+        {
+            // Enlace firmado del archivo elegido (el mismo que da el botón de la web).
+            direct = await Task.Run(() => _itchWeb.ResolveFileUrlAsync(web.DownloadPageUrl, pick.Id, CancellationToken.None));
+            if (direct is null) { StatusText = $"{entry.Name}: itch.io no dio el enlace de descarga. Prueba desde la tienda."; return; }
+        }
         _itchDownloads.Enqueue(new ItchDownloadRequest
         {
             Key = entry.AppId,
             Title = entry.Name,
             Url = entry.ItchUrl ?? string.Empty,
-            CoverUrl = entry.ItchCoverUrl,
-            GameId = gameId,
+            CoverUrl = entry.ItchCoverUrl ?? web?.CoverUrl,
+            GameId = entry.ItchGameId,
             DownloadKeyId = entry.ItchDownloadKeyId,
-            UploadId = pick.Id,
+            UploadId = web is null ? pick.Id : null,
+            DirectUrl = direct,
             FileName = pick.FileName,
             Size = pick.Size,
         });
@@ -1829,8 +1843,11 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     /// <summary>Descarga capturada en la tienda de itch.io: la hace Purgine.</summary>
     public void DownloadFromItch(ItchCapturedDownload d) => OnUi(() =>
     {
-        var title = CleanItchTitle(d.Title) ?? Path.GetFileNameWithoutExtension(d.FileName) ?? "Juego de itch.io";
-        var key = ItchKeyFromUrl(d.PageUrl, title);
+        var key = ItchKeyFromUrl(d.PageUrl, d.Title ?? d.FileName ?? "juego");
+        // Nunca «itch.io»: el título real, o el slug legible, o el nombre del archivo.
+        var title = CleanItchTitle(d.Title) is { } t && !t.Equals("itch.io", StringComparison.OrdinalIgnoreCase) ? t
+            : key.Contains('/') && !key.StartsWith("itch/", StringComparison.Ordinal) ? ItchWebScraper.PrettySlug(key.Split('/').Last())
+            : Path.GetFileNameWithoutExtension(d.FileName) ?? "Juego de itch.io";
         var page = Uri.TryCreate(d.PageUrl, UriKind.Absolute, out var u) && u.Host.EndsWith(".itch.io", StringComparison.OrdinalIgnoreCase)
             ? $"{u.Scheme}://{u.Host}/{key.Split('/').Last()}" : d.PageUrl;
         var owned = _itchOwned.FirstOrDefault(g => g.AppId == key);

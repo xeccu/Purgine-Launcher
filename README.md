@@ -291,11 +291,16 @@ Sin el cliente de itch, con la misma filosofía que Steam y Epic:
   inicia una sola vez). Las descargas que empiezas en la web (gratuitas o compradas) se capturan con
   `CoreWebView2.DownloadStarting` desde `*.itch.io` / `*.itch.zone` / `*.hwcdn.net`: se cancela la del navegador
   (no aparece el gestor de descargas) y la hace Purgine.
+  Los juegos con pantalla de donación («No thanks, just take me to the downloads») abren su página de descargas con
+  `window.open()`: un script hace que vaya a la misma pestaña (sin quedarse en `about:blank`). El nombre del juego
+  y su portada salen de su ficha (título real; si no, el slug legible, «mi-juego» → «Mi Juego»), también para su carpeta.
 - **Biblioteca**: con tu **clave de API** (Ajustes → «Cuenta de itch.io»; se crea en itch.io → Ajustes → Claves de API
   y se guarda cifrada con DPAPI) aparecen tus juegos comprados o reclamados (`api.itch.io/profile/owned-keys`) con
   el distintivo **ITCH**, su portada e **INSTALAR**. El filtro «Launcher» incluye itch.io automáticamente.
 - **Selector de versiones**: si el juego tiene varios archivos (`/games/{id}/uploads`: Windows 64 / 32 bits,
   portable, Linux…), se elige cuál; las de Windows primero.
+  Si la API no da sus archivos (sin clave, o juegos gratis / «paga lo que quieras»), se leen de su página de descargas
+  (`/download_url` → `/download/<token>`, `data-upload_id`) y se pide el enlace firmado como el botón de la web.
 - **Instalación**: cola en Descargas con progreso, pausar/reanudar (continúa con `Range`) y cancelar. Cada juego va a
   su carpeta en `ItchLibrary\`; los `.zip` se descomprimen con .NET y los `.7z` / `.rar` / `.tar.*` con 7-Zip (si
   está instalado) o con el `tar.exe` de Windows; el comprimido se borra y se busca el ejecutable principal

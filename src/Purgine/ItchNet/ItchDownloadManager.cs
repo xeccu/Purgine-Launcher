@@ -129,7 +129,24 @@ public sealed class ItchDownloadManager : IDisposable
         {
             if (installDir is not null && Directory.Exists(installDir) &&
                 Path.GetFullPath(installDir).StartsWith(Path.GetFullPath(_libraryRoot), StringComparison.OrdinalIgnoreCase))
-                Directory.Delete(installDir, recursive: true);
+            {
+                // Muchos .zip traen archivos de solo lectura, y un .exe recién descargado puede estar unos segundos
+                // bloqueado por el antivirus: se quita el atributo y se reintenta.
+                for (var attempt = 1; ; attempt++)
+                {
+                    try
+                    {
+                        foreach (var f in Directory.EnumerateFiles(installDir, "*", SearchOption.AllDirectories))
+                            File.SetAttributes(f, FileAttributes.Normal);
+                        Directory.Delete(installDir, recursive: true);
+                        break;
+                    }
+                    catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && attempt < 5)
+                    {
+                        Thread.Sleep(1000);
+                    }
+                }
+            }
             ItchRegistry.Remove(key);
             return null;
         }

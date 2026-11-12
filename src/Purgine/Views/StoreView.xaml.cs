@@ -7,6 +7,7 @@ using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 using Purgine.Core;
 using Purgine.Infrastructure;
+using Purgine.ItchNet;
 using Purgine.ViewModels;
 
 namespace Purgine.Views;
@@ -178,6 +179,7 @@ public partial class StoreView : UserControl
             core.LaunchingExternalUriScheme += OnLaunchingExternalUriScheme;
             core.ProcessFailed += OnProcessFailed;
             core.DownloadStarting += OnDownloadStarting;
+            _ = core.AddScriptToExecuteOnDocumentCreatedAsync(ItchSameTabScript);
 
             core.Navigate(_vm.TakePendingUrl() ?? _resumeUrl ?? _vm.CurrentHomeUrl);
             _resumeUrl = null;
@@ -251,7 +253,8 @@ public partial class StoreView : UserControl
         Uri.TryCreate(url, UriKind.Absolute, out var u) &&
         (u.Host.EndsWith("itch.io", StringComparison.OrdinalIgnoreCase) ||
          u.Host.EndsWith("itch.zone", StringComparison.OrdinalIgnoreCase) ||
-         u.Host.EndsWith("hwcdn.net", StringComparison.OrdinalIgnoreCase));
+         u.Host.EndsWith("hwcdn.net", StringComparison.OrdinalIgnoreCase) ||
+         u.Host.Contains("itchio-mirror", StringComparison.OrdinalIgnoreCase)); // almacenamiento de itch en Cloudflare R2
 
     private async void OnDownloadStarting(object? sender, CoreWebView2DownloadStartingEventArgs e)
     {
@@ -263,6 +266,13 @@ public partial class StoreView : UserControl
         var size = (long)(e.DownloadOperation.TotalBytesToReceive ?? 0);
         var fileName = Path.GetFileName(e.ResultFilePath);
         string? title = null, image = null;
+        // Datos de la ficha del juego visitada (la página de descargas suele llamarse solo «itch.io»).
+        var game = ItchWebScraper.GameUrlOf(page) ?? _lastItchGame?.GameUrl;
+        if (_lastItchGame is { } last && last.GameUrl == game)
+        {
+            title = last.Title;
+            image = last.Cover;
+        }
         try
         {
             var raw = await _web!.CoreWebView2.ExecuteScriptAsync("""
@@ -273,16 +283,74 @@ public partial class StoreView : UserControl
                 })()
                 """);
             var json = System.Text.Json.JsonSerializer.Deserialize<string>(raw);
-            if (json is not null)
+            if (json is not null && title is null)
             {
                 using var doc = System.Text.Json.JsonDocument.Parse(json);
-                title = doc.RootElement.GetProperty("title").GetString();
-                image = doc.RootElement.GetProperty("image").GetString();
+                var pageTitle = doc.RootElement.GetProperty("title").GetString();
+                if (IsUsefulTitle(pageTitle)) title = pageTitle;
+                image ??= doc.RootElement.GetProperty("image").GetString() is { Length: > 0 } img ? img : null;
             }
         }
         catch (Exception ex) { Log.Warn($"itch.io: datos de la página no disponibles ({ex.Message})."); }
-        _vm?.CaptureItchDownload(new ItchCapturedDownload(uri, fileName, page ?? uri, title, image, size));
+        // Sin título útil: el slug de la dirección, legible («mi-juego-genial» → «Mi Juego Genial»).
+        title ??= game is null ? null : ItchWebScraper.PrettySlug(game.Split('/').Last());
+        _vm?.CaptureItchDownload(new ItchCapturedDownload(uri, fileName, game ?? page ?? uri, title, image, size));
     }
+
+    /// <summary>
+    /// itch.io abre la página de descargas con <c>window.open()</c> vacío y después le pone la dirección (o abre
+    /// pestañas nuevas). En la tienda todo va en la misma pestaña: este script hace que <c>window.open</c> navegue aquí,
+    /// también cuando la dirección llega después, en lugar de quedarse en <c>about:blank</c>.
+    /// </summary>
+    private const string ItchSameTabScript = """
+        (() => {
+          if (!/(^|\.)itch\.io$/i.test(location.hostname)) return;
+          const go = u => { if (u && String(u) !== 'about:blank') location.href = String(u); };
+          window.open = function (url) {
+            if (url && String(url) !== 'about:blank') { go(url); return window; }
+            const loc = { assign: go, replace: go, set href(v) { go(v); }, get href() { return 'about:blank'; }, toString() { return 'about:blank'; } };
+            const fake = { closed: false, opener: window, close() {}, focus() {}, blur() {}, postMessage() {},
+                           document: { write() {}, writeln() {}, open() {}, close() {}, body: null } };
+            Object.defineProperty(fake, 'location', { get() { return loc; }, set(v) { go(v); } });
+            return fake;
+          };
+        })();
+        """;
+
+    /// <summary>Última ficha de juego de itch.io visitada (para nombrar bien lo que se descargue después).</summary>
+    private (string GameUrl, string? Title, string? Cover)? _lastItchGame;
+
+    /// <summary>Al cargar una página de itch.io de un juego, se recuerdan su título real y su portada.</summary>
+    private async Task RememberItchGameAsync()
+    {
+        if (_web?.CoreWebView2 is not { } core || ItchWebScraper.GameUrlOf(core.Source) is not { } game) return;
+        // Solo la ficha del juego (autor.itch.io/juego): las subpáginas (/download/…, /purchase) no tienen su
+        // título limpio ni su portada y no deben pisar lo que ya se sabe.
+        if (Uri.TryCreate(core.Source, UriKind.Absolute, out var src) && src.AbsolutePath.Trim('/').Contains('/')) return;
+        try
+        {
+            var raw = await core.ExecuteScriptAsync("""
+                (() => {
+                  const meta = p => document.querySelector(`meta[property="${p}"]`)?.content || '';
+                  const h = document.querySelector('h1.game_title')?.innerText || '';
+                  return JSON.stringify({ title: h || meta('og:title'), image: meta('og:image') });
+                })()
+                """);
+            if (System.Text.Json.JsonSerializer.Deserialize<string>(raw) is not { } json) return;
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var title = doc.RootElement.GetProperty("title").GetString();
+            var image = doc.RootElement.GetProperty("image").GetString();
+            if (IsUsefulTitle(title))
+                _lastItchGame = (game, title!.Trim(), string.IsNullOrWhiteSpace(image) ? null : image);
+            else if (_lastItchGame?.GameUrl != game)
+                _lastItchGame = (game, null, string.IsNullOrWhiteSpace(image) ? null : image);
+        }
+        catch (Exception ex) { Log.Warn($"itch.io: no se pudo leer la ficha del juego ({ex.Message})."); }
+    }
+
+    private static bool IsUsefulTitle(string? title) =>
+        !string.IsNullOrWhiteSpace(title) && !title.Trim().Equals("itch.io", StringComparison.OrdinalIgnoreCase) &&
+        !title.Contains("Download ", StringComparison.Ordinal) || title?.Contains(" by ", StringComparison.Ordinal) == true;
 
     private static bool IsSteamLink(string? uri) => uri?.StartsWith("steam:", StringComparison.OrdinalIgnoreCase) == true;
 
@@ -307,6 +375,7 @@ public partial class StoreView : UserControl
     private void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
         _navigationDone?.TrySetResult();
+        if (e.IsSuccess) _ = RememberItchGameAsync();
         LoadingBar.Visibility = Visibility.Collapsed;
         UpdateNavigationState();
         if (!e.IsSuccess && e.WebErrorStatus != CoreWebView2WebErrorStatus.OperationCanceled)
@@ -318,7 +387,10 @@ public partial class StoreView : UserControl
     {
         e.Handled = true;
         if (IsSteamLink(e.Uri)) HandleSteamLink(e.Uri);
-        else _web?.CoreWebView2?.Navigate(e.Uri);
+        // Ventana vacía (window.open() que recibe la dirección después): no se navega a about:blank; el script de la
+        // página lleva esa dirección a esta misma pestaña.
+        else if (!string.IsNullOrEmpty(e.Uri) && !e.Uri.StartsWith("about:", StringComparison.OrdinalIgnoreCase))
+            _web?.CoreWebView2?.Navigate(e.Uri);
     }
 
     /// <summary>Protocolos externos: steam:// lo resuelve Purgine; el resto no se abre desde la tienda.</summary>
