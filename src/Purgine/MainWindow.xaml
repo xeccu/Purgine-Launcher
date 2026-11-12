@@ -25,13 +25,8 @@
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0"
                 Visibility="{Binding IsEpicSkin, Converter={StaticResource BoolToVis}}">
             <DockPanel Margin="12,18,12,12">
-                <!-- Marca -->
-                <StackPanel DockPanel.Dock="Top" Margin="8,0,0,22">
-                    <StackPanel Orientation="Horizontal">
-                        <Image Source="/Assets/app.ico" Width="30" Height="30" Margin="0,0,10,0" />
-                        <TextBlock Text="Purgine" FontSize="19" FontWeight="Bold" VerticalAlignment="Center" />
-                    </StackPanel>
-                </StackPanel>
+                <!-- Perfil activo (foto redonda + nombre): un clic para cambiar de perfil -->
+                <views:ProfileWidget DockPanel.Dock="Top" DataContext="{Binding Profiles}" Margin="0,0,0,20" HorizontalAlignment="Stretch" />
 
                 <!-- Descargas abajo, como el icono de descargas de la tienda -->
                 <RadioButton DockPanel.Dock="Bottom" Style="{StaticResource SideNavItem}" GroupName="SideNav"
@@ -135,7 +130,10 @@
                     </StackPanel>
                 </StackPanel>
 
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <!-- Perfil activo (foto + nombre) con su menú de perfiles -->
+                <views:ProfileWidget DockPanel.Dock="Right" DataContext="{Binding Profiles}" VerticalAlignment="Center" Margin="12,0,0,0" />
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="28,0,0,0">
                     <RadioButton Style="{StaticResource NavTab}" GroupName="Nav" IsChecked="{Binding IsLibraryView, Mode=TwoWay}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE8F1;" FontFamily="{StaticResource IconFont}" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0" />
@@ -248,6 +246,12 @@
         <Grid Grid.ColumnSpan="2" Panel.ZIndex="100"
               Visibility="{Binding InstallDialog, Converter={StaticResource NullToVis}}">
             <views:InstallDialogView DataContext="{Binding InstallDialog}" />
+        </Grid>
+
+        <!-- ===== Crear / editar perfil (superposición) ===== -->
+        <Grid Grid.ColumnSpan="2" Panel.ZIndex="103"
+              Visibility="{Binding Profiles.Editor, Converter={StaticResource NullToVis}}">
+            <views:ProfileEditorView DataContext="{Binding Profiles.Editor}" />
         </Grid>
 
         <!-- ===== Selector de versiones de itch.io (superposición) ===== -->

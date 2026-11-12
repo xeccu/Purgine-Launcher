@@ -201,6 +201,17 @@
             </Setter>
         </Style>
 
+        <!-- Panel de los menús desplegables (filtros de la biblioteca, menú de perfiles) -->
+        <Style x:Key="DropdownPanel" TargetType="Border">
+            <Setter Property="Background" Value="#FF1E222C" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="14,10" />
+            <Setter Property="Margin" Value="0,4,0,0" />
+            <Setter Property="MinWidth" Value="220" />
+        </Style>
+
         <!-- Elemento de la barra lateral del estilo Epic: píldora redondeada, gris al estar seleccionado -->
         <Style x:Key="SideNavItem" TargetType="RadioButton">
             <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />

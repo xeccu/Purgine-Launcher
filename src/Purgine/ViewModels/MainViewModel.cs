@@ -145,6 +145,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         _saveSettings = new DebouncedAction(saveSettings, TimeSpan.FromMilliseconds(600));
 
         Store = new StoreViewModel(this);
+        Profiles = new ProfilesViewModel(() => Dialogs);
         Downloads = new DownloadsViewModel(this);
         Settings = new SettingsViewModel(settings, library, steam, _saveSettings.Request, () => Dialogs,
             login: LoginAsync, logout: LogoutAsync, epicLogin: EpicLoginAsync, epicLogout: EpicLogoutAsync);
@@ -275,6 +276,9 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
     }
 
     public GameDetailViewModel? Detail => _detail;
+
+    /// <summary>Perfiles locales: el activo y el menú para cambiar, crear, editar o borrar.</summary>
+    public ProfilesViewModel Profiles { get; }
 
     public bool IsHomeVisible => _selectedGame is null;
 

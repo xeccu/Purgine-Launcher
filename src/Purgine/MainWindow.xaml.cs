@@ -88,6 +88,12 @@ public partial class MainWindow : Window, IDialogService
         _tray = new TrayIcon("Purgine");
         _tray.RestoreRequested += (_, _) => RestoreFromTray();
         _vm.AttentionRequested += (_, _) => RestoreFromTray();
+        // Cambio de perfil: se guarda todo, se cierra y arranca una instancia nueva con los datos de ese perfil.
+        _vm.Profiles.SwitchRequested += (_, _) =>
+        {
+            App.StartNewInstanceForProfile();
+            ExitApplication();
+        };
         _tray.RefreshRequested += async (_, _) => await _vm.RefreshAsync();
         _tray.ExitRequested += (_, _) => ExitApplication();
     }

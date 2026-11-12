@@ -30,6 +30,7 @@ public partial class App : Application
         base.OnStartup(e);
 
         var runAppId = ParseRunArgument(e.Args);
+        WaitForPreviousInstance(e.Args);
         _singleInstance = new Mutex(initiallyOwned: true, MutexName, out var isFirst);
         if (!isFirst)
         {
@@ -113,6 +114,32 @@ public partial class App : Application
                 else window.RestoreFromTray();
             }), null, Timeout.Infinite, executeOnlyOnce: false);
         if (runAppId is not null) viewModel.RequestLaunch(runAppId);
+    }
+
+    /// <summary>
+    /// Cambio de perfil: la instancia nueva llega con <c>--wait-pid &lt;pid&gt;</c> y espera a que la anterior termine de
+    /// cerrarse (y suelte la instancia única y sus archivos) antes de arrancar con el perfil nuevo.
+    /// </summary>
+    private static void WaitForPreviousInstance(string[] args)
+    {
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (!args[i].Equals("--wait-pid", StringComparison.OrdinalIgnoreCase) || !int.TryParse(args[i + 1], out var pid)) continue;
+            try
+            {
+                using var previous = System.Diagnostics.Process.GetProcessById(pid);
+                previous.WaitForExit(20_000);
+            }
+            catch (ArgumentException) { /* ya terminó */ }
+            catch (InvalidOperationException) { }
+        }
+    }
+
+    /// <summary>Reinicia Purgine con el perfil activo nuevo (lo llama la ventana tras guardar todo).</summary>
+    public static void StartNewInstanceForProfile()
+    {
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!,
+            $"--wait-pid {Environment.ProcessId}") { UseShellExecute = false })?.Dispose();
     }
 
     /// <summary><c>--run 440</c> → "440" (accesos directos creados al instalar).</summary>

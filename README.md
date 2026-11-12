@@ -310,6 +310,20 @@ Sin el cliente de itch, con la misma filosofía que Steam y Epic:
   (descartando desinstaladores, crash handlers, redistribuibles e instaladores de requisitos). El juego queda
   **Instalado y listo para jugar**, con su tiempo de juego, y se puede desinstalar desde Purgine.
 
+### Perfiles locales (`Infrastructure/ProfileStore.cs`, `Views/ProfileWidget.xaml`)
+
+- Hasta **5 perfiles** en el mismo equipo, cada uno con nombre y foto redonda (o su inicial). Se gestionan desde el
+  widget de perfil: en el estilo Steam está a la derecha de la cabecera (la navegación queda a la izquierda) y en el
+  estilo Epic sustituye al nombre de la app en lo alto de la barra lateral. Su menú permite **cambiar de perfil**,
+  **editar nombre y foto**, **añadir** otro y **borrar** los que no estén activos (con confirmación).
+- **Datos aislados por perfil**: sesiones de Steam, Epic e itch.io, perfil del navegador de la Tienda y del inicio
+  de sesión de Epic (cookies), ajustes y estilo visual, etiquetas, tiempo jugado, notas, colas de descarga y estado
+  de la nube. Los **juegos instalados** (y sus registros), la caché de arte y las copias de partidas se comparten.
+- Cambiar de perfil guarda todo y **reinicia Purgine** con los datos del nuevo: el proceso nuevo espera a que el
+  anterior termine (`--wait-pid`) antes de arrancar, así nunca hay dos instancias usando los mismos archivos.
+- El primer perfil (creado con el nombre del usuario de Windows) usa la carpeta de datos de siempre: quien actualiza
+  no pierde nada ni hay migración.
+
 ### Otras funciones
 
 - **Tiempo jugado**: histórico de Steam (`localconfig.vdf`) más las sesiones locales que Steam aún no ha
@@ -363,6 +377,8 @@ Todo en `%LocalAppData%\Purgine\` (botón «Abrir carpeta de datos» en Ajustes)
 | `game-notes.json` | Notas y reseñas personales por juego (solo locales) |
 | `art\` | Iconos, imágenes panorámicas, logos e iconos de logros que no estaban en la caché de Steam |
 | `webview\` | Perfil del navegador de la Tienda (cookies y sesión web de Steam, caché) |
+| `profiles.json` | Lista de perfiles (nombre, foto, perfil activo) |
+| `profiles\<id>\` | Datos de cada perfil adicional: sesiones, ajustes, etiquetas, tiempo jugado, notas, colas, `webview\`, `webview-epic\` y su foto (el primer perfil usa la raíz) |
 | `purgine.log` | Registro de diagnóstico |
 
 > Si vienes de una versión anterior (cuando la app se llamaba «LightLauncher»), al primer arranque la carpeta

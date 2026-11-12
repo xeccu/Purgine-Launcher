@@ -35,7 +35,7 @@ public partial class EpicLoginDialog : Window
     {
         try
         {
-            var env = await CoreWebView2Environment.CreateAsync(null, System.IO.Path.Combine(AppPaths.DataDir, "webview-epic"),
+            var env = await CoreWebView2Environment.CreateAsync(null, AppPaths.EpicLoginWebViewDir,
                 new CoreWebView2EnvironmentOptions { Language = "es-ES" });
             _web = new WebView2 { DefaultBackgroundColor = System.Drawing.Color.FromArgb(0x0E, 0x10, 0x14) };
             Host.Children.Add(_web);

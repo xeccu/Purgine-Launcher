@@ -34,15 +34,6 @@
         </Style>
 
         <!-- Panel flotante de los desplegables -->
-        <Style x:Key="DropdownPanel" TargetType="Border">
-            <Setter Property="Background" Value="#FF1E222C" />
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Padding" Value="14,10" />
-            <Setter Property="Margin" Value="0,4,0,0" />
-            <Setter Property="MinWidth" Value="220" />
-        </Style>
 
         <!-- ===== Fila de la lista lateral: icono 24x24 + nombre + estado ===== -->
         <DataTemplate x:Key="SidebarItemTemplate" DataType="{x:Type vm:GameCardViewModel}">
