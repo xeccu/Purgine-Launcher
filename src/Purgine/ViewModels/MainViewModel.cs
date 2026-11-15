@@ -785,7 +785,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         foreach (var card in Games.Where(g => g.IsEpic))
         {
             if (!_epicBuilds.TryGetValue(card.Entry.AppId, out var build)) continue;
-            card.SetInstallSize(build.Exact ? (ulong)Math.Max(0, build.InstallSize) : 0);
+            card.SetInstallSize(build.HasRealSize ? (ulong)build.InstallSize : 0);
             if (!card.IsNotInstalled)
                 card.SetRemoteUpdate(card.Entry.EpicVersion is { Length: > 0 } v && build.BuildVersion.Length > 0 && v != build.BuildVersion);
         }
@@ -2375,4 +2375,14 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
 
 /// <summary>Build pública de un juego de Epic y su tamaño instalado (caché <c>epic-builds.json</c>).</summary>
 /// <param name="Exact">El tamaño salió del manifiesto de esa build (suma real de sus archivos).</param>
-public sealed record EpicBuildInfo(string BuildVersion, long InstallSize, bool Exact = false);
+public sealed record EpicBuildInfo(string BuildVersion, long InstallSize, bool Exact = false)
+{
+    /// <summary>
+    /// Por debajo de esto el manifiesto no es el juego sino un lanzador: los juegos de EA o Ubisoft en Epic traen un
+    /// manifiesto de pocos bytes y se instalan con su propia app (p. ej. Dragon Age: Inquisition, 4 bytes). Mostrar
+    /// «0 KB» confunde, así que se trata como tamaño desconocido.
+    /// </summary>
+    public const long MinRealInstallSize = 1024 * 1024;
+
+    public bool HasRealSize => Exact && InstallSize >= MinRealInstallSize;
+}
