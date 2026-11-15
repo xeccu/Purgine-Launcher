@@ -262,6 +262,7 @@ public sealed class GameCardViewModel : ObservableObject
     /// <summary>Asigna o refresca la descarga en curso (se llama en cada cambio de progreso).</summary>
     public void SetJob(DownloadJob? job)
     {
+        if (_job is { IsFinished: false } && job is null or { IsFinished: true }) _diskSize = -1; // tras actualizar, se vuelve a medir
         _job = job;
         OnPropertyChanged(nameof(Job));
         OnPropertyChanged(nameof(HasActiveJob));
@@ -286,7 +287,29 @@ public sealed class GameCardViewModel : ObservableObject
     /// <summary>«Descargando 45,2 % · 12,3 MB/s · 4 min» / «En cola» / «En pausa».</summary>
     public string DownloadText => _job is { } j ? JobText.Short(j) : string.Empty;
 
-    public bool CanUninstall => (IsSteam || IsItch || (IsEpic && Entry.EpicManagedByPurgine)) && !IsNotInstalled && !IsRunning && !HasActiveJob;
+    /// <summary>
+    /// Desinstalar está disponible aunque haya una descarga o actualización pendiente (o atascada): se cancela antes
+    /// de borrar la carpeta. Una instalación nueva sin terminar se quita con «Cancelar».
+    /// </summary>
+    public bool CanUninstall => (IsSteam || IsItch || (IsEpic && Entry.EpicManagedByPurgine)) && !IsNotInstalled && !IsRunning;
+
+    // ----- Tamaño real en disco (instalados) -----
+
+    private long _diskSize = -1;
+
+    /// <summary>Bytes que ocupa de verdad la carpeta del juego (-1 = sin medir).</summary>
+    public long DiskSize => _diskSize;
+
+    public bool ShowDiskSize => !IsNotInstalled && !IsLocal && !string.IsNullOrEmpty(Entry.InstallDir);
+
+    public string DiskSizeText => _diskSize < 0 ? "Calculando…" : Formatting.Bytes(_diskSize);
+
+    public void SetDiskSize(long bytes)
+    {
+        _diskSize = bytes;
+        OnPropertyChanged(nameof(DiskSize));
+        OnPropertyChanged(nameof(DiskSizeText));
+    }
 
     // ----- Espacio necesario (juegos no instalados) -----
 

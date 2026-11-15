@@ -785,7 +785,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         foreach (var card in Games.Where(g => g.IsEpic))
         {
             if (!_epicBuilds.TryGetValue(card.Entry.AppId, out var build)) continue;
-            card.SetInstallSize((ulong)Math.Max(0, build.InstallSize));
+            card.SetInstallSize(build.Exact ? (ulong)Math.Max(0, build.InstallSize) : 0);
             if (!card.IsNotInstalled)
                 card.SetRemoteUpdate(card.Entry.EpicVersion is { Length: > 0 } v && build.BuildVersion.Length > 0 && v != build.BuildVersion);
         }
@@ -1263,19 +1263,24 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
                 var asset = await Task.Run(() => _epic.GetAssetInfoAsync(ns, item, e.AppId, MetadataToken));
                 if (asset is null) continue;
                 _epicBuilds.TryGetValue(e.AppId, out var known);
-                if (known is not null && known.BuildVersion == asset.BuildVersion) continue;
-                // Instalados: el tamaño ya se conoce (no hace falta su manifiesto, que puede pesar decenas de MB).
-                long size = card.IsNotInstalled ? 0 : e.SizeOnDisk;
+                // Se vuelve a consultar si cambió la build o si el tamaño guardado no salió de su manifiesto (cachés
+                // antiguas guardaban el InstallSize del .item de Epic, que no se actualiza y puede ser de otra versión).
+                if (known is not null && known.BuildVersion == asset.BuildVersion && (known.Exact || !card.IsNotInstalled)) continue;
+                // Instalados: se muestra lo que ocupan de verdad en disco (se mide al abrir la ficha); el manifiesto,
+                // que puede pesar decenas de MB, solo se descarga para los no instalados.
+                long size = 0;
+                var exact = false;
                 if (card.IsNotInstalled)
                 {
                     try
                     {
                         var bytes = await Task.Run(() => _epic.DownloadManifestAsync(asset, MetadataToken));
                         size = await Task.Run(() => EpicNet.EpicManifest.Parse(bytes).InstallSize);
+                        exact = true;
                     }
                     catch (NotSupportedException) { /* manifiesto antiguo: sin tamaño */ }
                 }
-                _epicBuilds[e.AppId] = new EpicBuildInfo(asset.BuildVersion, size);
+                _epicBuilds[e.AppId] = new EpicBuildInfo(asset.BuildVersion, size, exact);
                 changed = true;
             }
             catch (OperationCanceledException) { return; }
@@ -1437,7 +1442,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         if (kind == DownloadJobKind.Install && _epicDownloads.Find(entry.AppId) is null)
         {
             StatusText = $"Consultando el tamaño de {entry.Name} en Epic…";
-            long size = _epicBuilds.TryGetValue(entry.AppId, out var b) ? b.InstallSize : 0;
+            long size = _epicBuilds.TryGetValue(entry.AppId, out var b) && b.Exact ? b.InstallSize : 0;
             if (size <= 0)
             {
                 try
@@ -1599,19 +1604,56 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         if (card.Job is { } job) CancelDownload(job);
     }
 
-    public void Uninstall(GameCardViewModel card)
+    public async void Uninstall(GameCardViewModel card)
     {
         if (!card.CanUninstall) return;
+        var pending = card.Job is { IsFinished: false } job ? job : null;
+        var pendingText = pending is null ? string.Empty
+            : $"\n\nTiene {(pending.Kind == DownloadJobKind.Install ? "una descarga" : "una actualización")} pendiente " +
+              $"({JobText.Short(pending).ToLowerInvariant()}): se cancelará primero.";
+        var size = card.DiskSize > 0 ? $" ({Formatting.Bytes(card.DiskSize)})" : string.Empty;
         if (!(Dialogs?.Confirm("Desinstalar",
-                $"¿Desinstalar «{card.Name}»?\n\nSe borrarán de forma permanente los archivos del juego de este equipo " +
-                "(no van a la papelera). Las partidas en la nube y el tiempo jugado se conservan.") ?? false))
+                $"¿Desinstalar «{card.Name}»?\n\nSe borrarán de forma permanente los archivos del juego de este equipo{size} " +
+                "(no van a la papelera). Las partidas en la nube y el tiempo jugado se conservan." + pendingText) ?? false))
             return;
 
-        var error = card.IsItch ? _itchDownloads.Uninstall(card.Entry.AppId, card.Entry.InstallDir)
-                  : card.IsEpic ? _epicDownloads.Uninstall(card.Entry) : _downloads.Uninstall(card.Entry);
-        if (error is null && (card.IsEpic || card.IsItch)) _ = RefreshAsync(); // vuelve a «No instalado» con los de la cuenta
-        StatusText = error ?? $"{card.Name} desinstalado.";
-        if (error is not null) Notify("No se pudo desinstalar", error);
+        try
+        {
+            if (pending is not null && !await StopJobAsync(pending))
+            {
+                StatusText = $"{card.Name}: no se pudo detener su descarga. Inténtalo de nuevo en unos segundos.";
+                return;
+            }
+
+            StatusText = $"Desinstalando {card.Name}…";
+            var entry = card.Entry;
+            bool isItch = card.IsItch, isEpic = card.IsEpic;
+            var error = await Task.Run(() => isItch ? _itchDownloads.Uninstall(entry.AppId, entry.InstallDir)
+                                           : isEpic ? _epicDownloads.Uninstall(entry) : _downloads.Uninstall(entry));
+            if (error is null && (isEpic || isItch)) _ = RefreshAsync(); // vuelve a «No instalado» con los de la cuenta
+            StatusText = error ?? $"{card.Name} desinstalado: espacio liberado.";
+            if (error is not null) Notify("No se pudo desinstalar", error);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Desinstalar {card.Name}", ex);
+            StatusText = $"No se pudo desinstalar {card.Name}: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Cancela una descarga o actualización (también una en cola, en pausa o atascada) y espera a que suelte sus
+    /// archivos. False si no se detuvo a tiempo.
+    /// </summary>
+    private async Task<bool> StopJobAsync(DownloadJob job)
+    {
+        if (job.IsFinished) return true;
+        StatusText = $"Cancelando la descarga pendiente de {job.Name}…";
+        if (job.IsItch) _itchDownloads.Cancel(job); else if (job.IsEpic) _epicDownloads.Cancel(job); else _downloads.Cancel(job);
+        for (var waited = 0; waited < 30_000 && !job.IsFinished; waited += 200)
+            await Task.Delay(200);
+        if (job.IsFinished) await Task.Delay(300); // margen para que el motor cierre sus archivos
+        return job.IsFinished;
     }
 
     // =====================================================================================
@@ -2332,4 +2374,5 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
 }
 
 /// <summary>Build pública de un juego de Epic y su tamaño instalado (caché <c>epic-builds.json</c>).</summary>
-public sealed record EpicBuildInfo(string BuildVersion, long InstallSize);
+/// <param name="Exact">El tamaño salió del manifiesto de esa build (suma real de sus archivos).</param>
+public sealed record EpicBuildInfo(string BuildVersion, long InstallSize, bool Exact = false);

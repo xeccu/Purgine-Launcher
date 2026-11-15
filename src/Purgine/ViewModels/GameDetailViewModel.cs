@@ -196,6 +196,7 @@ public sealed partial class GameDetailViewModel : ObservableObject
         else if (!_achievementsLoaded && Card.IsEpic) tasks.Add(LoadEpicAchievementsAsync(ct));
         tasks.AddRange(LoadExtrasTasks(ct));
         tasks.Add(LoadCloudAsync(ct));
+        tasks.Add(MeasureDiskSizeAsync(ct));
         try { await Task.WhenAll(tasks); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { /* se cambió de juego o se recarga */ }
         catch (Exception ex)
@@ -206,6 +207,14 @@ public sealed partial class GameDetailViewModel : ObservableObject
             Infrastructure.Log.Warn($"Ficha de {Card.Name}: {ex.Message}");
             MarkInterrupted();
         }
+    }
+
+    /// <summary>Tamaño real de la carpeta instalada (no el que dice el manifiesto o el registro de la tienda).</summary>
+    private async Task MeasureDiskSizeAsync(CancellationToken ct)
+    {
+        if (!Card.ShowDiskSize || Card.DiskSize >= 0 || Card.Entry.InstallDir is not { } dir) return;
+        var size = await Task.Run(() => Infrastructure.DiskUsage.DirectorySize(dir, ct), ct);
+        if (!ct.IsCancellationRequested) Card.SetDiskSize(size);
     }
 
     /// <summary>Lo que se quedó a medias pasa a «no se pudo» y se reintentará (al reabrir la ficha o al recargar).</summary>

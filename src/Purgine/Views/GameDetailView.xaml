@@ -101,6 +101,12 @@
                         <TextBlock Text="TIEMPO DE JUEGO" Style="{StaticResource StatLabel}" />
                         <TextBlock Text="{Binding Card.TotalPlaytimeText}" Style="{StaticResource StatValue}" />
                     </StackPanel>
+                    <StackPanel DockPanel.Dock="Left" Margin="32,0,0,0" VerticalAlignment="Center"
+                                ToolTip="Lo que ocupa de verdad la carpeta del juego en tu disco"
+                                Visibility="{Binding Card.ShowDiskSize, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="EN DISCO" Style="{StaticResource StatLabel}" />
+                        <TextBlock Text="{Binding Card.DiskSizeText}" Style="{StaticResource StatValue}" />
+                    </StackPanel>
                     <!-- Partidas en la nube (juegos de Epic): estado y menú de la carpeta de partidas -->
                     <Button DockPanel.Dock="Left" Margin="28,0,0,0" VerticalAlignment="Center" Padding="4,2"
                             Style="{StaticResource GhostButton}" ToolTip="{Binding CloudTooltip}" Click="OnCloudClick"
@@ -426,6 +432,15 @@
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="&#xE838;" FontFamily="{StaticResource IconFont}" Width="22" VerticalAlignment="Center" />
                                 <TextBlock Text="Carpeta del juego" Margin="6,0,0,0" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource LinkRow}" Command="{Binding Card.UninstallCommand}"
+                                ToolTip="Borra los archivos del juego para liberar espacio (si tiene una actualización pendiente, se cancela antes)"
+                                Visibility="{Binding Card.CanUninstall, Converter={StaticResource BoolToVis}}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE74D;" FontFamily="{StaticResource IconFont}" Width="22" VerticalAlignment="Center"
+                                           Foreground="{StaticResource DangerBrush}" />
+                                <TextBlock Text="Desinstalar…" Margin="6,0,0,0" />
                             </StackPanel>
                         </Button>
                     </StackPanel>

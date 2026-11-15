@@ -347,7 +347,7 @@ public sealed class SteamDownloadManager : IDisposable
 
     private void Untrack(DownloadJob job)
     {
-        lock (_gate) _jobs.Remove(job);
+        lock (_gate) { _jobs.Remove(job); _awaitingSteam.Remove(job); }
         QueueChanged?.Invoke();
         Persist();
     }

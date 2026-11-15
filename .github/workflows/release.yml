@@ -1,0 +1,78 @@
+# Publica una versión de Purgine para Windows en GitHub Releases.
+#  - Automático: al subir una etiqueta vX.Y.Z o vX.Y.Z-sufijo (git tag v0.1.1-alpha && git push origin v0.1.1-alpha).
+#  - Manual: Actions → Release → Run workflow, indicando la etiqueta (se crea si no existe).
+# Genera el instalador con nombre fijo (Purgine-Setup-Windows.exe) y lo adjunta a la Release junto a su SHA-256.
+# Las copias instaladas lo detectan al iniciar y se actualizan solas (Updates/UpdateService.cs).
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Etiqueta de la versión (p. ej. v0.1.1-alpha)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Instalador de Windows
+    runs-on: windows-latest
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    steps:
+      - name: Código
+        uses: actions/checkout@v4
+
+      - name: .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Versión y notas
+        id: ver
+        shell: pwsh
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          $tag = if ($env:INPUT_TAG) { $env:INPUT_TAG } else { $env:REF_NAME }
+          if ($tag -notmatch '^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { throw "Etiqueta no válida: $tag (usa v1.2.3 o v1.2.3-alpha)" }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          # Notas de la versión: docs/releases/<etiqueta>.md si existe; si no, un texto de instalación estándar.
+          $notes = "docs/releases/$tag.md"
+          if (Test-Path $notes) { Copy-Item $notes release-notes.md }
+          else {
+            @(
+              "## Instalación"
+              "Descarga **Purgine-Setup-Windows.exe** (en *Assets*), ábrelo y pulsa **Instalar**. Si ya tienes Purgine, se actualiza solo al iniciarlo."
+            ) | Set-Content release-notes.md -Encoding utf8
+          }
+
+      - name: Compilar e instalador
+        shell: pwsh
+        run: ./build/release.ps1 -Version '${{ steps.ver.outputs.tag }}'
+
+      - name: Publicar en GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Purgine ${{ steps.ver.outputs.tag }}
+          body_path: release-notes.md
+          generate_release_notes: true
+          make_latest: 'true'
+          fail_on_unmatched_files: true
+          files: |
+            dist/Purgine-Setup-Windows.exe
+            dist/SHA256SUMS.txt

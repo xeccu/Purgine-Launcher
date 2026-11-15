@@ -10,7 +10,7 @@
   <a href="https://xccstudios.es">xccstudios.es</a>
 </p>
 
-> **Estado: Alpha (v0.1.0-alpha).** Es la primera versión pública: funciona a diario, pero puede tener fallos.
+> **Estado: Alpha.** Es la primera versión pública: funciona a diario, pero puede tener fallos.
 > Si encuentras uno, abre un *issue* en este repositorio.
 
 **Purgine Launcher** reúne tus juegos de **Steam**, **Epic Games** e **itch.io** en una biblioteca rápida y de bajo
@@ -40,7 +40,7 @@ cliente oficial de Steam solo se despierta para **jugar** y se cierra al termina
 
 ## Instalación en Windows
 
-1. Descarga **`Purgine-Setup-v0.1.0-alpha.exe`** desde la [última Release](https://github.com/xeccu/Purgine-Launcher/releases/latest).
+1. Descarga **[`Purgine-Setup-Windows.exe`](https://github.com/xeccu/Purgine-Launcher/releases/latest/download/Purgine-Setup-Windows.exe)** (siempre la última versión; también en la [página de Releases](https://github.com/xeccu/Purgine-Launcher/releases/latest)).
 2. Ábrelo y pulsa **Instalar**. Se instala solo para tu usuario, **sin permisos de administrador**, en
    `%LocalAppData%\Programs\Purgine`, con accesos directos en el menú Inicio y (opcional) el Escritorio.
 3. Purgine se abre al terminar. Las siguientes versiones se instalan solas desde el aviso «Nueva versión
@@ -52,7 +52,7 @@ cliente oficial de Steam solo se despierta para **jugar** y se cierra al termina
 - **No hace falta instalar .NET**: el ejecutable es autocontenido (incluye el runtime de .NET 10).
 - **Desinstalar**: Configuración de Windows → Aplicaciones → Aplicaciones instaladas → Purgine → Desinstalar. Puedes
   conservar tus datos (`%LocalAppData%\Purgine`) o borrarlos; los juegos instalados no se tocan.
-- **Instalación desatendida** (scripts): `Purgine-Setup-v0.1.0-alpha.exe --install --silent`.
+- **Instalación desatendida** (scripts): `Purgine-Setup-Windows.exe --install --silent`.
 
 ### Requisitos
 
@@ -83,17 +83,21 @@ powershell -ExecutionPolicy Bypass -File build/release.ps1
 ```
 
 Publica con el perfil `src/Purgine/Properties/PublishProfiles/win-x64.pubxml` (autocontenido, un solo archivo) y deja
-en `dist/` el instalador `Purgine-Setup-v<versión>.exe` y su `SHA256SUMS.txt`. La versión sale de
-`Directory.Build.props` (`VersionPrefix` + `VersionSuffix`).
+en `dist/` el instalador **`Purgine-Setup-Windows.exe`** (nombre fijo en todas las versiones) y su `SHA256SUMS.txt`. La
+versión sale de `Directory.Build.props` (`VersionPrefix` + `VersionSuffix`) o de `-Version v1.2.3-alpha`.
 
 **Cómo funciona el instalador**: es el propio `Purgine.exe`. Si el archivo se llama `Purgine-Setup-*.exe` (o recibe
 `--install`), muestra el asistente de instalación; con `--update` hace la actualización desatendida y con
 `--uninstall`, la desinstalación (`Updates/AppInstaller.cs`, `Views/SetupWindow.xaml`). Así no hace falta ninguna
 herramienta externa (Inno Setup, MSI…) y lo que se instala es exactamente lo que se ha probado.
 
-**Cómo publicar una versión**: sube `VersionPrefix`/`VersionSuffix`, ejecuta `build/release.ps1` y crea una Release en
-GitHub con la etiqueta `v<versión>` (p. ej. `v0.1.1-alpha`) adjuntando `Purgine-Setup-v<versión>.exe`. Las copias
-instaladas la verán al iniciar.
+**Cómo publicar una versión** (automático con GitHub Actions, `.github/workflows/release.yml`):
+
+1. Sube `VersionPrefix`/`VersionSuffix` en `Directory.Build.props` y, si quieres, escribe sus novedades en
+   `docs/releases/v<versión>.md`.
+2. Crea y sube la etiqueta: `git tag v0.1.1-alpha` y `git push origin v0.1.1-alpha` (o Actions → Release → *Run workflow*).
+3. La Action compila en Windows, genera `Purgine-Setup-Windows.exe`, crea la Release con las notas y adjunta el
+   instalador y su SHA-256. Las copias instaladas la ven al iniciar y se actualizan solas.
 
 ### Auto-actualizador (`Updates/UpdateService.cs`, `ViewModels/UpdateViewModel.cs`)
 

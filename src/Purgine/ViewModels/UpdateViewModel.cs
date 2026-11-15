@@ -211,6 +211,7 @@ public sealed partial class UpdateViewModel : ObservableObject, IDisposable
         s = HeaderRegex().Replace(s, string.Empty);
         s = s.Replace("**", string.Empty).Replace("__", string.Empty).Replace("`", string.Empty);
         s = LinkRegex().Replace(s, "$1");
+        s = ItalicRegex().Replace(s, "$1");
         s = BulletRegex().Replace(s, "• ");
         return s.Trim();
     }
@@ -220,6 +221,9 @@ public sealed partial class UpdateViewModel : ObservableObject, IDisposable
 
     [GeneratedRegex(@"\[([^\]]+)\]\([^)]+\)")]
     private static partial Regex LinkRegex();
+
+    [GeneratedRegex(@"(?<![\w*])\*(?=\S)([^*\n]+?)(?<=\S)\*(?![\w*])")]
+    private static partial Regex ItalicRegex();
 
     [GeneratedRegex(@"(?m)^\s*[-*]\s+")]
     private static partial Regex BulletRegex();
