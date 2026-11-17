@@ -67,7 +67,11 @@ public static class JsonFileStore
 
     private static void TryBackupCorrupt(string path)
     {
-        try { File.Copy(path, path + $".corrupt-{DateTime.Now:yyyyMMddHHmmss}", overwrite: true); }
+        try
+        {
+            File.Copy(path, path + $".corrupt-{DateTime.Now:yyyyMMddHHmmss}", overwrite: true);
+            BackupRetention.Prune(Path.GetDirectoryName(path)!, Path.GetFileName(path) + ".corrupt-*"); // como mucho tres
+        }
         catch { /* ignorar */ }
     }
 }

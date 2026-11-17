@@ -69,7 +69,7 @@ public sealed record CloudConflictInfo(
 /// </summary>
 public sealed class CloudSaveManager
 {
-    private const int MaxBackupsPerGame = 10;
+    private const int MaxBackupsPerGame = Infrastructure.BackupRetention.MaxCopies; // la última y dos anteriores
     private const long MaxBackupBytes = 2L * 1024 * 1024 * 1024;
     private static readonly TimeSpan SameAgeTolerance = TimeSpan.FromSeconds(60);
 
@@ -661,8 +661,7 @@ public sealed class CloudSaveManager
                 zip.CreateEntryFromFile(file, entry.Replace('\\', '/'), CompressionLevel.Fastest);
             }
         }
-        foreach (var old in Directory.GetFiles(dir, "*.zip").OrderByDescending(f => f).Skip(MaxBackupsPerGame))
-            File.Delete(old);
+        Infrastructure.BackupRetention.Prune(dir, "*.zip", MaxBackupsPerGame);
     }
 
     private static string Ago(DateTime? utc) =>

@@ -8,7 +8,7 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
 
     <!-- Versión pública (etiqueta de GitHub Releases: v{VersionPrefix}-{VersionSuffix}). El auto-actualizador la compara con la última publicada. -->
-    <VersionPrefix>0.1.1</VersionPrefix>
+    <VersionPrefix>0.2.0</VersionPrefix>
     <VersionSuffix>alpha</VersionSuffix>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Product>Purgine</Product>

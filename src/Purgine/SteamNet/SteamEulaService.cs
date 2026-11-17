@@ -89,7 +89,7 @@ public sealed class SteamEulaService(SteamSession session, Func<string?> steamPa
         {
             Directory.CreateDirectory(backupDir);
             File.Copy(config, Path.Combine(backupDir, $"localconfig-{DateTime.Now:yyyyMMdd-HHmmss}.vdf"), overwrite: true);
-            foreach (var old in Directory.GetFiles(backupDir, "localconfig-*.vdf").OrderByDescending(f => f).Skip(10)) File.Delete(old);
+            Infrastructure.BackupRetention.Prune(backupDir, "localconfig-*.vdf"); // como mucho tres copias
 
             var text = File.ReadAllText(config);
             var updated = SetAppValues(text, appId, eulas.Select(e => (e.Id, e.Version.ToString())).ToList());
