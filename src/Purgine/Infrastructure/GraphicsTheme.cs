@@ -26,6 +26,60 @@ public static class GraphicsTheme
 
     public static bool IsEpic => Skin == UiSkin.Epic;
 
+    /// <summary>Color de acento elegido (Ajustes → Apariencia). <see cref="AccentTheme.Platform"/> = el del estilo.</summary>
+    public static AccentTheme Accent { get; private set; } = AccentTheme.Platform;
+
+    /// <summary>Colores base de cada acento (el resto de tonos se derivan de este).</summary>
+    public static Color AccentColor(AccentTheme accent) => accent switch
+    {
+        AccentTheme.Blue => Rgb(0x3D, 0x7B, 0xFF),
+        AccentTheme.Red => Rgb(0xE5, 0x3E, 0x3E),
+        AccentTheme.Green => Rgb(0x2F, 0xB8, 0x5E),
+        AccentTheme.Yellow => Rgb(0xF5, 0xC5, 0x18),
+        AccentTheme.Gold => Rgb(0xD4, 0xA5, 0x3A),
+        AccentTheme.Silver => Rgb(0xB8, 0xC0, 0xCC),
+        AccentTheme.Orange => Rgb(0xF2, 0x7A, 0x1A),
+        AccentTheme.Purple => Rgb(0x8E, 0x5B, 0xF5),
+        AccentTheme.Pink => Rgb(0xEC, 0x4F, 0x9C),
+        AccentTheme.Teal => Rgb(0x14, 0xB8, 0xA6),
+        _ => (IsEpic ? EpicPalette : SteamPalette).Primary,
+    };
+
+    /// <summary>Cambia el color de acento en caliente (se combina con el estilo actual).</summary>
+    public static void ApplyAccent(AccentTheme accent)
+    {
+        Accent = accent;
+        ApplySkin(Skin);
+    }
+
+    /// <summary>
+    /// Paleta del estilo con el acento aplicado: botones, selección, enlaces y brillos pasan al color elegido; fondos,
+    /// paneles y texto siguen siendo los del estilo (Steam o Epic).
+    /// </summary>
+    private static Palette WithAccent(Palette p)
+    {
+        if (Accent == AccentTheme.Platform) return p;
+        var c = AccentColor(Accent);
+        return p with
+        {
+            Accent = Mix(c, Colors.White, 0.10),
+            AccentHover = Mix(c, Colors.White, 0.28),
+            AccentSoft = Mix(p.Bg, c, 0.22),
+            SidebarSelected = Mix(p.Bg, c, 0.30),
+            Primary = c,
+            PrimaryHover = Mix(c, Colors.White, 0.18),
+            PrimaryPressed = Mix(c, Colors.Black, 0.15),
+            PrimaryEnd = Mix(c, Colors.Black, 0.30),
+        };
+    }
+
+    /// <summary>Texto sobre el acento: oscuro en los acentos claros (amarillo, dorado, plateado) para que se lea.</summary>
+    private static Color OnAccent(Color accent) =>
+        0.2126 * accent.R + 0.7152 * accent.G + 0.0722 * accent.B > 165 ? Rgb(0x12, 0x14, 0x1A) : Colors.White;
+
+    private static Color Mix(Color a, Color b, double t) => Color.FromRgb(
+        (byte)Math.Round(a.R + (b.R - a.R) * t), (byte)Math.Round(a.G + (b.G - a.G) * t), (byte)Math.Round(a.B + (b.B - a.B) * t));
+
     /// <summary>Acrílico de Windows 11 detrás de la ventana: solo Steam moderno (el estilo Epic es negro opaco).</summary>
     public static bool UseAcrylic => IsModern && !IsEpic;
 
@@ -58,7 +112,7 @@ public static class GraphicsTheme
         SidebarSelected: Rgb(0x2A, 0x2A, 0x2F), Panel: Rgb(0x18, 0x18, 0x1C), SubtleBorder: Rgb(0x2C, 0x2C, 0x30),
         Primary: Rgb(0x00, 0x74, 0xE4), PrimaryHover: Rgb(0x26, 0x8F, 0xF5), PrimaryPressed: Rgb(0x00, 0x5E, 0xBC), PrimaryEnd: Rgb(0x00, 0x5A, 0xC0));
 
-    private static Palette P => IsEpic ? EpicPalette : SteamPalette;
+    private static Palette P => WithAccent(IsEpic ? EpicPalette : SteamPalette);
 
     private static Color Surface => P.Surface;
     private static Color Panel => P.Panel;
@@ -88,6 +142,7 @@ public static class GraphicsTheme
         Recolor(r, "SteamBlueHoverBrush", p.PrimaryHover);
         Recolor(r, "SteamBluePressedBrush", p.PrimaryPressed);
         Recolor(r, "OverlayBrush", WithAlpha(p.Bg, 0xB3));
+        Recolor(r, "OnAccentBrush", OnAccent(p.Primary));
         Apply(Current);
     }
 
@@ -163,7 +218,7 @@ public static class GraphicsTheme
 
         Current = preset;
         Changed?.Invoke(preset);
-        Log.Info($"Apariencia: {(epic ? "Epic Games" : "Steam")} {(modern ? "moderna" : "optimizada")}.");
+        Log.Info($"Apariencia: {(epic ? "Epic Games" : "Steam")} {(modern ? "moderna" : "optimizada")}{(Accent == AccentTheme.Platform ? "" : $", acento {Accent}")}.");
     }
 
     /// <summary>Brillo con el color dominante de un juego (solo Ultra-moderno; null en Rendimiento).</summary>

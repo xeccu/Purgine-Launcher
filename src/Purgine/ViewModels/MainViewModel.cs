@@ -321,11 +321,25 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         set { if (value) SetSortMode(LibrarySortMode.Recent); }
     }
 
+    public bool SortBySizeDescending
+    {
+        get => _settings.SortMode == LibrarySortMode.SizeDescending;
+        set { if (value) SetSortMode(LibrarySortMode.SizeDescending); }
+    }
+
+    public bool SortBySizeAscending
+    {
+        get => _settings.SortMode == LibrarySortMode.SizeAscending;
+        set { if (value) SetSortMode(LibrarySortMode.SizeAscending); }
+    }
+
     /// <summary>Texto del botón de orden.</summary>
     public string SortLabel => _settings.SortMode switch
     {
         LibrarySortMode.Recent => "Actividad reciente",
         LibrarySortMode.Playtime => "Tiempo de juego",
+        LibrarySortMode.SizeDescending => "Tamaño (mayor a menor)",
+        LibrarySortMode.SizeAscending => "Tamaño (menor a mayor)",
         _ => "Alfabético (A-Z)",
     };
 
@@ -342,6 +356,8 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         OnPropertyChanged(nameof(SortByName));
         OnPropertyChanged(nameof(SortByPlaytime));
         OnPropertyChanged(nameof(SortByRecent));
+        OnPropertyChanged(nameof(SortBySizeDescending));
+        OnPropertyChanged(nameof(SortBySizeAscending));
         OnPropertyChanged(nameof(SortLabel));
         ApplySort();
         _saveSettings.Request();
@@ -356,7 +372,25 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
                 GamesView.SortDescriptions.Add(new SortDescription(nameof(GameCardViewModel.TotalPlaytimeHours), ListSortDirection.Descending));
             else if (_settings.SortMode == LibrarySortMode.Recent)
                 GamesView.SortDescriptions.Add(new SortDescription(nameof(GameCardViewModel.LastPlayedTicks), ListSortDirection.Descending));
+            else if (_settings.SortMode == LibrarySortMode.SizeDescending)
+                GamesView.SortDescriptions.Add(new SortDescription(nameof(GameCardViewModel.SortSizeDescending), ListSortDirection.Descending));
+            else if (_settings.SortMode == LibrarySortMode.SizeAscending)
+                GamesView.SortDescriptions.Add(new SortDescription(nameof(GameCardViewModel.SortSizeAscending), ListSortDirection.Ascending));
             GamesView.SortDescriptions.Add(new SortDescription(nameof(GameCardViewModel.Name), ListSortDirection.Ascending));
+
+            // Orden en vivo por tamaño: cuando llega un peso nuevo de Steam o Epic, o termina la medición en disco, la
+            // tarjeta se recoloca sola sin rehacer la lista.
+            if (GamesView is ICollectionViewLiveShaping live && live.CanChangeLiveSorting)
+            {
+                live.LiveSortingProperties.Clear();
+                var bySize = _settings.SortMode is LibrarySortMode.SizeDescending or LibrarySortMode.SizeAscending;
+                if (bySize)
+                {
+                    live.LiveSortingProperties.Add(nameof(GameCardViewModel.SortSizeDescending));
+                    live.LiveSortingProperties.Add(nameof(GameCardViewModel.SortSizeAscending));
+                }
+                live.IsLiveSorting = bySize;
+            }
         }
     }
 
@@ -1881,7 +1915,7 @@ public sealed class MainViewModel : ObservableObject, ICardHost, IStoreActions, 
         var pendingText = pending is null ? string.Empty
             : $"\n\nTiene {(pending.Kind == DownloadJobKind.Install ? "una descarga" : "una actualización")} pendiente " +
               $"({JobText.Short(pending).ToLowerInvariant()}): se cancelará primero.";
-        var size = card.DiskSize > 0 ? $" ({Formatting.Bytes(card.DiskSize)})" : string.Empty;
+        var size = card.HasRealDiskSize ? $" ({Formatting.Bytes(card.DiskSize)})" : string.Empty;
         if (!(Dialogs?.Confirm("Desinstalar",
                 $"¿Desinstalar «{card.Name}»?\n\nSe borrarán de forma permanente los archivos del juego de este equipo{size} " +
                 "(no van a la papelera). Las partidas en la nube y el tiempo jugado se conservan." + pendingText) ?? false))

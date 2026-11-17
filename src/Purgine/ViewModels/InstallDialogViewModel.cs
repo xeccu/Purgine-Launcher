@@ -83,7 +83,7 @@ public sealed class InstallComponentViewModel : ObservableObject
     /// Epic que solo cambian cómo se transmiten las texturas), en vez de un engañoso «+0 KB».
     /// </summary>
     public static string AddedSizeText(long bytes) =>
-        bytes <= 0 ? "Sin descarga extra" : bytes < 1L << 20 ? "+ <1 MB" : "+" + InstallDialogViewModel.PreciseSize(bytes);
+        bytes <= 0 ? "Sin descarga extra" : "+" + InstallDialogViewModel.PreciseSize(bytes);
     /// <summary>Aclaración bajo el nombre (p. ej. «Opcional»).</summary>
     public string? Note { get; }
 
@@ -264,6 +264,6 @@ public sealed class InstallDialogViewModel : ObservableObject
         >= 1L << 40 => $"{bytes / (double)(1L << 40):0.00} TB",
         >= 1L << 30 => $"{bytes / (double)(1L << 30):0.00} GB",
         >= 1L << 20 => $"{bytes / (double)(1L << 20):0.0} MB",
-        _ => $"{Math.Max(0, bytes) / 1024.0:0} KB",
+        _ => Formatting.Bytes(bytes), // «4 bytes», «12 KB»: nunca «0 KB»
     };
 }

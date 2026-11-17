@@ -10,12 +10,24 @@ public static class Formatting
         return t.Minutes == 0 ? $"{(int)t.TotalHours} h" : $"{(int)t.TotalHours} h {t.Minutes} min";
     }
 
-    public static string Bytes(long bytes) => bytes switch
+    /// <summary>
+    /// Tamaño en la unidad que le corresponde, nunca redondeado a cero: «4 bytes», «12 KB», «350 MB», «1,50 GB»,
+    /// «1,25 TB» (con decimales cuando el número es pequeño, para que se vea la cifra real).
+    /// </summary>
+    public static string Bytes(long bytes)
     {
-        >= 1L << 30 => $"{bytes / (double)(1L << 30):0.0} GB",
-        >= 1L << 20 => $"{bytes / (double)(1L << 20):0} MB",
-        _ => $"{bytes / 1024.0:0} KB",
-    };
+        if (bytes < 0) bytes = 0;
+        const double Kb = 1024, Mb = Kb * 1024, Gb = Mb * 1024, Tb = Gb * 1024;
+        return bytes switch
+        {
+            >= (long)Tb => $"{bytes / Tb:0.00} TB",
+            >= (long)Gb => $"{bytes / Gb:0.00} GB",
+            >= (long)Mb => bytes < 10 * Mb ? $"{bytes / Mb:0.0} MB" : $"{bytes / Mb:0} MB",
+            >= (long)Kb => bytes < 10 * Kb ? $"{bytes / Kb:0.0} KB" : $"{bytes / Kb:0} KB",
+            1 => "1 byte",
+            _ => $"{bytes} bytes",
+        };
+    }
 
     public static string Speed(double bytesPerSecond) =>
         bytesPerSecond >= 1 << 20 ? $"{bytesPerSecond / (1 << 20):0.0} MB/s" : $"{bytesPerSecond / 1024:0} KB/s";

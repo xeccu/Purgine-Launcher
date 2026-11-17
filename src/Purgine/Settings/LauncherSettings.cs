@@ -46,6 +46,25 @@ public enum GraphicsPreset
     High,
 }
 
+/// <summary>
+/// Color de acento: <see cref="Platform"/> usa el del estilo (azul de Steam o de Epic); el resto tiñe botones,
+/// selección, enlaces y brillos con ese color, sobre el estilo elegido.
+/// </summary>
+public enum AccentTheme
+{
+    Platform,
+    Blue,
+    Red,
+    Green,
+    Yellow,
+    Gold,
+    Silver,
+    Orange,
+    Purple,
+    Pink,
+    Teal,
+}
+
 /// <summary>Orden de la biblioteca (lista lateral y cuadrícula).</summary>
 public enum LibrarySortMode
 {
@@ -53,6 +72,10 @@ public enum LibrarySortMode
     Playtime,
     /// <summary>Actividad reciente: última sesión, de más reciente a más antigua.</summary>
     Recent,
+    /// <summary>Por tamaño, de mayor a menor (lo que ocupa en disco o, sin instalar, el peso del juego).</summary>
+    SizeDescending,
+    /// <summary>Por tamaño, de menor a mayor.</summary>
+    SizeAscending,
 }
 
 /// <summary>Tipo de contenido de la biblioteca (filtros «Juegos / Software / Herramientas»).</summary>
@@ -151,6 +174,9 @@ public sealed class LauncherSettings
 
     /// <summary>Estilo visual: Steam o Epic Games (se combina con <see cref="GraphicsPreset"/>: Moderna / Optimizada).</summary>
     public UiSkin Skin { get; set; } = UiSkin.Steam;
+
+    /// <summary>Color de acento (sobre el estilo Steam o Epic). Por defecto, el del propio estilo.</summary>
+    public AccentTheme Accent { get; set; } = AccentTheme.Platform;
 
     /// <summary>Última carpeta elegida para instalar juegos de itch.io (null = la de Purgine en AppData).</summary>
     public string? ItchLibraryPath { get; set; }

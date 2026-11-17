@@ -67,6 +67,8 @@ public partial class App : Application
         Log.Init(AppPaths.LogFile);
         Log.Info($"Purgine {AppVersion.Display} iniciado. Datos: {AppPaths.DataDir}");
         HookGlobalErrorHandlers();
+        // Copias locales: como mucho tres de cada cosa; y el instalador de la actualización ya aplicada, fuera.
+        _ = Task.Run(BackupRetention.PruneAll);
 
         var settings = JsonFileStore.LoadOrCreate<LauncherSettings>(AppPaths.SettingsFile);
         if (settings.Migrate())
@@ -79,6 +81,7 @@ public partial class App : Application
 
         GraphicsTheme.Apply(settings.GraphicsPreset);
         GraphicsTheme.ApplySkin(settings.Skin);
+        if (settings.Accent != AccentTheme.Platform) GraphicsTheme.ApplyAccent(settings.Accent);
 
         // Composición manual: pocos servicios no justifican un contenedor de DI.
         var locator = new SteamLocator();

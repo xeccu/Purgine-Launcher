@@ -307,7 +307,11 @@ public sealed class GameCardViewModel : ObservableObject
 
     public bool ShowDiskSize => !IsNotInstalled && !IsLocal && !string.IsNullOrEmpty(Entry.InstallDir);
 
+    /// <summary>Lo medido en disco, en su unidad («4 bytes» en un lanzador de EA en Epic, «31,25 GB»…).</summary>
     public string DiskSizeText => _diskSize < 0 ? "Calculando…" : Formatting.Bytes(_diskSize);
+
+    /// <summary>Ya se ha medido la carpeta en disco.</summary>
+    public bool HasRealDiskSize => _diskSize >= 0;
 
     public void SetDiskSize(long bytes)
     {
@@ -315,6 +319,30 @@ public sealed class GameCardViewModel : ObservableObject
         OnPropertyChanged(nameof(DiskSize));
         OnPropertyChanged(nameof(DiskSizeText));
         OnPropertyChanged(nameof(CardSubtitle));
+        RaiseSortSize();
+    }
+
+    // ----- Orden por tamaño -----
+
+    /// <summary>
+    /// Tamaño para ordenar: instalado, lo que ocupa de verdad en disco (medido; si aún no, el del manifiesto local);
+    /// sin instalar, el peso del juego. -1 si no se conoce.
+    /// </summary>
+    public long SortSize =>
+        !IsNotInstalled ? (HasRealDiskSize ? _diskSize : Entry.SizeOnDisk > 0 ? Entry.SizeOnDisk : -1)
+        : _installSize > 0 ? (long)_installSize : -1;
+
+    /// <summary>De mayor a menor: los de tamaño desconocido, al final.</summary>
+    public long SortSizeDescending => SortSize;
+
+    /// <summary>De menor a mayor: los de tamaño desconocido, también al final.</summary>
+    public long SortSizeAscending => SortSize < 0 ? long.MaxValue : SortSize;
+
+    private void RaiseSortSize()
+    {
+        OnPropertyChanged(nameof(SortSize));
+        OnPropertyChanged(nameof(SortSizeDescending));
+        OnPropertyChanged(nameof(SortSizeAscending));
     }
 
     /// <summary>
@@ -323,7 +351,7 @@ public sealed class GameCardViewModel : ObservableObject
     /// </summary>
     public string CardSubtitle =>
         IsNotInstalled && !IsLocal ? $"Peso: {RequiredSizeText}"
-        : _diskSize > 0 && ShowDiskSize ? $"{PlaytimeText} · {Formatting.Bytes(_diskSize)}"
+        : HasRealDiskSize && ShowDiskSize ? $"{PlaytimeText} · {Formatting.Bytes(_diskSize)}"
         : PlaytimeText;
 
     // ----- Peso del juego (no instalados) -----
@@ -352,6 +380,7 @@ public sealed class GameCardViewModel : ObservableObject
         OnPropertyChanged(nameof(DownloadSizeText));
         OnPropertyChanged(nameof(ShowRequiredSize));
         OnPropertyChanged(nameof(CardSubtitle));
+        RaiseSortSize();
     }
 
     public bool HasInstallSize => _installSize > 0;
@@ -441,6 +470,7 @@ public sealed class GameCardViewModel : ObservableObject
     {
         var coverChanged = entry.CoverImagePath != Entry.CoverImagePath || entry.ExecutablePath != Entry.ExecutablePath;
         Entry = entry;
+        RaiseSortSize();
         CheckInstallPresent();
         if (coverChanged)
         {

@@ -44,6 +44,28 @@ public sealed class SettingsViewModel : ObservableObject
 
         RefreshTags();
         _library.Changed += (_, _) => RefreshTags();
+
+        AccentOptions = Enum.GetValues<AccentTheme>()
+            .Select(a => new AccentOptionViewModel(a, () => _s.Accent, SetAccent))
+            .ToList();
+    }
+
+    // ===================== Color de acento =====================
+
+    /// <summary>Muestras de color (Ajustes → Apariencia): la primera es la del propio estilo (Steam o Epic).</summary>
+    public IReadOnlyList<AccentOptionViewModel> AccentOptions { get; }
+
+    public string AccentName => AccentOptionViewModel.DisplayName(_s.Accent);
+
+    /// <summary>Aplica el color al instante (botones, selección, enlaces, brillos) y lo guarda en settings.json.</summary>
+    private void SetAccent(AccentTheme accent)
+    {
+        if (_s.Accent == accent) return;
+        _s.Accent = accent;
+        Infrastructure.GraphicsTheme.ApplyAccent(accent);
+        foreach (var o in AccentOptions) o.Refresh();
+        OnPropertyChanged(nameof(AccentName));
+        Saved();
     }
 
     // ===================== Cuenta de Steam (SteamKit2) =====================
@@ -173,6 +195,7 @@ public sealed class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(AppearanceSteamLight));
         OnPropertyChanged(nameof(AppearanceEpicModern));
         OnPropertyChanged(nameof(AppearanceEpicLight));
+        foreach (var o in AccentOptions) o.Refresh(); // la muestra «Según el estilo» cambia con Steam / Epic
         Saved();
     }
 
@@ -305,6 +328,7 @@ public sealed class SettingsViewModel : ObservableObject
         _s.SteamClientArguments = d.SteamClientArguments;
         _s.SteamCleanupPolicy = d.SteamCleanupPolicy;
         if (_s.GraphicsPreset != d.GraphicsPreset || _s.Skin != d.Skin) SetAppearance(d.Skin, d.GraphicsPreset);
+        SetAccent(d.Accent);
         _s.CloudSyncGraceSeconds = d.CloudSyncGraceSeconds;
         _s.SteamShutdownTimeoutSeconds = d.SteamShutdownTimeoutSeconds;
         _s.GameStartTimeoutSeconds = d.GameStartTimeoutSeconds;
@@ -337,4 +361,69 @@ public sealed class SettingsViewModel : ObservableObject
             Log.Warn($"No se pudo abrir {path}: {ex.Message}");
         }
     }
+}
+
+/// <summary>Una muestra del selector de color de acento.</summary>
+public sealed class AccentOptionViewModel : ObservableObject
+{
+    private readonly Func<AccentTheme> _current;
+    private readonly Action<AccentTheme> _select;
+
+    public AccentOptionViewModel(AccentTheme theme, Func<AccentTheme> current, Action<AccentTheme> select)
+    {
+        Theme = theme;
+        _current = current;
+        _select = select;
+    }
+
+    public AccentTheme Theme { get; }
+    public string Name => DisplayName(Theme);
+
+    /// <summary>Color de la muestra (dorado y plateado con un leve degradado metálico).</summary>
+    public System.Windows.Media.Brush Swatch
+    {
+        get
+        {
+            var c = Infrastructure.GraphicsTheme.AccentColor(Theme);
+            System.Windows.Media.Brush brush = Theme switch
+            {
+                AccentTheme.Gold => Gradient(0xF3, 0xD2, 0x7A, 0xB0, 0x82, 0x28),
+                AccentTheme.Silver => Gradient(0xF0, 0xF3, 0xF7, 0x8A, 0x93, 0xA1),
+                _ => new System.Windows.Media.SolidColorBrush(c),
+            };
+            brush.Freeze();
+            return brush;
+        }
+    }
+
+    public bool IsSelected
+    {
+        get => _current() == Theme;
+        set { if (value) _select(Theme); }
+    }
+
+    public void Refresh()
+    {
+        OnPropertyChanged(nameof(IsSelected));
+        OnPropertyChanged(nameof(Swatch));
+    }
+
+    public static string DisplayName(AccentTheme theme) => theme switch
+    {
+        AccentTheme.Platform => "Según el estilo (Steam / Epic)",
+        AccentTheme.Blue => "Azul",
+        AccentTheme.Red => "Rojo",
+        AccentTheme.Green => "Verde",
+        AccentTheme.Yellow => "Amarillo",
+        AccentTheme.Gold => "Dorado",
+        AccentTheme.Silver => "Plateado",
+        AccentTheme.Orange => "Naranja",
+        AccentTheme.Purple => "Morado",
+        AccentTheme.Pink => "Rosa",
+        AccentTheme.Teal => "Turquesa",
+        _ => theme.ToString(),
+    };
+
+    private static System.Windows.Media.LinearGradientBrush Gradient(byte r1, byte g1, byte b1, byte r2, byte g2, byte b2) =>
+        new(System.Windows.Media.Color.FromRgb(r1, g1, b1), System.Windows.Media.Color.FromRgb(r2, g2, b2), 45);
 }

@@ -21,6 +21,8 @@
         <SolidColorBrush x:Key="TextBrush" Color="{StaticResource TextColor}" />
         <SolidColorBrush x:Key="MutedBrush" Color="{StaticResource MutedColor}" />
         <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+        <!-- Texto sobre el color de acento (oscuro en acentos claros; lo cambia GraphicsTheme) -->
+        <SolidColorBrush x:Key="OnAccentBrush" Color="White" />
         <SolidColorBrush x:Key="AccentHoverBrush" Color="#6A9EFF" />
         <SolidColorBrush x:Key="AccentSoftBrush" Color="#1A2B4D" />
         <SolidColorBrush x:Key="HoverBrush" Color="#232836" />
@@ -83,7 +85,7 @@
         <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
             <Setter Property="Background" Value="{StaticResource AccentBrush}" />
             <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
-            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Foreground" Value="{StaticResource OnAccentBrush}" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Template">
                 <Setter.Value>
@@ -504,7 +506,7 @@
 
         <!-- Botón principal de la ficha (JUGAR / INSTALAR / ACTUALIZAR) -->
         <Style x:Key="SteamPlayButton" TargetType="Button">
-            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Foreground" Value="{StaticResource OnAccentBrush}" />
             <Setter Property="Background" Value="{DynamicResource PlayButtonBrush}" />
             <Setter Property="FontSize" Value="15" />
             <Setter Property="FontWeight" Value="Bold" />
@@ -539,7 +541,7 @@
 
         <!-- Botón redondo de jugar/instalar sobre portadas y filas -->
         <Style x:Key="RoundPlayButton" TargetType="Button">
-            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Foreground" Value="{StaticResource OnAccentBrush}" />
             <Setter Property="Background" Value="{DynamicResource PlayButtonBrush}" />
             <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
             <Setter Property="Width" Value="52" />
