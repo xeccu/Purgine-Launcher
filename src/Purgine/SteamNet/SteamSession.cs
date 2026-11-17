@@ -30,11 +30,24 @@ public sealed class SteamSession : IAsyncDisposable
 {
     private static readonly TimeSpan IdleDisconnect = TimeSpan.FromMinutes(3);
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(30);
+    /// <summary>Tiempo máximo de una consulta a un servicio (logros, amigos…): una conexión muerta no la cuelga.</summary>
+    private static readonly TimeSpan ServiceTimeout = TimeSpan.FromSeconds(20);
+
     /// <summary>
-    /// LoginID propio: Steam distingue sesiones por este valor, así que la de Purgine convive con la del
-    /// cliente de escritorio sin expulsarla.
+    /// LoginID propio de este equipo, perfil y usuario de Windows: Steam distingue sesiones por este valor, así que
+    /// la de Purgine convive con la del cliente de escritorio. Antes era un valor fijo y dos Purgine con la misma
+    /// cuenta (el portátil y el sobremesa) se expulsaban entre sí (LogonSessionReplaced): tras jugar en uno, los
+    /// logros del otro dejaban de cargar hasta reiniciar.
     /// </summary>
-    private const uint LauncherLoginId = 0x4C4C_4C31; // "LLL1"
+    private static readonly uint LauncherLoginId = ComputeLoginId();
+
+    private static uint ComputeLoginId()
+    {
+        var seed = $"{Environment.MachineName}|{Environment.UserName}|{AppPaths.ProfileDir}".ToUpperInvariant();
+        var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(seed));
+        var id = BitConverter.ToUInt32(hash, 0);
+        return id == 0 ? 0x4C4C_4C31u : id;
+    }
 
     private readonly SteamCredentialStore _store;
     private readonly SemaphoreSlim _connectGate = new(1, 1);
@@ -66,7 +79,8 @@ public sealed class SteamSession : IAsyncDisposable
     }
 
     public SteamSessionState State { get { lock (_gate) return _state; } }
-    public bool IsLoggedIn => State == SteamSessionState.LoggedIn;
+    /// <summary>Sesión iniciada y con conexión viva (tras desconectar, el estado podía quedarse en «iniciada»).</summary>
+    public bool IsLoggedIn => State == SteamSessionState.LoggedIn && _client?.IsConnected == true;
     public bool IsAnonymous { get; private set; }
     public string? AccountName { get; private set; }
     public SteamID? SteamId { get; private set; }
@@ -282,6 +296,7 @@ public sealed class SteamSession : IAsyncDisposable
         {
             // Sin conexión o Steam ocupado (p. ej. NoConnection): sin logros, sin excepción sin observar.
             Log.Warn($"Steam (red): logros no disponibles ahora ({ex.Message}).");
+            MarkBroken(ex);
             return null;
         }
         Hold();
@@ -292,7 +307,7 @@ public sealed class SteamSession : IAsyncDisposable
 
             var progressRequest = new CPlayer_GetAchievementsProgress_Request { steamid = steamId, language = "spanish" };
             progressRequest.appids.Add(appId);
-            var progress = await player.GetAchievementsProgress(progressRequest).ToTask().WaitAsync(ct).ConfigureAwait(false);
+            var progress = await player.GetAchievementsProgress(progressRequest).ToTask().WaitAsync(ServiceTimeout, ct).ConfigureAwait(false);
             if (progress.Result != EResult.OK) return null;
             var entry = progress.Body.achievement_progress.FirstOrDefault(a => a.appid == appId);
             if (entry is null || entry.total == 0) return new AchievementSummary(0, 0, []);
@@ -307,7 +322,7 @@ public sealed class SteamSession : IAsyncDisposable
                     max_achievements = (uint)maxTop,
                 };
                 topRequest.appids.Add(appId);
-                var topResponse = await player.GetTopAchievementsForGames(topRequest).ToTask().WaitAsync(ct).ConfigureAwait(false);
+                var topResponse = await player.GetTopAchievementsForGames(topRequest).ToTask().WaitAsync(ServiceTimeout, ct).ConfigureAwait(false);
                 if (topResponse.Result == EResult.OK)
                 {
                     foreach (var a in topResponse.Body.games.FirstOrDefault(g => g.appid == appId)?.achievements ?? [])
@@ -323,6 +338,7 @@ public sealed class SteamSession : IAsyncDisposable
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Log.Warn($"Steam (red): no se pudieron leer los logros de {appId}: {ex.Message}");
+            MarkBroken(ex);
             return null;
         }
         finally
@@ -353,11 +369,12 @@ public sealed class SteamSession : IAsyncDisposable
         try
         {
             var service = _client!.GetHandler<SteamUnifiedMessages>()!.CreateService<TService>();
-            return await call(service, SteamId.ConvertToUInt64()).WaitAsync(ct).ConfigureAwait(false);
+            return await call(service, SteamId.ConvertToUInt64()).WaitAsync(ServiceTimeout, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Log.Warn($"Steam (red): no se pudo obtener {what}: {ex.Message}");
+            MarkBroken(ex);
             return null;
         }
         finally
@@ -400,7 +417,7 @@ public sealed class SteamSession : IAsyncDisposable
     public async Task<bool> ReconnectAsync(CancellationToken ct)
     {
         if (!HasSavedSession) return false;
-        var healthy = IsLoggedIn && _client?.IsConnected == true;
+        var healthy = IsLoggedIn && _client?.IsConnected == true && await PingAsync(ct).ConfigureAwait(false);
         if (!healthy || Volatile.Read(ref _holds) == 0) await DisconnectAsync().ConfigureAwait(false);
         try { return await LoginWithSavedSessionAsync(ct).ConfigureAwait(false); }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -408,6 +425,37 @@ public sealed class SteamSession : IAsyncDisposable
             Log.Warn($"Steam (red): no se pudo reconectar ({ex.Message}).");
             return false;
         }
+    }
+
+    /// <summary>
+    /// ¿Responde la conexión? Una petición ligera con plazo corto: tras suspender el equipo o una partida puede estar
+    /// muerta aunque figure como conectada.
+    /// </summary>
+    private async Task<bool> PingAsync(CancellationToken ct)
+    {
+        try
+        {
+            var apps = _apps;
+            if (apps is null) return false;
+            await apps.PICSGetAccessTokens([7u], []).ToTask().WaitAsync(TimeSpan.FromSeconds(8), ct).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Warn($"Steam (red): la conexión no responde ({ex.Message}); se rehace.");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Una consulta falló por la conexión (plazo agotado, desconexión): se cierra para que la siguiente empiece con
+    /// una conexión nueva, salvo que haya descargas usándola (ellas reintentan por su cuenta).
+    /// </summary>
+    private void MarkBroken(Exception ex)
+    {
+        if (ex is not (TimeoutException or SteamLoginException or TaskCanceledException or InvalidOperationException)) return;
+        if (Volatile.Read(ref _holds) > 1) return; // la propia consulta aún cuenta como uno
+        _ = Task.Run(DisconnectAsync);
     }
 
     public void Hold() { Interlocked.Increment(ref _holds); Touch(); }
@@ -451,6 +499,10 @@ public sealed class SteamSession : IAsyncDisposable
             {
                 Log.Warn($"Steam cerró la sesión: {cb.Result}");
                 SetState(SteamSessionState.Disconnected, $"Steam cerró la sesión ({cb.Result}).");
+                // Sin sesión, la conexión ya no sirve: se cierra para que la próxima consulta empiece de cero (antes
+                // quedaba a medias y los logros fallaban hasta reiniciar Purgine).
+                var loggedOffClient = _client;
+                _ = Task.Run(async () => { if (ReferenceEquals(_client, loggedOffClient)) await DisconnectAsync().ConfigureAwait(false); });
             });
             _callbacks.Subscribe<SteamFriends.PersonaStateCallback>(cb =>
             {
@@ -461,7 +513,15 @@ public sealed class SteamSession : IAsyncDisposable
             });
             _callbacks.Subscribe<SteamApps.LicenseListCallback>(cb =>
             {
-                if (cb.Result == EResult.OK) _licenses.TrySetResult(cb.LicenseList);
+                if (cb.Result != EResult.OK) return;
+                // Steam vuelve a enviar la lista al comprar o activar algo: se sustituye para detectar juegos nuevos
+                // sin reiniciar Purgine.
+                if (!_licenses.TrySetResult(cb.LicenseList))
+                {
+                    var updated = NewLicenseTcs();
+                    updated.SetResult(cb.LicenseList);
+                    _licenses = updated;
+                }
             });
 
             _pumpCts = new CancellationTokenSource();
@@ -523,6 +583,9 @@ public sealed class SteamSession : IAsyncDisposable
             _friends = null;
             IsAnonymous = false;
             _licenses = NewLicenseTcs();
+            // El bombeo de mensajes ya está parado y Steam no avisará: el estado se pone aquí. Si se quedaba en
+            // «iniciada», la siguiente consulta usaba una conexión que ya no existe (NullReferenceException).
+            SetState(SteamSessionState.Disconnected, "Desconectado de Steam.");
         }
         finally
         {

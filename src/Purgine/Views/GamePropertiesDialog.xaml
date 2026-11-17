@@ -24,7 +24,8 @@
                     <TextBlock Text="{Binding DlcTabHeader}" />
                 </StackPanel>
             </RadioButton>
-            <RadioButton Style="{StaticResource NavTab}" GroupName="PropTabs" IsChecked="{Binding IsModsTab, Mode=TwoWay}">
+            <RadioButton Style="{StaticResource NavTab}" GroupName="PropTabs" IsChecked="{Binding IsModsTab, Mode=TwoWay}"
+                         Visibility="{Binding ShowModsTab, Converter={StaticResource BoolToVis}}">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="&#xE74C;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
                     <TextBlock Text="{Binding ModsTabHeader}" />
@@ -53,12 +54,19 @@
                     <ItemsControl ItemsSource="{Binding Dlcs}" Focusable="False">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:DlcItemViewModel}">
-                                <CheckBox IsChecked="{Binding IsEnabled, Mode=TwoWay}" IsEnabled="{Binding HasContent}" Margin="10,6">
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding Name}" />
-                                        <TextBlock Text="{Binding Detail}" Style="{StaticResource MutedText}" FontSize="11" />
-                                    </StackPanel>
-                                </CheckBox>
+                                <DockPanel Margin="10,6">
+                                    <TextBlock DockPanel.Dock="Right" Text="{Binding SizeText}" Style="{StaticResource MutedText}" FontSize="12"
+                                               VerticalAlignment="Center" Margin="12,0,6,0"
+                                               Visibility="{Binding SizeText, Converter={StaticResource NullToVis}}" />
+                                    <CheckBox IsChecked="{Binding IsEnabled, Mode=TwoWay}" IsEnabled="{Binding HasContent}">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name}" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding Description}" Style="{StaticResource MutedText}" FontSize="11" TextWrapping="Wrap"
+                                                       Visibility="{Binding Description, Converter={StaticResource NullToVis}}" />
+                                            <TextBlock Text="{Binding Detail}" Style="{StaticResource MutedText}" FontSize="11" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                </DockPanel>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -89,8 +97,8 @@
         <DockPanel Grid.Row="4" Margin="0,14,0,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <Button Style="{StaticResource GhostButton}" Content="Cerrar" IsCancel="True" Margin="0,0,8,0" MinWidth="90" />
-                <Button Style="{StaticResource PrimaryButton}" Content="Aplicar DLC" MinWidth="90" Command="{Binding ApplyCommand}"
-                        ToolTip="Guarda los cambios de DLC (los mods se aplican al marcarlos)" />
+                <Button Style="{StaticResource PrimaryButton}" Content="{Binding ApplyText}" MinWidth="90" Command="{Binding ApplyCommand}"
+                        ToolTip="Descarga lo que actives y borra del disco lo que desactives" />
             </StackPanel>
             <TextBlock Text="{Binding ResultText}" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" />
         </DockPanel>

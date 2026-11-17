@@ -15,7 +15,22 @@ public sealed class DriveOptionViewModel : ObservableObject
         LibraryPath = libraryPath;
         IsDefault = isDefault;
         IsNewLibrary = isNewLibrary;
-        HasEnoughSpace = requiredBytes == 0 || (ulong)Math.Max(0, freeBytes) >= requiredBytes;
+        SetRequired(requiredBytes);
+    }
+
+    private bool _hasEnoughSpace = true;
+
+    /// <summary>
+    /// Recalcula si cabe con el peso de lo elegido. Peso desconocido (0) nunca bloquea: el motor de descarga vuelve a
+    /// comprobar el espacio con la lista real de archivos antes de escribir nada.
+    /// </summary>
+    public void SetRequired(ulong requiredBytes)
+    {
+        var enough = requiredBytes == 0 || (ulong)Math.Max(0, FreeBytes) >= requiredBytes;
+        if (_hasEnoughSpace == enough) return;
+        _hasEnoughSpace = enough;
+        OnPropertyChanged(nameof(HasEnoughSpace));
+        OnPropertyChanged(nameof(Tooltip));
     }
 
     public string Root { get; }
@@ -29,7 +44,7 @@ public sealed class DriveOptionViewModel : ObservableObject
     /// <summary>Unidad con más espacio entre las bibliotecas existentes (la que se usaría sin preguntar).</summary>
     public bool IsDefault { get; }
     public bool IsNewLibrary { get; }
-    public bool HasEnoughSpace { get; }
+    public bool HasEnoughSpace => _hasEnoughSpace;
 
     public string Tooltip =>
         !HasEnoughSpace ? "No hay espacio suficiente en esta unidad."
@@ -37,12 +52,56 @@ public sealed class DriveOptionViewModel : ObservableObject
         : $"Biblioteca de Steam: {LibraryPath}";
 }
 
-/// <summary>Lo elegido en el diálogo de instalar.</summary>
-public sealed record InstallChoice(string LibraryPath, bool CreateDesktopShortcut, bool CreateStartMenuShortcut);
+/// <summary>
+/// Un componente del selector previo a instalar: un DLC con contenido (Steam) o una etiqueta de instalación (Epic).
+/// <see cref="Key"/> es el id del DLC o la etiqueta.
+/// </summary>
+public sealed class InstallComponentViewModel : ObservableObject
+{
+    private bool _isSelected;
+    private readonly Action _changed;
+
+    public InstallComponentViewModel(string key, string name, long sizeBytes, bool selected, Action changed, string? note = null)
+    {
+        Key = key;
+        Name = name;
+        SizeBytes = sizeBytes;
+        _isSelected = selected;
+        _changed = changed;
+        Note = note;
+    }
+
+    public string Key { get; }
+    public string Name { get; }
+    /// <summary>Lo que añade (bytes); -1 = no disponible.</summary>
+    public long SizeBytes { get; }
+    public string SizeText => SizeBytes < 0 ? "No disponible por el momento"
+        : AddedSizeText(SizeBytes);
+
+    /// <summary>
+    /// «+27,39 GB»; «Sin descarga extra» si no añade nada y «+ &lt;1 MB» si son unos pocos bytes (p. ej. las opciones de
+    /// Epic que solo cambian cómo se transmiten las texturas), en vez de un engañoso «+0 KB».
+    /// </summary>
+    public static string AddedSizeText(long bytes) =>
+        bytes <= 0 ? "Sin descarga extra" : bytes < 1L << 20 ? "+ <1 MB" : "+" + InstallDialogViewModel.PreciseSize(bytes);
+    /// <summary>Aclaración bajo el nombre (p. ej. «Opcional»).</summary>
+    public string? Note { get; }
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set { if (SetProperty(ref _isSelected, value)) _changed(); }
+    }
+}
+
+/// <summary>Lo elegido en el diálogo de instalar (con los componentes marcados y desmarcados).</summary>
+public sealed record InstallChoice(string LibraryPath, bool CreateDesktopShortcut, bool CreateStartMenuShortcut,
+    IReadOnlyList<string>? SelectedComponents = null, IReadOnlyList<string>? UnselectedComponents = null);
 
 /// <summary>
 /// Diálogo previo a una instalación (superposición dentro de la ventana, sin ventanas externas): juego y
-/// tamaño, accesos directos y unidad de destino con su espacio libre.
+/// peso, componentes opcionales (DLC de Steam, etiquetas de Epic), accesos directos y unidad de destino con su
+/// espacio libre. El peso y la comprobación de espacio siguen a los componentes marcados.
 /// </summary>
 public sealed class InstallDialogViewModel : ObservableObject
 {
@@ -53,18 +112,21 @@ public sealed class InstallDialogViewModel : ObservableObject
     private bool _createStartMenuShortcut = true;
 
     public InstallDialogViewModel(string name, ulong sizeBytes, IEnumerable<DriveOptionViewModel> drives,
-        Func<string?>? browse = null, bool showShortcuts = true)
+        Func<string?>? browse = null, bool showShortcuts = true, ulong downloadBytes = 0)
     {
         _browse = browse;
+        _downloadBytes = downloadBytes;
         ShowShortcuts = showShortcuts;
         BrowseCommand = new RelayCommand(_ => Browse(), _ => _browse is not null);
         Name = name;
-        SizeBytes = sizeBytes;
+        _sizeBytes = sizeBytes;
         Drives = new ObservableCollection<DriveOptionViewModel>(drives);
         _selectedDrive = Drives.FirstOrDefault(d => d.IsDefault && d.HasEnoughSpace)
                          ?? Drives.FirstOrDefault(d => d.HasEnoughSpace)
                          ?? Drives.FirstOrDefault();
-        InstallCommand = new RelayCommand(_ => Close(new InstallChoice(_selectedDrive!.LibraryPath, _createDesktopShortcut, _createStartMenuShortcut)),
+        InstallCommand = new RelayCommand(_ => Close(new InstallChoice(_selectedDrive!.LibraryPath, _createDesktopShortcut, _createStartMenuShortcut,
+                HasComponents ? Components.Where(c => c.IsSelected).Select(c => c.Key).ToList() : null,
+                HasComponents ? Components.Where(c => !c.IsSelected).Select(c => c.Key).ToList() : null)),
             _ => _selectedDrive is { HasEnoughSpace: true });
         CancelCommand = new RelayCommand(_ => Close(null));
     }
@@ -96,9 +158,65 @@ public sealed class InstallDialogViewModel : ObservableObject
     }
 
     public string Name { get; }
-    public ulong SizeBytes { get; }
-    /// <summary>«72,01 GB» (o «Tamaño desconocido» si Steam no lo publica).</summary>
-    public string SizeText => SizeBytes == 0 ? "Tamaño desconocido" : PreciseSize((long)SizeBytes);
+
+    private ulong _sizeBytes;
+    private ulong _downloadBytes;
+    private Func<IReadOnlyList<InstallComponentViewModel>, (ulong Install, ulong Download)?>? _sizeOf;
+
+    /// <summary>Peso instalado de lo elegido (0 = no disponible).</summary>
+    public ulong SizeBytes
+    {
+        get => _sizeBytes;
+        private set
+        {
+            _sizeBytes = value;
+            foreach (var d in Drives) d.SetRequired(value);
+            OnPropertyChanged(nameof(SizeBytes));
+            OnPropertyChanged(nameof(SizeText));
+            OnPropertyChanged(nameof(DownloadText));
+            OnPropertyChanged(nameof(WarningText));
+            CommandManager.InvalidateRequerySuggested();
+        }
+    }
+
+    /// <summary>«72,01 GB» o «No disponible por el momento» (nunca una cifra inventada).</summary>
+    public string SizeText => _sizeBytes == 0 ? "No disponible por el momento" : PreciseSize((long)_sizeBytes);
+
+    /// <summary>«Descarga necesaria: 58,3 GB» (comprimido), si se conoce.</summary>
+    public string? DownloadText => _sizeBytes == 0 || _downloadBytes == 0 ? null : $"Descarga necesaria: {PreciseSize((long)_downloadBytes)}";
+
+    /// <summary>«72,01 GB» del juego base obligatorio, sin ningún componente (null si no hay selector).</summary>
+    public string? BaseSizeText { get; private set; }
+
+    /// <summary>Componentes opcionales (DLC con contenido, etiquetas de Epic). Vacío = el juego no tiene.</summary>
+    public ObservableCollection<InstallComponentViewModel> Components { get; } = [];
+    public bool HasComponents => Components.Count > 0;
+
+    /// <summary>
+    /// Añade el selector de componentes. <paramref name="sizeOf"/> calcula el peso y la descarga exactos de lo
+    /// marcado (null = no disponible).
+    /// </summary>
+    public void SetComponents(IEnumerable<InstallComponentViewModel> components,
+        Func<IReadOnlyList<InstallComponentViewModel>, (ulong Install, ulong Download)?> sizeOf)
+    {
+        _sizeOf = sizeOf;
+        Components.Clear();
+        foreach (var c in components) Components.Add(c);
+        var baseSize = sizeOf([]);
+        BaseSizeText = baseSize is { Install: > 0 } b ? PreciseSize((long)b.Install) : "No disponible por el momento";
+        OnPropertyChanged(nameof(BaseSizeText));
+        OnPropertyChanged(nameof(HasComponents));
+        RecalculateSize();
+    }
+
+    /// <summary>Los componentes llaman aquí al marcarse o desmarcarse.</summary>
+    public void RecalculateSize()
+    {
+        if (_sizeOf is null) return;
+        var size = _sizeOf(Components.Where(c => c.IsSelected).ToList());
+        _downloadBytes = size?.Download ?? 0;
+        SizeBytes = size?.Install ?? 0;
+    }
 
     public ImageSource? Banner
     {

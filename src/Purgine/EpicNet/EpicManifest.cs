@@ -9,11 +9,16 @@ public sealed record EpicChunk(Guid Guid, string GuidHex, ulong Hash, byte Group
 /// <summary>Trozo de un archivo: <see cref="Size"/> bytes desde <see cref="Offset"/> dentro del fragmento.</summary>
 public sealed record EpicChunkPart(string ChunkGuidHex, uint Offset, uint Size);
 
-/// <summary>Un archivo de la instalación: ruta relativa, SHA-1 y los trozos de fragmentos que lo forman, en orden.</summary>
-public sealed record EpicFile(string Path, byte[] Sha1, IReadOnlyList<EpicChunkPart> Parts)
+/// <summary>
+/// Un archivo de la instalación: ruta relativa, SHA-1, los trozos de fragmentos que lo forman (en orden) y sus
+/// etiquetas de instalación (vacías = forma parte del juego base y se instala siempre).
+/// </summary>
+public sealed record EpicFile(string Path, byte[] Sha1, IReadOnlyList<EpicChunkPart> Parts, IReadOnlyList<string> Tags)
 {
     public long Size => Parts.Sum(p => (long)p.Size);
 }
+
+
 
 /// <summary>
 /// Manifiesto binario de Epic (formato de Epic Games Launcher, el mismo que interpreta Legendary):
@@ -32,7 +37,23 @@ public sealed class EpicManifest
     public Dictionary<string, EpicChunk> Chunks { get; } = new(StringComparer.Ordinal);
     public List<EpicFile> Files { get; } = [];
 
+    /// <summary>Todo el manifiesto (todas las etiquetas).</summary>
     public long InstallSize => Files.Sum(f => f.Size);
+
+    /// <summary>
+    /// Archivos que se instalan con estas etiquetas: los del juego base (sin etiqueta) y los que tengan alguna de
+    /// las elegidas. Null = todo el manifiesto.
+    /// </summary>
+    public IEnumerable<EpicFile> FilesFor(IReadOnlyCollection<string>? tags) =>
+        tags is null ? Files : Files.Where(f => f.Tags.Count == 0 || f.Tags.Any(t => tags.Contains(t, StringComparer.OrdinalIgnoreCase)));
+
+    /// <summary>Peso instalado con estas etiquetas (null = todo).</summary>
+    public long SizeFor(IReadOnlyCollection<string>? tags) => FilesFor(tags).Sum(f => f.Size);
+
+    /// <summary>Descarga (fragmentos comprimidos, cada uno una sola vez) con estas etiquetas (null = todo).</summary>
+    public long DownloadSizeFor(IReadOnlyCollection<string>? tags) =>
+        FilesFor(tags).SelectMany(f => f.Parts).Select(p => p.ChunkGuidHex).Distinct()
+            .Sum(g => Chunks.TryGetValue(g, out var c) ? c.FileSize : 0);
 
     /// <summary>Carpeta de fragmentos en la CDN según la versión del formato.</summary>
     public string ChunkDir => FeatureLevel >= 15 ? "ChunksV4" : FeatureLevel >= 6 ? "ChunksV3" : FeatureLevel >= 3 ? "ChunksV2" : "Chunks";
@@ -122,10 +143,13 @@ public sealed class EpicManifest
         var shas = new byte[count][];
         for (var i = 0; i < count; i++) shas[i] = r.ReadBytes(20);
         r.ReadBytes(count);                                      // flags
+        var fileTags = new string[count][];
         for (var i = 0; i < count; i++)                          // etiquetas de instalación
         {
             var tags = r.ReadInt32();
-            for (var t = 0; t < tags; t++) FString(r);
+            var list = new List<string>(Math.Max(0, tags));
+            for (var t = 0; t < tags; t++) if (FString(r) is { Length: > 0 } tag) list.Add(tag);
+            fileTags[i] = list.ToArray();
         }
         for (var i = 0; i < count; i++)
         {
@@ -141,7 +165,7 @@ public sealed class EpicManifest
                 parts.Add(new EpicChunkPart(hex, offset, length));
                 r.BaseStream.Position = partStart + partSize;
             }
-            Files.Add(new EpicFile(names[i].Replace('/', '\\'), shas[i], parts));
+            Files.Add(new EpicFile(names[i].Replace('/', '\\'), shas[i], parts, fileTags[i]));
         }
         r.BaseStream.Position = start + size;
     }
@@ -186,5 +210,22 @@ public sealed class EpicManifest
         using var output = new MemoryStream();
         z.CopyTo(output);
         return output.ToArray();
+    }
+}
+
+/// <summary>Reconoce por el nombre los paquetes de texturas en alta resolución (DLC de Steam).</summary>
+public static class EpicComponentNames
+{
+    /// <summary>
+    /// ¿Es un paquete de texturas en alta resolución? («High Resolution Texture Pack», «HD Textures», «4K»…). Se
+    /// ofrece desmarcado: es un extra grande que no hace falta para jugar.
+    /// </summary>
+    public static bool IsHighResolutionPack(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        var lower = name.ToLowerInvariant();
+        return lower.Contains("high resolution") || lower.Contains("high-resolution") || lower.Contains("high res") ||
+               lower.Contains("high-res") || lower.Contains("hd texture") || lower.Contains("4k texture") ||
+               lower.Contains("texturas hd") || lower.Contains("alta resolución");
     }
 }

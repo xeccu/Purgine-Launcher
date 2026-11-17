@@ -200,13 +200,9 @@
                     </Grid>
 
                     <TextBlock Text="{Binding Name}" Margin="2,8,2,0" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Text="{Binding PlaytimeText}" Margin="2,2,2,0" FontSize="12"
+                    <TextBlock Text="{Binding CardSubtitle}" Margin="2,2,2,0" FontSize="12"
                                Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis"
-                               Visibility="{Binding ShowRequiredSize, Converter={StaticResource InverseBoolToVis}}" />
-                    <TextBlock Text="{Binding RequiredSizeText, StringFormat='Tamaño: {0}'}" Margin="2,2,2,0" FontSize="12"
-                               Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis"
-                               ToolTip="Espacio necesario para instalarlo"
-                               Visibility="{Binding ShowRequiredSize, Converter={StaticResource BoolToVis}}" />
+                               ToolTip="{Binding CardSubtitle}" />
                 </StackPanel>
             </Button>
         </DataTemplate>
@@ -267,12 +263,9 @@
                         <TextBlock Text="{Binding PlatformLabel}" FontSize="11" Foreground="{StaticResource MutedBrush}" />
                     </Border>
 
-                    <TextBlock Grid.Column="3" Text="{Binding PlaytimeText}" VerticalAlignment="Center"
+                    <TextBlock Grid.Column="3" Text="{Binding CardSubtitle}" VerticalAlignment="Center"
                                Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis"
-                               Visibility="{Binding ShowRequiredSize, Converter={StaticResource InverseBoolToVis}}" />
-                    <TextBlock Grid.Column="3" Text="{Binding RequiredSizeText, StringFormat='Tamaño: {0}'}" VerticalAlignment="Center"
-                               Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis"
-                               Visibility="{Binding ShowRequiredSize, Converter={StaticResource BoolToVis}}" />
+                               ToolTip="{Binding CardSubtitle}" />
 
                     <Button Grid.Column="4" Style="{StaticResource RoundPlayButton}" Width="34" Height="34" FontSize="13" Margin="8,0,4,0"
                             Command="{Binding PrimaryActionCommand}" Content="{Binding PrimaryActionGlyph}"
@@ -560,8 +553,10 @@
                             ToolTip="Recargar la información de Steam y Epic Games (logros, cromos, tiempo jugado, conexión) sin reiniciar Purgine">
                         <TextBlock Style="{StaticResource ReloadSpinIcon}" />
                     </Button>
-                    <Button Style="{StaticResource IconButton}" Content="&#xE72C;" Command="{Binding RefreshCommand}"
-                            Margin="0,0,8,0" ToolTip="Volver a escanear las bibliotecas" />
+                    <Button Style="{StaticResource IconButton}" Command="{Binding RefreshCommand}" Margin="0,0,8,0"
+                            ToolTip="Actualizar la biblioteca: vuelve a consultar Steam, Epic Games e itch.io (juegos nuevos, versiones y pesos) y mide lo que ocupan los instalados">
+                        <TextBlock Style="{StaticResource RefreshSpinIcon}" />
+                    </Button>
                     <Button Style="{StaticResource PrimaryButton}" Command="{Binding AddLocalGameCommand}"
                             ToolTip="Añadir cualquier .exe: proyectos propios (Godot, Unity…), emuladores o juegos sin tienda">
                         <StackPanel Orientation="Horizontal">

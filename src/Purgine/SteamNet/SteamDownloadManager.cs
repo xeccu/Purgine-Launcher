@@ -16,6 +16,8 @@ public sealed class QueuedDownload
     public bool AwaitingSteamRegistration { get; set; }
     public bool CreateDesktopShortcut { get; set; }
     public bool CreateStartMenuShortcut { get; set; }
+    /// <summary>DLC desmarcados en el selector de componentes (null = sin elección).</summary>
+    public List<uint>? DisabledDlc { get; set; }
 }
 
 /// <summary>
@@ -64,6 +66,7 @@ public sealed class SteamDownloadManager : IDisposable
             {
                 CreateDesktopShortcut = q.CreateDesktopShortcut,
                 CreateStartMenuShortcut = q.CreateStartMenuShortcut,
+                DisabledDlc = q.DisabledDlc,
             });
             job.SetState(DownloadJobState.Paused, "En pausa (de la sesión anterior)");
         }
@@ -90,7 +93,7 @@ public sealed class SteamDownloadManager : IDisposable
     /// null = la de más espacio libre.
     /// </summary>
     public DownloadJob Enqueue(GameEntry game, DownloadJobKind kind, string? libraryPath = null,
-        bool desktopShortcut = false, bool startMenuShortcut = false)
+        bool desktopShortcut = false, bool startMenuShortcut = false, IReadOnlyCollection<uint>? disabledDlc = null)
     {
         var appId = uint.Parse(game.AppId);
         lock (_gate)
@@ -109,6 +112,7 @@ public sealed class SteamDownloadManager : IDisposable
         {
             CreateDesktopShortcut = desktopShortcut,
             CreateStartMenuShortcut = startMenuShortcut,
+            DisabledDlc = disabledDlc,
         });
         Persist();
         _wake.Release();
@@ -367,6 +371,7 @@ public sealed class SteamDownloadManager : IDisposable
                 AwaitingSteamRegistration = _awaitingSteam.ContainsKey(j),
                 CreateDesktopShortcut = j.CreateDesktopShortcut,
                 CreateStartMenuShortcut = j.CreateStartMenuShortcut,
+                DisabledDlc = j.DisabledDlc?.ToList(),
             }).ToList();
         }
         JsonFileStore.Save(_queuePath, items);

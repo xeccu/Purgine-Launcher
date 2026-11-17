@@ -401,6 +401,23 @@ public sealed partial class GameDetailViewModel : ObservableObject
     /// <summary>Segunda parte de la recarga, con las conexiones ya rehechas: vuelve a consultarlo todo.</summary>
     public Task ReloadNetworkDataAsync() => LoadAsync();
 
+    /// <summary>
+    /// Vuelve a pedir solo los logros (al cerrar el juego de esta ficha: los desbloqueados en la partida aparecen sin
+    /// tener que pulsar recargar ni reiniciar).
+    /// </summary>
+    public async Task ReloadAchievementsAsync()
+    {
+        if (IsClosing || !ShowAchievements || IsLoadingAchievements) return;
+        var ct = _cts.Token;
+        _achievementsLoaded = false;
+        try
+        {
+            if (Card.IsSteam) await LoadAchievementsAsync(ct);
+            else await LoadEpicAchievementsAsync(ct);
+        }
+        catch (OperationCanceledException) { _achievementsLoaded = false; }
+    }
+
     /// <summary>Suelta las imágenes grandes (ventana en la bandeja). <see cref="LoadAsync"/> las recupera.</summary>
     public void ReleaseImages()
     {

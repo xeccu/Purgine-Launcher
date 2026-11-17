@@ -17,6 +17,8 @@ public sealed class EpicInstallRecord
     public string CatalogItemId { get; set; } = string.Empty;
     public long InstallSize { get; set; }
     public string[] Categories { get; set; } = [];
+    /// <summary>Opciones de descarga selectiva de Epic elegidas al instalar (ids del SDMeta); null = las de por defecto.</summary>
+    public string[]? SelectedOptions { get; set; }
 }
 
 /// <summary>Registro (<c>epic-installs.json</c>) de lo que Purgine ha instalado o actualizado de Epic.</summary>
@@ -63,6 +65,7 @@ public sealed class QueuedEpicDownload
     public string[] Categories { get; set; } = [];
     public bool CreateDesktopShortcut { get; set; }
     public bool CreateStartMenuShortcut { get; set; }
+    public string[]? SelectedOptions { get; set; }
 }
 
 /// <summary>
@@ -97,6 +100,7 @@ public sealed class EpicDownloadManager : IDisposable
                 EpicCatalogItemId = q.CatalogItemId,
                 CreateDesktopShortcut = q.CreateDesktopShortcut,
                 CreateStartMenuShortcut = q.CreateStartMenuShortcut,
+                EpicSelectedOptions = q.SelectedOptions,
             }, q.Categories);
             job.SetState(DownloadJobState.Paused, "En pausa (de la sesión anterior)");
         }
@@ -125,7 +129,8 @@ public sealed class EpicDownloadManager : IDisposable
     }
 
     public DownloadJob Enqueue(GameEntry game, DownloadJobKind kind, string? libraryPath = null,
-        bool desktopShortcut = false, bool startMenuShortcut = false)
+        bool desktopShortcut = false, bool startMenuShortcut = false, IReadOnlyCollection<string>? selectedOptions = null,
+        bool quickVerify = false)
     {
         if (game.EpicNamespace is null || game.EpicCatalogItemId is null)
             throw new InvalidOperationException("Faltan los datos de catálogo de Epic de este juego.");
@@ -143,6 +148,8 @@ public sealed class EpicDownloadManager : IDisposable
         {
             library = Path.GetDirectoryName(dir.TrimEnd('\\'))!;
             folder = Path.GetFileName(dir.TrimEnd('\\'));
+            // Una actualización respeta las opciones que se eligieron al instalar.
+            selectedOptions ??= EpicInstallRegistry.Load().FirstOrDefault(r => r.AppName == game.AppId)?.SelectedOptions;
         }
         else
         {
@@ -157,6 +164,8 @@ public sealed class EpicDownloadManager : IDisposable
             EpicCatalogItemId = game.EpicCatalogItemId,
             CreateDesktopShortcut = desktopShortcut,
             CreateStartMenuShortcut = startMenuShortcut,
+            EpicSelectedOptions = selectedOptions,
+            QuickVerify = quickVerify,
         }, game.EpicCategories.ToArray());
         Persist();
         _wake.Release();
@@ -268,6 +277,7 @@ public sealed class EpicDownloadManager : IDisposable
                 CatalogItemId = job.EpicCatalogItemId!,
                 InstallSize = result.InstallSize,
                 Categories = categories,
+                SelectedOptions = result.SelectedOptions?.ToArray(),
             });
             job.SetState(DownloadJobState.Completed, job.Kind == DownloadJobKind.Install ? "Instalado." : "Actualizado.");
             Untrack(job);
@@ -335,6 +345,7 @@ public sealed class EpicDownloadManager : IDisposable
                 Categories = _categories.GetValueOrDefault(j) ?? [],
                 CreateDesktopShortcut = j.CreateDesktopShortcut,
                 CreateStartMenuShortcut = j.CreateStartMenuShortcut,
+                SelectedOptions = j.EpicSelectedOptions?.ToArray(),
             }).ToList();
         }
         JsonFileStore.Save(_queuePath, items);

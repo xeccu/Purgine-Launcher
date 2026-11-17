@@ -13,8 +13,14 @@ public sealed class DlcItemViewModel : ObservableObject
     private bool _isEnabled;
 
     public DlcItemViewModel(uint id, string name, bool hasContent, bool isInstalled, bool isEnabled)
+        : this(id.ToString(), name, hasContent, isInstalled, isEnabled) => Id = id;
+
+    /// <summary>Opción de contenido de Epic (clave = id de la opción en el SDMeta de Epic).</summary>
+    public DlcItemViewModel(string key, string name, bool hasContent, bool isInstalled, bool isEnabled, string? sizeText = null, string? description = null)
     {
-        Id = id;
+        Key = key;
+        SizeText = sizeText;
+        Description = description;
         Name = name;
         HasContent = hasContent;
         IsInstalled = isInstalled;
@@ -23,6 +29,12 @@ public sealed class DlcItemViewModel : ObservableObject
     }
 
     public uint Id { get; }
+    /// <summary>Id del DLC (Steam) o de la opción de Epic.</summary>
+    public string Key { get; }
+    /// <summary>«+27,4 GB» (Epic), o null.</summary>
+    public string? SizeText { get; }
+    /// <summary>Descripción de Epic, o null.</summary>
+    public string? Description { get; }
     public string Name { get; }
     /// <summary>Tiene archivos propios (depot): se puede activar o desactivar.</summary>
     public bool HasContent { get; }
@@ -32,12 +44,14 @@ public sealed class DlcItemViewModel : ObservableObject
     public bool IsEnabled
     {
         get => _isEnabled;
-        set => SetProperty(ref _isEnabled, value);
+        set { if (SetProperty(ref _isEnabled, value)) OnPropertyChanged(nameof(Detail)); }
     }
 
     public string Detail =>
         !HasContent ? "Sin archivos propios: lo activa tu licencia (no se puede desactivar)"
-        : IsInstalled ? "Instalado" : "No instalado";
+        : IsInstalled ? (IsEnabled ? "Instalado" : "Instalado · se borrará al aplicar")
+        : IsEnabled && !InitialEnabled ? "No instalado · se descargará al aplicar"
+        : "No instalado";
 }
 
 /// <summary>
@@ -94,9 +108,9 @@ public sealed class ModItemViewModel : ObservableObject
 }
 
 /// <summary>
-/// Propiedades de un juego instalado: DLC (activar/desactivar los que tienen archivos propios, guardado en el
-/// appmanifest como hace el cliente de Steam) y mods de Workshop (activar/desactivar moviendo su carpeta).
-/// Los cambios se aplican al pulsar «Aplicar».
+/// Propiedades de un juego instalado: DLC (instalar o quitar de verdad los que tienen archivos propios: «Aplicar»
+/// pone en Descargas una actualización que baja los activados y borra del disco los desactivados) y mods de Workshop
+/// (activar/desactivar moviendo su carpeta, al momento).
 /// </summary>
 public sealed class GamePropertiesViewModel : ObservableObject
 {
@@ -104,14 +118,22 @@ public sealed class GamePropertiesViewModel : ObservableObject
     private readonly SteamSession _session;
     private readonly SteamOwnershipService _ownership;
     private readonly SteamCommunityService _community;
+    private readonly Func<IReadOnlyCollection<uint>, string?>? _applyDlc;
+    private readonly Func<Task<(IReadOnlyList<DlcItemViewModel> Items, string Status)>>? _loadEpic;
+    private readonly Func<IReadOnlyCollection<string>, string?>? _applyEpic;
     private bool _isDlcTab = true;
     private string _dlcStatus = "Cargando los DLC…";
     private string _modsStatus = "Buscando mods…";
     private string _resultText = string.Empty;
     private bool _isBusy;
 
-    public GamePropertiesViewModel(GameCardViewModel card, SteamSession session, SteamOwnershipService ownership, SteamCommunityService community)
+    /// <param name="applyDlc">
+    /// Pone en Descargas la actualización con estos DLC desactivados (los demás se instalan). Devuelve el error o null.
+    /// </param>
+    public GamePropertiesViewModel(GameCardViewModel card, SteamSession session, SteamOwnershipService ownership, SteamCommunityService community,
+        Func<IReadOnlyCollection<uint>, string?>? applyDlc = null)
     {
+        _applyDlc = applyDlc;
         _card = card;
         _session = session;
         _ownership = ownership;
@@ -121,6 +143,30 @@ public sealed class GamePropertiesViewModel : ObservableObject
         OpenSubscriptionsCommand = new RelayCommand(_ => OpenUrl(
             $"https://steamcommunity.com/my/myworkshopfiles/?appid={card.Entry.AppId}&browsefilter=mysubscriptions"));
     }
+
+    /// <summary>
+    /// Propiedades de un juego de Epic instalado por Purgine: las opciones de contenido de Epic (las mismas que en
+    /// Epic Games Launcher) con su estado real en disco. «Aplicar» descarga las marcadas y borra las desmarcadas.
+    /// </summary>
+    public static GamePropertiesViewModel ForEpic(GameCardViewModel card, SteamSession session, SteamOwnershipService ownership,
+        SteamCommunityService community, Func<Task<(IReadOnlyList<DlcItemViewModel> Items, string Status)>> load,
+        Func<IReadOnlyCollection<string>, string?> apply) =>
+        new(card, session, ownership, community, null, load, apply);
+
+    private GamePropertiesViewModel(GameCardViewModel card, SteamSession session, SteamOwnershipService ownership, SteamCommunityService community,
+        Func<IReadOnlyCollection<uint>, string?>? applyDlc, Func<Task<(IReadOnlyList<DlcItemViewModel> Items, string Status)>> loadEpic,
+        Func<IReadOnlyCollection<string>, string?> applyEpic)
+        : this(card, session, ownership, community, applyDlc)
+    {
+        _loadEpic = loadEpic;
+        _applyEpic = applyEpic;
+        _dlcStatus = "Consultando las opciones de Epic…";
+    }
+
+    public bool IsEpic => _loadEpic is not null;
+    /// <summary>La pestaña de Workshop solo existe en Steam.</summary>
+    public bool ShowModsTab => !IsEpic;
+    public string ApplyText => IsEpic ? "Aplicar" : "Aplicar DLC";
 
     public string Title => $"Propiedades — {_card.Name}";
     public string GameName => _card.Name;
@@ -134,11 +180,13 @@ public sealed class GamePropertiesViewModel : ObservableObject
     public string DlcStatus { get => _dlcStatus; private set => SetProperty(ref _dlcStatus, value); }
     public string ModsStatus { get => _modsStatus; private set => SetProperty(ref _modsStatus, value); }
     public string ResultText { get => _resultText; private set => SetProperty(ref _resultText, value); }
-    public string DlcTabHeader => $"DLC ({Dlcs.Count})";
+    public string DlcTabHeader => IsEpic ? $"Contenido opcional ({Dlcs.Count})" : $"DLC ({Dlcs.Count})";
     public string ModsTabHeader => $"Workshop ({Mods.Count})";
 
     /// <summary>Solo los DLC esperan a «Aplicar» (necesitan Steam cerrado); los mods se aplican al momento.</summary>
-    public bool HasChanges => Dlcs.Any(d => d.HasContent && d.IsEnabled != d.InitialEnabled);
+    /// También cuenta un DLC cuyo estado en disco no coincide con lo elegido (desactivado pero aún instalado, o activado
+    /// sin instalar): «Aplicar» lo pone en orden.
+    public bool HasChanges => Dlcs.Any(d => d.HasContent && (d.IsEnabled != d.InitialEnabled || d.IsEnabled != d.IsInstalled));
 
     public ICommand ApplyCommand { get; }
     public ICommand OpenWorkshopCommand { get; }
@@ -151,7 +199,28 @@ public sealed class GamePropertiesViewModel : ObservableObject
 
     public async Task LoadAsync()
     {
+        if (IsEpic) { await LoadEpicAsync(); return; }
         await Task.WhenAll(LoadDlcsAsync(), LoadModsAsync());
+    }
+
+    private async Task LoadEpicAsync()
+    {
+        try
+        {
+            var (items, status) = await _loadEpic!();
+            foreach (var item in items)
+            {
+                item.PropertyChanged += (_, _) => CommandManager.InvalidateRequerySuggested();
+                Dlcs.Add(item);
+            }
+            DlcStatus = status;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Propiedades (Epic) de {_card.Name}: {ex.Message}");
+            DlcStatus = $"No se pudieron consultar las opciones en Epic: {ex.Message}";
+        }
+        OnPropertyChanged(nameof(DlcTabHeader));
     }
 
     private async Task LoadDlcsAsync()
@@ -180,8 +249,11 @@ public sealed class GamePropertiesViewModel : ObservableObject
         var withDepots = info["depots"].Children
             .Select(d => d["dlcappid"].AsUnsignedInteger()).Where(id => id != 0).ToHashSet();
         listed.UnionWith(withDepots);
+        var depotToDlc = info["depots"].Children
+            .Where(d => uint.TryParse(d.Name, out _) && d["dlcappid"].AsUnsignedInteger() != 0)
+            .ToDictionary(d => uint.Parse(d.Name!), d => d["dlcappid"].AsUnsignedInteger());
 
-        var installed = InstalledDlcDepots();
+        var installed = InstalledDlcDepots(depotToDlc);
         var disabled = AppManifestWriter.ReadDisabledDlc(AcfPath);
         var owned = listed.Where(_ownership.IsOwned).ToList();
 
@@ -197,18 +269,27 @@ public sealed class GamePropertiesViewModel : ObservableObject
         DlcStatus = owned.Count == 0
             ? listed.Count == 0 ? "Este juego no tiene DLC." : $"No tienes ninguno de sus {listed.Count} DLC."
             : $"Tienes {owned.Count} DLC" + (notOwned > 0 ? $" ({notOwned} más en la tienda)." : ".") +
-              " Desactivar un DLC con archivos hace que Steam y Purgine dejen de instalarlo y actualizarlo; " +
-              "se aplica en la próxima actualización o verificación. Requiere Steam cerrado.";
+              " Al aplicar, Purgine descarga los DLC que actives y borra del disco los que desactives (con Steam cerrado).";
     }
 
-    /// <summary>DLC con depot instalado (InstalledDepots/…/dlcappid del appmanifest).</summary>
-    private HashSet<uint> InstalledDlcDepots()
+    /// <summary>
+    /// DLC con depot instalado según el appmanifest (InstalledDepots: por su <c>dlcappid</c> o, si falta, por el depot
+    /// según Steam) y cuya carpeta del juego existe.
+    /// </summary>
+    private HashSet<uint> InstalledDlcDepots(IReadOnlyDictionary<uint, uint> depotToDlc)
     {
         try
         {
+            if (_card.Entry.InstallDir is not { } dir || !Directory.Exists(dir)) return [];
             var depots = VdfParser.ParseFile(AcfPath)["AppState"]?["InstalledDepots"];
-            return depots is null ? [] : depots.Children.Values
-                .Select(d => uint.TryParse(d.GetValue("dlcappid"), out var id) ? id : 0).Where(id => id != 0).ToHashSet();
+            if (depots is null) return [];
+            var result = new HashSet<uint>();
+            foreach (var (name, node) in depots.Children)
+            {
+                if (uint.TryParse(node.GetValue("dlcappid"), out var id) && id != 0) result.Add(id);
+                else if (uint.TryParse(name, out var depot) && depotToDlc.TryGetValue(depot, out var dlc)) result.Add(dlc);
+            }
+            return result;
         }
         catch (Exception) { return []; }
     }
@@ -266,7 +347,8 @@ public sealed class GamePropertiesViewModel : ObservableObject
     /// <summary>Aplica los cambios de DLC (los mods ya se aplicaron al marcarlos).</summary>
     private void Apply()
     {
-        if (_card.IsRunning) { ResultText = "Cierra el juego antes de cambiar los DLC."; return; }
+        if (_card.IsRunning) { ResultText = "Cierra el juego antes de cambiar su contenido."; return; }
+        if (IsEpic) { ApplyEpic(); return; }
         if (SteamLocator.IsClientRunning())
         {
             ResultText = "Cierra Steam para cambiar los DLC (lo reescribe al salir) y vuelve a pulsar «Aplicar».";
@@ -275,8 +357,23 @@ public sealed class GamePropertiesViewModel : ObservableObject
         _isBusy = true;
         try
         {
-            AppManifestWriter.WriteDisabledDlc(AcfPath, Dlcs.Where(d => d.HasContent && !d.IsEnabled).Select(d => d.Id));
-            ResultText = "DLC guardados. Se aplican en la próxima actualización o verificación del juego.";
+            var disabled = Dlcs.Where(d => d.HasContent && !d.IsEnabled).Select(d => d.Id).ToList();
+            var added = Dlcs.Count(d => d.HasContent && d.IsEnabled && !d.IsInstalled);
+            var removed = Dlcs.Count(d => d.HasContent && !d.IsEnabled && d.IsInstalled);
+            if (_applyDlc is not null)
+            {
+                // Una actualización de Purgine: baja solo los depots de los DLC activados y borra los de los desactivados.
+                if (_applyDlc(disabled) is { } error) { ResultText = error; return; }
+                ResultText = added == 0 && removed == 0
+                    ? "Guardado. No hay nada que descargar ni borrar."
+                    : $"En Descargas: {(added > 0 ? $"se descargará{(added > 1 ? "n" : "")} {added} DLC" : "")}" +
+                      $"{(added > 0 && removed > 0 ? " y " : "")}{(removed > 0 ? $"se borrará{(removed > 1 ? "n" : "")} {removed} del disco" : "")}.";
+            }
+            else
+            {
+                AppManifestWriter.WriteDisabledDlc(AcfPath, disabled);
+                ResultText = "DLC guardados. Se aplican en la próxima actualización del juego.";
+            }
             Reload();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -287,6 +384,21 @@ public sealed class GamePropertiesViewModel : ObservableObject
         {
             _isBusy = false;
         }
+    }
+
+    /// <summary>Epic: pone en Descargas la actualización con estas opciones (baja lo marcado y borra lo desmarcado).</summary>
+    private void ApplyEpic()
+    {
+        var added = Dlcs.Count(d => d.IsEnabled && !d.IsInstalled);
+        var removed = Dlcs.Count(d => !d.IsEnabled && d.IsInstalled);
+        if (_applyEpic!(Dlcs.Where(d => d.IsEnabled).Select(d => d.Key).ToList()) is { } error) { ResultText = error; return; }
+        ResultText = $"En Descargas: {(added > 0 ? $"se descargará{(added > 1 ? "n" : "")} {added}" : "")}" +
+                     $"{(added > 0 && removed > 0 ? " y " : "")}{(removed > 0 ? $"se borrará{(removed > 1 ? "n" : "")} {removed} del disco" : "")}" +
+                     (added == 0 && removed == 0 ? "se comprobará el contenido" : "") + ".";
+        var items = Dlcs.Select(d => new DlcItemViewModel(d.Key, d.Name, true, d.IsInstalled, d.IsEnabled, d.SizeText, d.Description)).ToList();
+        Dlcs.Clear();
+        foreach (var d in items) { d.PropertyChanged += (_, _) => CommandManager.InvalidateRequerySuggested(); Dlcs.Add(d); }
+        CommandManager.InvalidateRequerySuggested();
     }
 
     /// <summary>Recarga el estado real tras aplicar (lo marcado pasa a ser el estado inicial).</summary>

@@ -13,7 +13,9 @@ public sealed record DepotDownloadResult(
     string LibraryPath,
     string InstallDirName,
     uint BuildId,
-    IReadOnlyList<(uint DepotId, ulong ManifestId, ulong Size, DepotManifest Manifest)> Depots);
+    IReadOnlyList<(uint DepotId, ulong ManifestId, ulong Size, DepotManifest Manifest)> Depots,
+    IReadOnlyCollection<uint>? DisabledDlc = null,
+    IReadOnlyDictionary<uint, uint>? DepotDlc = null);
 
 /// <summary>
 /// Motor de descarga de depots desde la CDN de Steam (patrón DepotDownloader), 100 % en C#:
@@ -54,14 +56,30 @@ public sealed class DepotDownloadEngine
         var buildId = appInfo["depots"]["branches"]["public"]["buildid"].AsUnsignedInteger();
         var installPath = Path.Combine(job.LibraryPath, "steamapps", "common", installDirName);
 
-        // DLC desactivados en Propiedades: sus depots no se descargan ni se actualizan.
-        var disabledDlc = AppManifestWriter.ReadDisabledDlc(Path.Combine(job.LibraryPath, "steamapps", $"appmanifest_{job.AppId}.acf"));
-        var selections = DepotSelector.Select(appInfo["depots"], DepotSelector.SteamLanguage(),
-            dlc => _ownership.IsOwned(dlc) && !disabledDlc.Contains(dlc));
-        if (selections.Count == 0) throw new InvalidOperationException("No hay depots para Windows que esta cuenta pueda descargar.");
-
         // Manifiestos instalados (para actualizar solo lo que cambia).
         var installed = ReadInstalledDepots(job.LibraryPath, job.AppId);
+
+        // DLC desmarcados en el selector de componentes o desactivados en Propiedades: sus depots no se descargan
+        // ni se actualizan. Los DLC opcionales (texturas en alta resolución…) solo si se marcaron o ya estaban.
+        var explicitChoice = job.DisabledDlc is not null;
+        var disabledDlc = job.DisabledDlc?.ToHashSet()
+                          ?? AppManifestWriter.ReadDisabledDlc(Path.Combine(job.LibraryPath, "steamapps", $"appmanifest_{job.AppId}.acf"));
+        var selections = DepotSelector.Select(appInfo["depots"], DepotSelector.SteamLanguage(),
+                dlc => _ownership.IsOwned(dlc) && !disabledDlc.Contains(dlc), _ownership.OwnsDepot)
+            .Where(d => !d.Optional || (explicitChoice ? !disabledDlc.Contains(d.DlcAppId) : installed.ContainsKey(d.DepotId)))
+            .ToList();
+        if (selections.Count == 0) throw new InvalidOperationException("No hay depots para Windows que esta cuenta pueda descargar.");
+
+        // Depots de DLC que están instalados y ya no se quieren (desmarcados): sus archivos se borran al terminar,
+        // para que el DLC no quede en disco ni lo monte Steam.
+        var dlcDepots = appInfo["depots"].Children
+            .Where(d => uint.TryParse(d.Name, out _) && (d["dlcappid"].AsUnsignedInteger() != 0 || d["config"]["optionaldlc"].AsUnsignedInteger() != 0))
+            .ToDictionary(d => uint.Parse(d.Name!), d => d["dlcappid"].AsUnsignedInteger() is var id and not 0 ? id : d["config"]["optionaldlc"].AsUnsignedInteger());
+        var selectedIds = selections.Select(s => s.DepotId).ToHashSet();
+        var dropped = installed.Where(kv => dlcDepots.ContainsKey(kv.Key) && !selectedIds.Contains(kv.Key)).ToList();
+
+        // Cambio solo de DLC (Propiedades): los depots que ya están al día no se vuelven a verificar archivo a archivo.
+        var dlcChangeOnly = explicitChoice && job.Kind == DownloadJobKind.Update;
 
         // ---------- 2. Claves y manifiestos ----------
         var servers = await _session.GetCdnServersAsync(job.AppId).ConfigureAwait(false);
@@ -91,9 +109,42 @@ public sealed class DepotDownloadEngine
             else if (oldId == sel.ManifestId)
                 old = manifest; // mismo manifiesto: basta verificar que los archivos están completos
 
-            depots.Add(new DepotWork(sel.DepotId, sel.ManifestId, key, manifest, old));
+            depots.Add(new DepotWork(sel.DepotId, sel.ManifestId, key, manifest, old,
+                SkipVerify: dlcChangeOnly && ReferenceEquals(old, manifest)));
         }
         if (depots.Count == 0) throw new InvalidOperationException("Tu cuenta no tiene acceso a los depots de este juego.");
+
+        // Lista de archivos de los DLC desmarcados (del depotcache o, si no está, de la CDN).
+        var toDelete = new List<string>();
+        if (dropped.Count > 0)
+        {
+            var kept = new HashSet<string>(depots.SelectMany(d => d.Manifest.Files ?? []).Select(f => f.FileName), StringComparer.OrdinalIgnoreCase);
+            foreach (var (depotId, manifestId) in dropped)
+            {
+                ct.ThrowIfCancellationRequested();
+                job.SetState(DownloadJobState.Preparing, $"Preparando la eliminación del DLC (depot {depotId})…");
+                var key = await _session.GetDepotKeyAsync(depotId, job.AppId).ConfigureAwait(false);
+                DepotManifest? old = key is null ? null : TryLoadSteamManifest(steamPath, depotId, manifestId, key);
+                if (old is null && key is not null)
+                {
+                    try
+                    {
+                        var code = await _session.GetManifestRequestCodeAsync(depotId, job.AppId, manifestId, "public").ConfigureAwait(false);
+                        old = await WithServerRetry(servers, ct, server => cdn.DownloadManifestAsync(depotId, manifestId, code, server, key)).ConfigureAwait(false);
+                        if (old.FilenamesEncrypted) old.DecryptFilenames(key);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        Log.Warn($"Depot {depotId}: no se pudo obtener su lista de archivos ({ex.Message}).");
+                    }
+                }
+                if (old is null)
+                    throw new InvalidOperationException($"No se pudo saber qué archivos son del DLC (depot {depotId}) para quitarlo. Inténtalo de nuevo con conexión.");
+                toDelete.AddRange((old.Files ?? [])
+                    .Where(f => !f.Flags.HasFlag(EDepotFileFlag.Directory) && !kept.Contains(f.FileName))
+                    .Select(f => Path.Combine(installPath, f.FileName.Replace('/', Path.DirectorySeparatorChar))));
+            }
+        }
 
         // ---------- 3. Plan incremental (verificación de lo que ya hay en disco) ----------
         job.SetState(DownloadJobState.Verifying, "Comprobando los archivos que ya están en disco…");
@@ -129,21 +180,28 @@ public sealed class DepotDownloadEngine
             foreach (var f in plan.Files) f.Close();
         }
 
-        // ---------- 5. Limpieza de archivos que ya no existen en la nueva versión ----------
-        foreach (var removed in plan.RemovedFiles)
+        // ---------- 5. Limpieza: archivos que ya no existen en la nueva versión y los de los DLC desmarcados ----------
+        foreach (var removed in plan.RemovedFiles.Concat(toDelete).Where(File.Exists))
         {
             try { File.Delete(removed); } catch (Exception ex) { Log.Warn($"No se pudo borrar {removed}: {ex.Message}"); }
         }
+        if (toDelete.Count > 0)
+        {
+            RemoveEmptyFolders(installPath, toDelete);
+            Log.Info($"DLC quitados de {job.Name}: depots {string.Join(", ", dropped.Select(d => d.Key))} ({toDelete.Count} archivos borrados).");
+        }
 
         return new DepotDownloadResult(job.LibraryPath, installDirName, buildId,
-            depots.Select(d => (d.DepotId, d.ManifestId, d.Manifest.TotalUncompressedSize, d.Manifest)).ToList());
+            depots.Select(d => (d.DepotId, d.ManifestId, d.Manifest.TotalUncompressedSize, d.Manifest)).ToList(),
+            explicitChoice ? disabledDlc : null,
+            selections.Where(s => s.DlcAppId != 0).ToDictionary(s => s.DepotId, s => s.DlcAppId));
     }
 
     // =====================================================================================
     // Plan incremental
     // =====================================================================================
 
-    private sealed record DepotWork(uint DepotId, ulong ManifestId, byte[] Key, DepotManifest Manifest, DepotManifest? Old);
+    private sealed record DepotWork(uint DepotId, ulong ManifestId, byte[] Key, DepotManifest Manifest, DepotManifest? Old, bool SkipVerify = false);
 
     private sealed record ChunkWork(DepotWork Depot, FileTarget File, DepotManifest.ChunkData Chunk);
 
@@ -161,6 +219,7 @@ public sealed class DepotDownloadEngine
 
         foreach (var depot in depots)
         {
+            if (depot.SkipVerify) { checkedBytes += (long)depot.Manifest.TotalUncompressedSize; continue; }
             var oldFiles = depot.Old?.Files?.ToDictionary(f => f.FileName, StringComparer.OrdinalIgnoreCase)
                            ?? new Dictionary<string, DepotManifest.FileData>(StringComparer.OrdinalIgnoreCase);
 
@@ -327,7 +386,7 @@ public sealed class DepotDownloadEngine
     }
 
     /// <summary>Depots y manifiestos instalados según el appmanifest de Steam (vacío si no está instalado).</summary>
-    private static Dictionary<uint, ulong> ReadInstalledDepots(string libraryPath, uint appId)
+    public static Dictionary<uint, ulong> ReadInstalledDepots(string libraryPath, uint appId)
     {
         var result = new Dictionary<uint, ulong>();
         var acf = Path.Combine(libraryPath, "steamapps", $"appmanifest_{appId}.acf");
@@ -364,6 +423,26 @@ public sealed class DepotDownloadEngine
         {
             Log.Warn($"Manifiesto instalado ilegible ({path}): {ex.Message}. Se verificarán los archivos uno a uno.");
             return null;
+        }
+    }
+
+    /// <summary>Quita las carpetas que se han quedado vacías tras borrar un DLC (nunca la del juego).</summary>
+    private static void RemoveEmptyFolders(string installPath, IEnumerable<string> deletedFiles)
+    {
+        var root = Path.GetFullPath(installPath).TrimEnd(Path.DirectorySeparatorChar);
+        foreach (var dir in deletedFiles.Select(Path.GetDirectoryName).Where(d => d is not null).Distinct().OrderByDescending(d => d!.Length))
+        {
+            var current = dir;
+            while (current is not null && current.Length > root.Length && current.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    if (!Directory.Exists(current) || Directory.EnumerateFileSystemEntries(current).Any()) break;
+                    Directory.Delete(current);
+                }
+                catch (Exception) { break; }
+                current = Path.GetDirectoryName(current);
+            }
         }
     }
 

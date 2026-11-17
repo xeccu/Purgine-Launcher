@@ -16,10 +16,13 @@ public sealed class OwnedApp
     /// <summary>Hash del icono pequeño (PICS common/icon) para descargarlo de la CDN si no está en disco.</summary>
     public string? Icon { get; set; }
     /// <summary>
-    /// Espacio que ocupará instalado (bytes): suma de los depots que se descargarían en este equipo según PICS
-    /// (Windows, 64 bits, idioma, DLC propios). 0 si Steam no publica tamaños para esta app.
+    /// Peso del juego instalado (bytes): suma de los depots que se descargarían por defecto en este equipo según
+    /// PICS (Windows, 64 bits, idioma, solo los depots de tus licencias y tus DLC no opcionales). 0 = no disponible
+    /// (Steam no publica el tamaño de algún depot): nunca una cifra a medias.
     /// </summary>
     public ulong InstallSize { get; set; }
+    /// <summary>Lo que se descargaría (comprimido) para esa misma selección. 0 = no disponible.</summary>
+    public ulong DownloadSize { get; set; }
     /// <summary>Hash del icono .ico del juego (PICS common/clienticon), para los accesos directos.</summary>
     public string? ClientIcon { get; set; }
     /// <summary>Tiene Steam Workshop (PICS common/workshop_visible). Null = desconocido (caché antigua).</summary>
@@ -34,9 +37,17 @@ public sealed class OwnedApp
 /// <summary>Contenido de <c>owned-games.json</c> (caché para arrancar sin red).</summary>
 public sealed class OwnedLibraryCache
 {
+    /// <summary>
+    /// Versión del cálculo de tamaños. Las cachés anteriores a la 2 sumaban depots de otras regiones y DLC
+    /// opcionales (cifras infladas): sus tamaños se descartan al cargar hasta la siguiente consulta a Steam.
+    /// </summary>
+    public const int CurrentVersion = 3; // 3: el peso es solo el juego base (sin DLC)
+    public int Version { get; set; }
     public string AccountName { get; set; } = string.Empty;
     public DateTimeOffset UpdatedUtc { get; set; }
     public List<OwnedApp> Apps { get; set; } = [];
+    /// <summary>Depots que incluyen las licencias de la cuenta (para no sumar las copias de otras regiones).</summary>
+    public List<uint> OwnedDepots { get; set; } = [];
 }
 
 /// <summary>
@@ -58,6 +69,17 @@ public sealed class SteamOwnershipService
         _session = session;
         _cachePath = cachePath;
         _cache = JsonFileStore.Load<OwnedLibraryCache>(cachePath);
+        if (_cache.Version < OwnedLibraryCache.CurrentVersion)
+            foreach (var app in _cache.Apps) { app.InstallSize = 0; app.DownloadSize = 0; } // cifras antiguas, no fiables
+        _ownedDepots = _cache.OwnedDepots.ToHashSet();
+    }
+
+    private HashSet<uint> _ownedDepots;
+
+    /// <summary>¿Incluye alguna licencia de la cuenta este depot? (Para elegir la copia de tu región.)</summary>
+    public bool OwnsDepot(uint depotId)
+    {
+        lock (_gate) return _ownedDepots.Contains(depotId);
     }
 
     /// <summary>Último listado conocido (de la caché o de la última consulta).</summary>
@@ -94,6 +116,11 @@ public sealed class SteamOwnershipService
                 .Distinct()
                 .ToList();
 
+            var ownedDepots = packages.Values
+                .SelectMany(p => p["depotids"].Children.Select(c => c.AsUnsignedInteger()))
+                .Where(id => id != 0)
+                .ToHashSet();
+
             var info = await _session.GetAppInfoAsync(appIds, ct).ConfigureAwait(false);
             var ownedIds = appIds.ToHashSet();
             var language = DepotSelector.SteamLanguage();
@@ -103,6 +130,10 @@ public sealed class SteamOwnershipService
                 var common = kv["common"];
                 var name = common["name"].Value;
                 if (string.IsNullOrWhiteSpace(name)) continue;
+                // Peso de la tarjeta: solo el juego base (depots sin DLC, en tu idioma y región). Los DLC, mapas y
+                // paquetes de texturas se desglosan en el selector de componentes al instalar.
+                var size = DepotSelector.DefaultSize(DepotSelector.Select(kv["depots"], language, ownedIds.Contains, ownedDepots.Contains),
+                    optionalDlc: _ => true);
                 apps.Add(new OwnedApp
                 {
                     AppId = appId,
@@ -114,17 +145,20 @@ public sealed class SteamOwnershipService
                     ClientIcon = common["clienticon"].Value,
                     HasWorkshop = common["workshop_visible"].Value == "1",
                     HasPointsShop = common["category"]["category_29"] != KeyValue.Invalid,
-                    InstallSize = SumSizes(DepotSelector.Select(kv["depots"], language, ownedIds.Contains)),
+                    InstallSize = size?.Install ?? 0,
+                    DownloadSize = size?.Download ?? 0,
                 });
             }
 
             var cache = new OwnedLibraryCache
             {
+                Version = OwnedLibraryCache.CurrentVersion,
+                OwnedDepots = ownedDepots.Order().ToList(),
                 AccountName = _session.AccountName ?? string.Empty,
                 UpdatedUtc = DateTimeOffset.UtcNow,
                 Apps = apps.OrderBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase).ToList(),
             };
-            lock (_gate) _cache = cache;
+            lock (_gate) { _cache = cache; _ownedDepots = ownedDepots; }
             JsonFileStore.Save(_cachePath, cache);
             Log.Info($"Steam (red): {licenses.Count} licencias → {apps.Count} apps ({apps.Count(a => a.Type == "game")} juegos).");
             return cache;
@@ -135,17 +169,10 @@ public sealed class SteamOwnershipService
         }
     }
 
-    private static ulong SumSizes(List<SelectedDepot> depots)
-    {
-        ulong total = 0;
-        foreach (var d in depots) total += d.Size;
-        return total;
-    }
-
     /// <summary>Al cerrar sesión: se borra la caché (pertenece a esa cuenta).</summary>
     public void Clear()
     {
-        lock (_gate) _cache = new OwnedLibraryCache();
+        lock (_gate) { _cache = new OwnedLibraryCache(); _ownedDepots = []; }
         try { File.Delete(_cachePath); } catch (Exception) { /* no existía */ }
     }
 }

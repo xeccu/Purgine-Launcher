@@ -86,6 +86,9 @@ public static class AppManifestWriter
             catch (Exception ex) { Log.Warn($"Manifiesto anterior ilegible ({acfPath}): {ex.Message}"); }
         }
 
+        // DLC elegidos en el selector de componentes al instalar: mandan sobre lo que hubiera.
+        if (result.DisabledDlc is { } chosen) disabledDlc = string.Join(",", chosen.Distinct().Order());
+
         var installPath = Path.Combine(result.LibraryPath, "steamapps", "common", result.InstallDirName);
         var sizeOnDisk = DirectorySize(installPath);
 
@@ -116,6 +119,7 @@ public static class AppManifestWriter
             sb.Append("\t\t\"").Append(depotId).Append("\"\n\t\t{\n");
             Kv("\t\t\t", "manifest", manifestId.ToString());
             Kv("\t\t\t", "size", size.ToString());
+            if (result.DepotDlc?.TryGetValue(depotId, out var dlc) == true) Kv("\t\t\t", "dlcappid", dlc.ToString()); // como Steam: así se sabe qué DLC hay instalados
             sb.Append("\t\t}\n");
         }
         sb.Append("\t}\n");
@@ -126,6 +130,12 @@ public static class AppManifestWriter
             if (disabledDlc.Length > 0) Kv("\t\t", "DisabledDLC", disabledDlc); // DLC desactivados (Propiedades)
             sb.Append("\t}\n");
         }
+        // Lo montado de verdad (Steam lo compara con UserConfig): sin esto, Steam podía bajar por su cuenta al abrir el
+        // juego los DLC que se desmarcaron en Purgine.
+        sb.Append("\t\"MountedConfig\"\n\t{\n");
+        if (language.Length > 0) Kv("\t\t", "language", language);
+        if (disabledDlc.Length > 0) Kv("\t\t", "DisabledDLC", disabledDlc);
+        sb.Append("\t}\n");
         sb.Append("}\n");
 
         var tmp = acfPath + ".tmp";

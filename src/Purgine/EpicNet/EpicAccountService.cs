@@ -33,7 +33,9 @@ public sealed record EpicCloudFile(string Key, string? ReadLink, DateTimeOffset?
 public sealed record EpicLibraryItem(string Namespace, string CatalogItemId, string AppName);
 
 /// <summary>Build pública de un juego y dónde está su manifiesto.</summary>
-public sealed record EpicAssetInfo(string BuildVersion, string? ManifestHash, IReadOnlyList<string> ManifestUrls);
+/// <param name="SelectiveDownloadUrls">URL (firmadas) del SDMeta de esa build: las opciones de descarga selectiva. Vacía si el juego no tiene.</param>
+public sealed record EpicAssetInfo(string BuildVersion, string? ManifestHash, IReadOnlyList<string> ManifestUrls,
+    IReadOnlyList<string>? SelectiveDownloadUrls = null);
 
 /// <summary>Un logro de Epic (nombre visible según esté desbloqueado o no).</summary>
 public sealed record EpicAchievement(string Id, string Name, string Description, string? IconUrl, bool Unlocked, DateTimeOffset? UnlockedUtc, double? RarityPercent, bool Hidden);
@@ -394,19 +396,24 @@ public sealed class EpicAccountService : IDisposable
         req.Headers.Authorization = new AuthenticationHeaderValue("bearer", token);
         var json = await SendJsonAsync(req, ct).ConfigureAwait(false);
         var element = json.GetProperty("elements")[0];
-        var urls = new List<string>();
-        foreach (var m in element.GetProperty("manifests").EnumerateArray())
+        static List<string> Urls(JsonElement list)
         {
-            var uri = m.GetProperty("uri").GetString()!;
-            if (m.TryGetProperty("queryParams", out var qp) && qp.GetArrayLength() > 0)
-                uri += "?" + string.Join("&", qp.EnumerateArray().Select(p =>
-                    $"{p.GetProperty("name").GetString()}={p.GetProperty("value").GetString()}"));
-            urls.Add(uri);
+            var urls = new List<string>();
+            foreach (var m in list.EnumerateArray())
+            {
+                var uri = m.GetProperty("uri").GetString()!;
+                if (m.TryGetProperty("queryParams", out var qp) && qp.GetArrayLength() > 0)
+                    uri += "?" + string.Join("&", qp.EnumerateArray().Select(p =>
+                        $"{p.GetProperty("name").GetString()}={p.GetProperty("value").GetString()}"));
+                urls.Add(uri);
+            }
+            return urls;
         }
         return new EpicAssetInfo(
             element.GetProperty("buildVersion").GetString() ?? string.Empty,
             element.TryGetProperty("hash", out var h) ? h.GetString() : null,
-            urls);
+            Urls(element.GetProperty("manifests")),
+            element.TryGetProperty("selectiveDownload", out var sd) && sd.ValueKind == JsonValueKind.Array ? Urls(sd) : []);
     }
 
     /// <summary>Descarga el manifiesto (de la primera CDN que responda).</summary>
@@ -419,6 +426,22 @@ public sealed class EpicAccountService : IDisposable
             catch (HttpRequestException ex) { last = ex; }
         }
         throw new EpicApiException($"No se pudo descargar el manifiesto: {last?.Message}", false);
+    }
+
+    /// <summary>
+    /// SDMeta de la build (opciones de descarga selectiva, como en Epic Games Launcher). Null si el juego no tiene;
+    /// lanza si lo tiene pero no se puede descargar (para no instalar a ciegas).
+    /// </summary>
+    public async Task<string?> DownloadSelectiveDownloadAsync(EpicAssetInfo asset, CancellationToken ct)
+    {
+        if (asset.SelectiveDownloadUrls is not { Count: > 0 } urls) return null;
+        Exception? last = null;
+        foreach (var url in urls)
+        {
+            try { return await _http.Value.GetStringAsync(url, ct).ConfigureAwait(false); }
+            catch (HttpRequestException ex) { last = ex; }
+        }
+        throw new EpicApiException($"No se pudieron leer las opciones de descarga de Epic: {last?.Message}", false);
     }
 
     /// <summary>
@@ -454,10 +477,10 @@ public sealed class EpicAccountService : IDisposable
         {
             var player = await GraphQlAsync(token, playerQuery, new { epicAccountId = AccountId, sandboxId }, ct).ConfigureAwait(false);
             var records = player.GetProperty("data").GetProperty("PlayerAchievement").GetProperty("playerAchievementGameRecordsBySandbox").GetProperty("records");
-            foreach (var rec in records.EnumerateArray())
-                foreach (var pa in rec.GetProperty("playerAchievements").EnumerateArray())
+            foreach (var rec in ArrayOrEmpty(records))
+                foreach (var pa in rec.TryGetProperty("playerAchievements", out var pas) ? ArrayOrEmpty(pas) : [])
                 {
-                    var a = pa.GetProperty("playerAchievement");
+                    if (!pa.TryGetProperty("playerAchievement", out var a) || a.ValueKind != JsonValueKind.Object) continue;
                     if (a.TryGetProperty("unlocked", out var u) && u.ValueKind == JsonValueKind.True)
                         unlocked[a.GetProperty("achievementName").GetString() ?? string.Empty] =
                             a.TryGetProperty("unlockDate", out var d) && d.TryGetDateTimeOffset(out var dt) ? dt : null;
@@ -468,10 +491,11 @@ public sealed class EpicAccountService : IDisposable
             Log.Warn($"Epic: logros del jugador no disponibles ({ex.Message}).");
         }
 
+        // Juegos sin logros: Epic devuelve null en vez de una lista vacía (no es un error de conexión).
         var list = new List<EpicAchievement>();
-        foreach (var item in record.GetProperty("achievements").EnumerateArray())
+        foreach (var item in record.TryGetProperty("achievements", out var achs) ? ArrayOrEmpty(achs) : [])
         {
-            var a = item.GetProperty("achievement");
+            if (!item.TryGetProperty("achievement", out var a) || a.ValueKind != JsonValueKind.Object) continue;
             var name = a.GetProperty("name").GetString() ?? string.Empty;
             var isUnlocked = unlocked.TryGetValue(name, out var when);
             list.Add(new EpicAchievement(name,
@@ -484,6 +508,9 @@ public sealed class EpicAccountService : IDisposable
         }
         return new EpicAchievementSet(productId, list);
     }
+
+    private static IEnumerable<JsonElement> ArrayOrEmpty(JsonElement e) =>
+        e.ValueKind == JsonValueKind.Array ? e.EnumerateArray() : [];
 
     private async Task<JsonElement> GraphQlAsync(string token, string query, object variables, CancellationToken ct)
     {

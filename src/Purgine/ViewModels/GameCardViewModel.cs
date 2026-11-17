@@ -65,7 +65,7 @@ public sealed class GameCardViewModel : ObservableObject
 
         ShowDetailsCommand = new RelayCommand(_ => _host.ShowDetails(this));
         ForceCloseCommand = new RelayCommand(_ => _host.ForceClose(this), _ => IsRunning);
-        PropertiesCommand = new RelayCommand(_ => _host.ShowProperties(this), _ => IsSteam && !IsNotInstalled);
+        PropertiesCommand = new RelayCommand(_ => _host.ShowProperties(this), _ => ShowPropertiesLink);
         PrimaryActionCommand = new RelayCommand(
             _ => { if (ShowUpdateButton) _host.Update(this); else if (IsNotInstalled && !HasActiveJob) _host.Install(this); else _host.Launch(this); },
             _ => !IsRunning && (IsNotInstalled || HasActiveJob || ShowUpdateButton || _host.CanLaunch));
@@ -291,6 +291,11 @@ public sealed class GameCardViewModel : ObservableObject
     /// Desinstalar está disponible aunque haya una descarga o actualización pendiente (o atascada): se cancela antes
     /// de borrar la carpeta. Una instalación nueva sin terminar se quita con «Cancelar».
     /// </summary>
+    /// <summary>Propiedades: DLC y mods (Steam) o el contenido opcional de Epic (juegos de Epic instalados por Purgine).</summary>
+    public string PropertiesLinkText => IsEpic ? "Propiedades (contenido opcional)…" : "Propiedades (DLC y mods)…";
+
+    public bool ShowPropertiesLink => !IsNotInstalled && (IsSteam || (IsEpic && Entry.EpicManagedByPurgine));
+
     public bool CanUninstall => (IsSteam || IsItch || (IsEpic && Entry.EpicManagedByPurgine)) && !IsNotInstalled && !IsRunning;
 
     // ----- Tamaño real en disco (instalados) -----
@@ -309,28 +314,58 @@ public sealed class GameCardViewModel : ObservableObject
         _diskSize = bytes;
         OnPropertyChanged(nameof(DiskSize));
         OnPropertyChanged(nameof(DiskSizeText));
+        OnPropertyChanged(nameof(CardSubtitle));
     }
 
-    // ----- Espacio necesario (juegos no instalados) -----
+    /// <summary>
+    /// Línea bajo el nombre en la biblioteca: no instalado, el peso del juego; instalado, el tiempo jugado y lo que
+    /// ocupa de verdad en disco (en cuanto se ha medido).
+    /// </summary>
+    public string CardSubtitle =>
+        IsNotInstalled && !IsLocal ? $"Peso: {RequiredSizeText}"
+        : _diskSize > 0 && ShowDiskSize ? $"{PlaytimeText} · {Formatting.Bytes(_diskSize)}"
+        : PlaytimeText;
+
+    // ----- Peso del juego (no instalados) -----
 
     private ulong _installSize;
+    private ulong _downloadSize;
 
-    /// <summary>Bytes que ocupará instalado según PICS (0 = desconocido).</summary>
+    /// <summary>
+    /// Peso real del juego instalado según la fuente (PICS de Steam con tus licencias, manifiesto de Epic sin
+    /// componentes opcionales). 0 = no disponible: nunca se estima.
+    /// </summary>
     public ulong InstallSize => _installSize;
 
-    public void SetInstallSize(ulong bytes)
+    /// <summary>Lo que se descarga (comprimido) para esa misma selección; 0 = no disponible.</summary>
+    public ulong DownloadSize => _downloadSize;
+
+    public void SetInstallSize(ulong bytes, ulong download = 0)
     {
-        if (_installSize == bytes) return;
+        if (_installSize == bytes && _downloadSize == download) return;
         _installSize = bytes;
+        _downloadSize = bytes == 0 ? 0 : download;
         OnPropertyChanged(nameof(InstallSize));
+        OnPropertyChanged(nameof(DownloadSize));
+        OnPropertyChanged(nameof(HasInstallSize));
         OnPropertyChanged(nameof(RequiredSizeText));
+        OnPropertyChanged(nameof(DownloadSizeText));
         OnPropertyChanged(nameof(ShowRequiredSize));
+        OnPropertyChanged(nameof(CardSubtitle));
     }
 
-    /// <summary>«2,4 GB».</summary>
-    public string RequiredSizeText => _installSize == 0 ? string.Empty : Formatting.Bytes((long)_installSize);
+    public bool HasInstallSize => _installSize > 0;
 
-    public bool ShowRequiredSize => IsNotInstalled && _installSize > 0;
+    /// <summary>«88,2 GB» o «No disponible por el momento» (nunca «0 KB» ni una aproximación).</summary>
+    public string RequiredSizeText => _installSize == 0 ? NotAvailableText : Formatting.Bytes((long)_installSize);
+
+    /// <summary>«Descarga de 52,1 GB» si se conoce.</summary>
+    public string? DownloadSizeText => _downloadSize == 0 ? null : $"Descarga de {Formatting.Bytes((long)_downloadSize)}";
+
+    public const string NotAvailableText = "No disponible por el momento";
+
+    /// <summary>Peso visible en la tarjeta y la ficha: cualquier juego de tienda que no está instalado.</summary>
+    public bool ShowRequiredSize => IsNotInstalled && !IsLocal;
 
     // ----- Actualizaciones -----
 
@@ -358,7 +393,7 @@ public sealed class GameCardViewModel : ObservableObject
     public string PlaytimeText
     {
         get => _playtimeText;
-        private set => SetProperty(ref _playtimeText, value);
+        private set { if (SetProperty(ref _playtimeText, value)) OnPropertyChanged(nameof(CardSubtitle)); }
     }
 
     /// <summary>Horas jugadas (para ordenar por tiempo de juego).</summary>

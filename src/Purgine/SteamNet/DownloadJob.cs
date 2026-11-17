@@ -53,6 +53,24 @@ public sealed class DownloadJob
     /// <summary>Al terminar una instalación: acceso directo en el menú Inicio.</summary>
     public bool CreateStartMenuShortcut { get; set; }
 
+    /// <summary>
+    /// Steam: DLC desmarcados en el selector de componentes (no se descargan). Null = sin elección explícita (se
+    /// respeta lo que diga el appmanifest).
+    /// </summary>
+    public IReadOnlyCollection<uint>? DisabledDlc { get; init; }
+
+    /// <summary>
+    /// Epic: opciones de descarga selectiva marcadas (ids del SDMeta de Epic). Null = las que Epic marca por defecto.
+    /// Las obligatorias y las invisibles las añade el motor en cada build.
+    /// </summary>
+    public IReadOnlyCollection<string>? EpicSelectedOptions { get; init; }
+
+    /// <summary>
+    /// Epic: cambio solo de opciones (Propiedades). Los archivos que ya están se dan por buenos si tienen el tamaño
+    /// correcto (sin recalcular su SHA-1), para no repasar decenas de GB por añadir o quitar unas texturas.
+    /// </summary>
+    public bool QuickVerify { get; init; }
+
     // ----- Epic Games (null en los trabajos de Steam) -----
     public string? EpicAppName { get; init; }
     public string? EpicNamespace { get; init; }

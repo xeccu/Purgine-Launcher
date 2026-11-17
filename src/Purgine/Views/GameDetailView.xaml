@@ -76,10 +76,12 @@
                     </Button>
                     <StackPanel DockPanel.Dock="Left" Margin="32,0,0,0" VerticalAlignment="Center"
                                 Visibility="{Binding Card.ShowRequiredSize, Converter={StaticResource BoolToVis}}">
-                        <TextBlock Text="ESPACIO NECESARIO" Style="{StaticResource StatLabel}" />
-                        <TextBlock Style="{StaticResource StatValue}">
-                            <Run Text="{Binding Card.RequiredSizeText, Mode=OneWay}" FontWeight="SemiBold" />
-                            <Run Text="{Binding FreeSpaceText, Mode=OneWay}" FontSize="12">
+                        <TextBlock Text="PESO DEL JUEGO" Style="{StaticResource StatLabel}"
+                                   ToolTip="Lo que ocupa el juego base instalado según Steam o Epic. Los DLC y paquetes opcionales se eligen (y suman) al instalar" />
+                        <TextBlock Text="{Binding Card.RequiredSizeText}" Style="{StaticResource StatValue}" FontWeight="SemiBold" />
+                        <TextBlock FontSize="12" Margin="0,2,0,0">
+                            <Run Text="{Binding Card.DownloadSizeText, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" />
+                            <Run Text="{Binding FreeSpaceText, Mode=OneWay}">
                                 <Run.Style>
                                     <Style TargetType="Run">
                                         <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
@@ -407,10 +409,10 @@
                             </StackPanel>
                         </Button>
                         <Button Style="{StaticResource LinkRow}" Command="{Binding Card.PropertiesCommand}"
-                                Visibility="{Binding Card.IsSteam, Converter={StaticResource BoolToVis}}">
+                                Visibility="{Binding Card.ShowPropertiesLink, Converter={StaticResource BoolToVis}}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="&#xE713;" FontFamily="{StaticResource IconFont}" Width="22" VerticalAlignment="Center" />
-                                <TextBlock Text="Propiedades (DLC y mods)…" Margin="6,0,0,0" />
+                                <TextBlock Text="{Binding Card.PropertiesLinkText}" Margin="6,0,0,0" />
                             </StackPanel>
                         </Button>
                         <Button Style="{StaticResource LinkRow}" Command="{Binding OpenSupportCommand}"

@@ -61,13 +61,61 @@
                         <Border DockPanel.Dock="Left" Width="120" Height="56" CornerRadius="3" Background="{StaticResource CardBrush}" ClipToBounds="True">
                             <Image Source="{Binding Banner}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality" />
                         </Border>
-                        <TextBlock DockPanel.Dock="Right" Text="{Binding SizeText}" FontSize="15" FontWeight="Bold"
-                                   VerticalAlignment="Center" ToolTip="Espacio necesario una vez instalado" />
+                        <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center" MaxWidth="210">
+                            <TextBlock Text="PESO FINAL EN DISCO" FontSize="10" FontWeight="Bold" Foreground="{StaticResource MutedBrush}"
+                                       HorizontalAlignment="Right" />
+                            <TextBlock Text="{Binding SizeText}" FontSize="15" FontWeight="Bold" HorizontalAlignment="Right" TextWrapping="Wrap"
+                                       TextAlignment="Right" ToolTip="Lo que ocupará en el disco con los componentes elegidos (es el espacio que necesita)" />
+                            <TextBlock Text="{Binding DownloadText}" FontSize="11" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right"
+                                       ToolTip="Lo que se descarga (comprimido)"
+                                       Visibility="{Binding DownloadText, Converter={StaticResource NullToVis}}" />
+                        </StackPanel>
                         <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" Margin="16,0,12,0"
                                    VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                     </DockPanel>
 
                     <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,10,0,12" />
+
+                    <!-- Componentes opcionales (DLC con contenido de Steam, descargas selectivas de Epic) -->
+                    <StackPanel Visibility="{Binding HasComponents, Converter={StaticResource BoolToVis}}" Margin="0,0,0,14">
+                        <TextBlock Text="CONTENIDO A DESCARGAR:" FontSize="12" FontWeight="Bold" Margin="0,0,0,8" />
+                        <Border Background="#262B36" CornerRadius="{DynamicResource PlayButtonCornerRadius}" Padding="12,8">
+                            <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto">
+                                <StackPanel>
+                                <DockPanel Margin="0,4">
+                                    <TextBlock DockPanel.Dock="Right" Text="{Binding BaseSizeText}" FontSize="12"
+                                               Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                                    <CheckBox IsChecked="True" IsEnabled="False" VerticalAlignment="Center">
+                                        <StackPanel>
+                                            <TextBlock Text="Juego base" />
+                                            <TextBlock Text="Obligatorio" FontSize="11" Foreground="{StaticResource MutedBrush}" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                </DockPanel>
+                                <ItemsControl ItemsSource="{Binding Components}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:InstallComponentViewModel}">
+                                            <DockPanel Margin="0,4">
+                                                <TextBlock DockPanel.Dock="Right" Text="{Binding SizeText}" FontSize="12"
+                                                           Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                                                <CheckBox IsChecked="{Binding IsSelected}" VerticalAlignment="Center">
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Text="{Binding Note}" FontSize="11" Foreground="{StaticResource MutedBrush}"
+                                                                   TextWrapping="Wrap" MaxWidth="380" HorizontalAlignment="Left"
+                                                                   Visibility="{Binding Note, Converter={StaticResource NullToVis}}" />
+                                                    </StackPanel>
+                                                </CheckBox>
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Border>
+                        <TextBlock Text="Solo se descarga e instala lo marcado. La descarga y el peso final se recalculan al marcar o desmarcar." FontSize="11"
+                                   Foreground="{StaticResource MutedBrush}" Margin="2,6,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
 
                     <!-- Accesos directos -->
                     <WrapPanel Visibility="{Binding ShowShortcuts, Converter={StaticResource BoolToVis}}">
